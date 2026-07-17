@@ -17,8 +17,10 @@ import { createAgentRuntime } from './services/agent/agent-runtime.ts';
 import { createConversationsStore } from './services/store/conversations-store.ts';
 import { createSettingsStore } from './services/store/settings-store.ts';
 import { createSkillsService } from './services/skills/skills-service.ts';
+import { createGateway } from './services/gateway/gateway-server.ts';
 import type { AgentRuntime } from './services/agent/agent-runtime.ts';
 import type { SkillsService } from './services/skills/skills-service.ts';
+import type { Gateway } from './services/gateway/gateway-server.ts';
 import type { UIEvent } from '../shared/ipc-contract.ts';
 
 const createWindow = (): BrowserWindow => {
@@ -69,15 +71,23 @@ const builtinSkillsSource = (): string => (app.isPackaged ? join(process.resourc
 
 const BUILTIN_SKILLS = ['ask-marcel-office'];
 
-const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; skills: SkillsService } => {
+const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; skills: SkillsService; gateway: Gateway } => {
   const userData = app.getPath('userData');
   const now = (): string => new Date().toISOString();
   const settings = createSettingsStore({ userData });
   const conversations = createConversationsStore({ userData, now });
   const skills = createSkillsService({ userData, builtinSource: builtinSkillsSource(), builtinNames: BUILTIN_SKILLS });
-  const agent = createAgentRuntime({ settings, conversations, userData, now, emit, inheritedEnv: process.env });
+  // Providers are read per request, not captured: a key changed in settings must take
+  // effect on the next turn without restarting the gateway.
+  const gateway = createGateway({
+    findProvider: async (providerId) => {
+      const current = await settings.get();
+      return current.ok ? current.value.providers.find((p) => p.id === providerId) : undefined;
+    },
+  });
+  const agent = createAgentRuntime({ settings, conversations, gateway, userData, now, emit, inheritedEnv: process.env });
   registerIpc({ settings, conversations, agent, skills });
-  return { agent, skills };
+  return { agent, skills, gateway };
 };
 
 void app.whenReady().then(() => {
@@ -87,7 +97,11 @@ void app.whenReady().then(() => {
   const window = createWindow();
   // Events go to the window that exists now. There is one window in v1 (multi-window
   // is a stated non-goal), so a lookup per event would be ceremony.
-  const { agent: runtime, skills } = buildRuntime((event) => {
+  const {
+    agent: runtime,
+    skills,
+    gateway,
+  } = buildRuntime((event) => {
     if (!window.isDestroyed()) window.webContents.send(CHAT_EVENT, event);
   });
 
@@ -96,8 +110,12 @@ void app.whenReady().then(() => {
   // message can possibly be sent, and blocking startup on a copy would be worse.
   void skills.seedBuiltins();
 
-  // A turn left running would keep an orphaned agent subprocess alive after quit.
-  app.on('before-quit', () => runtime.cancelAll());
+  // A turn left running would keep an orphaned agent subprocess alive after quit, and
+  // the gateway would keep a socket listening.
+  app.on('before-quit', () => {
+    runtime.cancelAll();
+    void gateway.stop();
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

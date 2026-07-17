@@ -10,10 +10,13 @@
  * by the provider's own values: an inherited var silently redirecting a turn to the
  * wrong endpoint or the wrong key is exactly the bug this ordering prevents.
  *
- * M2 handles the anthropic provider only. The openai branch (pointing the agent at
- * the local gateway) lands with the gateway itself in M5.
+ * An openai-compatible provider is pointed at the local gateway instead of the real
+ * API: the agent speaks Anthropic to 127.0.0.1 and the gateway translates. The model
+ * vars then carry the FULL 'providerId::modelId' reference, because the gateway needs
+ * the providerId to know which upstream to call — the agent is just the courier.
  */
 import { binDir, claudeConfigDir } from './paths.ts';
+import { formatModelRef } from './model-ref.ts';
 import type { Provider } from './types.ts';
 
 export type SessionEnvInput = {
@@ -22,6 +25,9 @@ export type SessionEnvInput = {
   readonly modelId: string;
   readonly userData: string;
   readonly inheritedEnv: Readonly<Record<string, string | undefined>>;
+  // Where the local gateway is listening, and its per-run key. Required for an
+  // openai provider; ignored for anthropic, which talks to the real API.
+  readonly gateway?: { readonly baseUrl: string; readonly apiKey: string };
 };
 
 // The SDK appends /v1/messages itself, so a base url ending in /v1 would become
@@ -56,24 +62,36 @@ export const buildSessionEnv = (input: SessionEnvInput): Record<string, string> 
   env['PATH'] = inheritedPath === undefined ? binDir(input.userData) : `${binDir(input.userData)}:${inheritedPath}`;
   env['NO_UPDATE_NOTIFIER'] = '1';
 
-  env['ANTHROPIC_API_KEY'] = input.provider.apiKey;
-
-  const baseUrl = input.provider.baseUrl;
-  if (baseUrl === undefined || baseUrl.length === 0) {
-    // No provider base url means the real Anthropic API. An inherited one would
-    // silently redirect the traffic, so it is removed rather than left in place.
-    delete env['ANTHROPIC_BASE_URL'];
+  // An openai provider never sees its own key or endpoint: the agent talks to the
+  // gateway, and the gateway holds the real credentials. The model reference keeps
+  // its providerId so the gateway knows which upstream to call.
+  // Narrowed once into a local: `viaGateway && input.gateway !== undefined` reads as a
+  // redundant second check, because a boolean const does not narrow the property.
+  const gateway = input.provider.kind === 'openai' ? input.gateway : undefined;
+  if (gateway !== undefined) {
+    env['ANTHROPIC_BASE_URL'] = gateway.baseUrl;
+    env['ANTHROPIC_API_KEY'] = gateway.apiKey;
   } else {
-    env['ANTHROPIC_BASE_URL'] = normaliseBaseUrl(baseUrl);
+    env['ANTHROPIC_API_KEY'] = input.provider.apiKey;
+    const baseUrl = input.provider.baseUrl;
+    if (baseUrl === undefined || baseUrl.length === 0) {
+      // No provider base url means the real Anthropic API. An inherited one would
+      // silently redirect the traffic, so it is removed rather than left in place.
+      delete env['ANTHROPIC_BASE_URL'];
+    } else {
+      env['ANTHROPIC_BASE_URL'] = normaliseBaseUrl(baseUrl);
+    }
   }
 
-  // All four pinned to the chosen model. The agent makes background calls (titles,
+  // All four pinned to the same model. The agent makes background calls (titles,
   // summaries, fast paths) that would otherwise quietly bill a different model on
-  // the user's key.
-  env['ANTHROPIC_MODEL'] = input.modelId;
-  env['ANTHROPIC_DEFAULT_OPUS_MODEL'] = input.modelId;
-  env['ANTHROPIC_DEFAULT_SONNET_MODEL'] = input.modelId;
-  env['ANTHROPIC_DEFAULT_HAIKU_MODEL'] = input.modelId;
+  // the user's key. Through the gateway that value is the full reference, since the
+  // gateway routes on the providerId.
+  const model = gateway === undefined ? input.modelId : formatModelRef({ providerId: input.provider.id, modelId: input.modelId });
+  env['ANTHROPIC_MODEL'] = model;
+  env['ANTHROPIC_DEFAULT_OPUS_MODEL'] = model;
+  env['ANTHROPIC_DEFAULT_SONNET_MODEL'] = model;
+  env['ANTHROPIC_DEFAULT_HAIKU_MODEL'] = model;
 
   return env;
 };

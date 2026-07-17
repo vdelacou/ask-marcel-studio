@@ -81,6 +81,57 @@ describe('pointing the agent at an anthropic provider', () => {
   });
 });
 
+describe('routing an openai-compatible provider through the local gateway', () => {
+  const openai: Provider = { id: 'lmstudio', kind: 'openai', label: 'LM Studio', baseUrl: 'http://127.0.0.1:1234/v1', apiKey: 'sk-upstream-secret', modelIds: ['qwen2.5'] };
+  const GATEWAY = { baseUrl: 'http://127.0.0.1:51999', apiKey: 'gateway-run-key' };
+
+  const viaGateway = (provider: Provider = openai, modelId = 'qwen2.5'): Record<string, string> =>
+    buildSessionEnv({ provider, modelId, userData: USER_DATA, inheritedEnv: INHERITED, gateway: GATEWAY });
+
+  test('the agent is pointed at the gateway, not at the real provider', () => {
+    expect(viaGateway()['ANTHROPIC_BASE_URL']).toBe('http://127.0.0.1:51999');
+  });
+
+  test('the agent authenticates with the gateway key, and never sees the provider key', () => {
+    const env = viaGateway();
+
+    expect(env['ANTHROPIC_API_KEY']).toBe('gateway-run-key');
+    // Load-bearing: the upstream key stays in the main process. Handing it to the
+    // agent subprocess would put it in the environment of everything the agent runs.
+    expect(JSON.stringify(env)).not.toContain('sk-upstream-secret');
+  });
+
+  test('the model keeps its provider prefix, since the gateway routes on it', () => {
+    // The gateway is the only thing that knows which upstream 'lmstudio' means.
+    expect(viaGateway()['ANTHROPIC_MODEL']).toBe('lmstudio::qwen2.5');
+  });
+
+  test('every background model var carries the full reference too', () => {
+    const env = viaGateway();
+
+    expect(env['ANTHROPIC_DEFAULT_OPUS_MODEL']).toBe('lmstudio::qwen2.5');
+    expect(env['ANTHROPIC_DEFAULT_SONNET_MODEL']).toBe('lmstudio::qwen2.5');
+    expect(env['ANTHROPIC_DEFAULT_HAIKU_MODEL']).toBe('lmstudio::qwen2.5');
+  });
+
+  test('an anthropic provider ignores the gateway and talks to the real api', () => {
+    const env = buildSessionEnv({ provider: anthropic, modelId: 'claude-opus-4-8', userData: USER_DATA, inheritedEnv: INHERITED, gateway: GATEWAY });
+
+    expect('ANTHROPIC_BASE_URL' in env).toBe(false);
+    expect(env['ANTHROPIC_API_KEY']).toBe('sk-ant-real');
+    // No prefix: the SDK is calling Anthropic directly, and it has never heard of
+    // 'anthropic-work::'.
+    expect(env['ANTHROPIC_MODEL']).toBe('claude-opus-4-8');
+  });
+
+  test('an openai provider with no gateway running falls back to its own endpoint rather than silently misrouting', () => {
+    const env = buildSessionEnv({ provider: openai, modelId: 'qwen2.5', userData: USER_DATA, inheritedEnv: INHERITED });
+
+    expect(env['ANTHROPIC_BASE_URL']).toBe('http://127.0.0.1:1234');
+    expect(env['ANTHROPIC_MODEL']).toBe('qwen2.5');
+  });
+});
+
 describe('keeping every model call on the model the user picked', () => {
   // The agent makes background calls (titles, summaries, fast paths) that would
   // otherwise silently use a default model on the user's key. Pinning all four

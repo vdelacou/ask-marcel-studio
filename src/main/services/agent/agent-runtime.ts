@@ -12,12 +12,13 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { emptyFold, foldSdkMessage } from '../../../shared/sdk-event-fold.ts';
 import { buildSessionEnv } from '../../../shared/session-env.ts';
-import { parseModelRef } from '../../../shared/model-ref.ts';
+import { formatModelRef, parseModelRef } from '../../../shared/model-ref.ts';
 import { titleFromFirstMessage } from '../../../shared/conversation-doc.ts';
 import { formatError } from '../../../shared/utilities/format-error.ts';
 import type { ChatError, ChatSendInput, UIEvent } from '../../../shared/ipc-contract.ts';
 import type { Conversation, Message, Provider, Settings } from '../../../shared/types.ts';
 import type { ConversationsStore } from '../store/conversations-store.ts';
+import type { Gateway } from '../gateway/gateway-server.ts';
 import type { SettingsStore } from '../store/settings-store.ts';
 import type { Result } from '../../../shared/result.ts';
 import { err, ok } from '../../../shared/result.ts';
@@ -25,6 +26,9 @@ import { err, ok } from '../../../shared/result.ts';
 export type AgentRuntimeDeps = {
   readonly settings: SettingsStore;
   readonly conversations: ConversationsStore;
+  // Started on the first turn that needs it, not at launch: an Anthropic-only user
+  // never pays for a listening socket.
+  readonly gateway: Gateway;
   readonly userData: string;
   readonly now: () => string;
   readonly emit: (event: UIEvent) => void;
@@ -60,13 +64,20 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
     deps.emit({ type: 'turn-start', conversationId: conversation.id, messageId });
 
     try {
+      // Lazy: an openai provider needs the loopback gateway, an anthropic one does not.
+      const gateway = provider.kind === 'openai' ? await deps.gateway.start() : undefined;
+      // Through the gateway the model must keep its providerId: the gateway routes on
+      // it, and query's `model` option overrides ANTHROPIC_MODEL, so setting the env
+      // var alone is not enough. Direct to Anthropic it must be the bare id, which is
+      // all the real API has heard of.
+      const model = gateway === undefined ? modelId : formatModelRef({ providerId: provider.id, modelId });
       const turn = query({
         prompt: text,
         options: {
           abortController: controller,
-          model: modelId,
+          model,
           cwd: workspace,
-          env: buildSessionEnv({ provider, modelId, userData: deps.userData, inheritedEnv: deps.inheritedEnv }),
+          env: buildSessionEnv({ provider, modelId, userData: deps.userData, inheritedEnv: deps.inheritedEnv, ...(gateway === undefined ? {} : { gateway }) }),
           systemPrompt: { type: 'preset', preset: 'claude_code' },
           settingSources: ['user'],
           permissionMode: 'bypassPermissions',
