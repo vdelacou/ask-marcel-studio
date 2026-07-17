@@ -29,7 +29,9 @@ export default [
   ...tsPlugin.configs.recommended,
   securityPlugin.configs.recommended,
   {
-    files: ['**/*.ts', '**/*.tsx'],
+    // .mjs included for the dev harnesses in scripts/ (e.g. fake-anthropic.mjs),
+    // which run under plain node and need its globals.
+    files: ['**/*.ts', '**/*.tsx', '**/*.mjs'],
     languageOptions: { globals: globals.node },
     rules: {
       'func-style': ['error', 'expression'],
@@ -60,8 +62,16 @@ export default [
     // console that invoked them. The Logger port (rule 4) governs src/**; injecting
     // a logger into a pre-commit gate would be ceremony without observability value.
     // Project-level severity change with a comment — never an inline ignore (rule 15).
-    files: ['scripts/**/*.ts'],
+    files: ['scripts/**/*.ts', 'scripts/**/*.mjs'],
     rules: { 'no-console': 'off' },
+  },
+  {
+    // explicit-function-return-type is a TypeScript rule, and a plain .mjs file
+    // cannot carry a return-type annotation to satisfy it — JSDoc does not count.
+    // The dev harnesses here are .mjs because they run under plain node, outside
+    // the app's toolchain. Project-level severity change with a reason (rule 15).
+    files: ['**/*.mjs'],
+    rules: { '@typescript-eslint/explicit-function-return-type': 'off' },
   },
   {
     // React + a11y registration. In the canonical Next.js config these plugins arrive

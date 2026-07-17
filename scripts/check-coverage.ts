@@ -60,6 +60,10 @@ const COVERAGE_RULES: ReadonlyArray<Tier> = [
   // Prefix is the exact file path: these are gated individually, not as a tree,
   // because their siblings in the same folder do import electron.
   ...BUN_TESTABLE_MAIN.map((prefix) => ({ name: 'store io', prefix, threshold: 80 })),
+  // Renderer logic is pure (no react, no electron) and therefore fully testable, so
+  // it carries the same 100% bar as the shared kernel. Only src/renderer/src/lib
+  // qualifies: components are prop-pure by rule 21 and page shells own the hooks.
+  { name: 'renderer lib', prefix: 'src/renderer/src/lib/', threshold: 100 },
 ];
 
 const SKIPPED: ReadonlyArray<SkipRule> = [
@@ -70,7 +74,8 @@ const SKIPPED: ReadonlyArray<SkipRule> = [
   // not unit-tested by rule 21 (prop-pure components are verified by lint and review).
   {
     name: 'electron surface',
-    match: (p) => !BUN_TESTABLE_MAIN.includes(p) && (p.startsWith('src/main/') || p.startsWith('src/preload/') || p.startsWith('src/renderer/')),
+    match: (p) =>
+      !BUN_TESTABLE_MAIN.includes(p) && !p.startsWith('src/renderer/src/lib/') && (p.startsWith('src/main/') || p.startsWith('src/preload/') || p.startsWith('src/renderer/')),
   },
 ];
 // Resist adding composition/wiring files here: any composition root is

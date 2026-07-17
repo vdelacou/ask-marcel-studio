@@ -5,11 +5,11 @@ your Microsoft 365 in reach. A radically simplified Cherry Studio, stripped to t
 
 Electron + React, MIT licensed. Built to the atelier engineering standard.
 
-> **Status: M1 complete.** The app opens on a settings screen where you can add providers
-> (Anthropic, or any OpenAI-compatible endpoint); settings persist across a restart and API keys
-> are encrypted with your OS keychain. Chat, skills, the office CLI, and the OpenAI-compatible
-> gateway are not built yet. See `docs/PLAN.md` for the milestone plan and `.claude/PLAN.md` for
-> the current run.
+> **Status: M2 complete — the app chats.** Add an Anthropic provider in settings, and you get a
+> working agent conversation: streamed text, visible tool calls it actually executes, a persisted
+> transcript that survives a restart, and a Stop button. Skills, the office CLI, the
+> OpenAI-compatible gateway, and packaging are not built yet. See `docs/PLAN.md` for the milestone
+> plan and `.claude/PLAN.md` for the current run.
 
 ## Requirements
 
@@ -69,6 +69,18 @@ scripts/          atelier gate scripts
 .githooks/        pre-commit (8 gates) + commit-msg (Conventional Commits)
 docs/PLAN.md      the full 7-milestone plan
 .claude/          PLAN.md (current run), LESSONS.md (append-only memory)
+```
+
+## Trying it without an API key
+
+`scripts/fake-anthropic.mjs` is a stand-in endpoint that speaks the real Anthropic SSE wire
+protocol. Everything except the model is real: real SDK, real agent subprocess, real tool
+execution, real IPC. It answers the first turn with some text plus a `Bash` tool call, and the
+second (once it sees a `tool_result`) with a closing line.
+
+```bash
+node scripts/fake-anthropic.mjs        # prints FAKE_PORT <port>
+bun run dev                            # add a provider: baseUrl http://127.0.0.1:<port>, any key
 ```
 
 ## How a setting reaches disk

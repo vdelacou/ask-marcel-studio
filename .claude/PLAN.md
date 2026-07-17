@@ -1,5 +1,5 @@
 # PLAN: Ask Marcel Studio M0-M2 (scaffold through first demo)
-Status: in progress. Started 2026-07-17. M0 and M1 complete (M1 unstaged, awaiting commit); M2 next.
+Status: M0, M1 and M2 complete. M2 unstaged, awaiting commit. This plan (M0-M2) is DONE bar the live-key checks.
 
 ## Goal
 
@@ -58,13 +58,28 @@ not throw.
 11. [x] Settings screen: providers CRUD  DoD: settings survive an app restart [met — drove the built app in two separate Electron processes against one userData: saved in process 1, reloaded and rendered in process 2, key decrypted via keychain]
 
 ### M2 Anthropic chat (FIRST DEMO)
-12. [ ] Step zero: read the installed `@anthropic-ai/claude-agent-sdk@0.3.185` .d.ts and confirm every option name (`systemPrompt` preset, `settingSources`, `resume`, interrupt) (risk R3)  DoD: any divergence from `docs/PLAN.md` captured as a `[gotcha]` in LESSONS.md
-13. [ ] `session-env.ts` (+test), pure env builder  DoD: bun test green incl. the model-var pinning cases
-14. [ ] `sdk-event-fold.ts` (+test), SDK msgs to UIEvents + persisted parts  DoD: fixture-array tests green
-15. [ ] `agent-runtime.ts`: query() per turn, run map, cancel, resume capture  DoD: one in-flight run per conversation enforced
-16. [ ] IPC register/emit + preload contextBridge  DoD: renderer receives `chat:event`
-17. [ ] Renderer: zustand store, `ui-event-fold.ts` (+test), chat-thread, composer, tool-call-card  DoD: streamed text + visible tool calls render
-18. [ ] Zero-provider empty state  DoD: `chat:send` with no provider returns `err({kind:'no-provider'})` and the UI shows the CTA
+12. [x] Step zero: read the installed SDK .d.ts (risk R3)  DoD: divergence captured [met — interrupt() is a no-op with a string prompt; cancel uses Options.abortController. See LESSONS]
+13. [x] `session-env.ts` (+test), pure env builder  DoD: bun test green incl. model-var pinning [met — 21 tests, 100%]
+14. [x] `sdk-event-fold.ts` (+test)  DoD: fixture-array tests green [met — 25 tests, 100%; verified against real SDK output via the fake endpoint]
+15. [x] `agent-runtime.ts`  DoD: one in-flight run per conversation [met — cancel via abortController, verified live: partial text kept, no error toast, 0 orphaned subprocesses]
+16. [x] IPC register/emit + preload contextBridge  DoD: renderer receives `chat:event` [met — verified live]
+17. [x] Renderer: `ui-event-fold.ts` (+test), chat-thread, composer, tool-call-card  DoD: streamed text + visible tool calls render [met — verified live in the DOM. zustand NOT used: M2 has one page and no sidebar, so it was ceremony; dep removed. Re-add when the sidebar needs cross-component state]
+18. [x] Zero-provider empty state  DoD: err({kind:'no-provider'}) + CTA [met — verified live: "No model yet", no composer, CTA lands on Providers, no conversation created]
+
+## Verified live (against scripts/fake-anthropic.mjs, no key spent)
+
+- Streamed text -> Bash tool card (done, with input and result) -> streamed text, all rendered.
+- The agent really executed `echo MARCEL_WAS_HERE`; the output came back into the card.
+- Persisted in order; `sdkSessionId` captured.
+- Relaunch in a fresh process reloads the whole transcript, and does not create a second conversation.
+- Stop mid-stream: partial text kept, spinner cleared, no error toast, 0 orphaned subprocesses.
+- Fresh install with no providers: "No model yet" + CTA, no composer, no conversation created.
+
+## Still needs a real Anthropic key (cannot be done by the agent)
+
+- A live turn against the real API (the fake proves the wiring, not the model).
+- SDK-level resume: `sdkSessionId` is captured and passed as `resume`, but only a real
+  session proves the server honours it.
 
 ## Notes / breadcrumbs
 

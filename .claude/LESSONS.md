@@ -6,6 +6,26 @@ Each entry is one of `[mistake]`, `[decision]`, or `[gotcha]`. Newest first.
 
 ---
 
+## [gotcha] 2026-07-17 | noUncheckedIndexedAccess was off, so the types lied about array access
+
+`lint:strict` flagged `providers[0] === undefined` as "always false", which looked like dead code but was the opposite: without `noUncheckedIndexedAccess`, TypeScript types every index access as present, so `providers[0]` on an EMPTY array is typed `Provider` while returning `undefined` at runtime. The defensive checks were correct and the type system was wrong. Neither `strict: true` nor `@electron-toolkit/tsconfig` enables the flag, so it was silently off from M0. Turning it on in both tsconfigs produced zero new errors, because the code already guarded every index access.
+Applies to: both tsconfigs; keep the flag on, and read an "always false" comparison as a possible missing flag before deleting the check.
+
+## [decision] 2026-07-17 | M2 is verified against a fake Anthropic endpoint, not a live key
+
+`docs/PLAN.md` gates M2's definition of done on a live Anthropic key, which the agent does not have. `scripts/fake-anthropic.mjs` speaks the real SSE wire protocol instead (message_start, content_block_delta, tool_use with input_json_delta, message_delta, message_stop), so everything except the model itself is real: real SDK, real agent subprocess, real tool execution, real IPC, real renderer. It proved the whole path, including the agent genuinely running `echo MARCEL_WAS_HERE` and the output coming back into a tool card. Keep it for M5, where the gateway has to emit exactly this wire format.
+Applies to: verifying any turn-shaped behaviour without spending a key.
+
+## [mistake] 2026-07-17 | two harness bugs read as app bugs during M2 verification
+
+A probe showed no assistant reply and then a missing tool card, both of which looked like real defects and were not. First, the fake endpoint chose its response from a global turn counter that survived across runs, so a later probe got the wrong turn; keying off whether the request body contains a `tool_result` made it stateless and correct. Second, the probe created its own BrowserWindow while main creates its own, and main emits chat events to ITS window, so the events were arriving at a window the probe never inspected. Both wasted a debugging cycle chasing the wrong layer.
+Rule for next time: when a probe shows nothing, suspect the probe before the app — confirm the harness is observing the same objects the app is using.
+
+## [gotcha] 2026-07-17 | query.interrupt() silently no-ops with a string prompt; cancel must use abortController
+
+`docs/PLAN.md` specifies cancel via `query.interrupt()`, and the method does exist on the Query type in 0.3.185, so it typechecks. But the SDK documents control requests as "only supported when streaming input/output is used", and the runtime honours that by doing nothing rather than complaining: probed against a hanging local server with a string prompt, `interrupt()` RESOLVED while the generator kept running and kept emitting. A silent success is the worst failure mode, since nothing surfaces it. `Options.abortController` is the mechanism that actually works: it stops the query, emission ceases, and the generator throws `Claude Code process aborted by user`, which the runtime must recognise as a user cancel rather than report as an error.
+Applies to: the M2 agent runtime's cancel path, and any later use of setPermissionMode or setModel, which are control requests with the same constraint.
+
 ## [mistake] 2026-07-17 | main validated the api key but stored the untrimmed one
 
 `validateSettings` rejected a blank key with `apiKey.trim().length === 0` and then stored the raw `apiKey`, so a key pasted with a trailing newline was encrypted verbatim and would have been sent to the provider, returning a 401 that reads like a bad key. Every unit test passed because the renderer's `draftsToSettings` trims first, so no test ever handed main an untrimmed key; only driving the real app and calling `studio.settings.save()` directly exposed it. Main is the authoritative validator and must never depend on the caller having normalised its input.
