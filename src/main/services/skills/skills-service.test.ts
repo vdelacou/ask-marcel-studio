@@ -1,0 +1,217 @@
+/*
+ * The skills service against a real temp userData. This file never imports electron
+ * (the folder picker lives in the IPC layer, not here), so the bun runner can run it.
+ */
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createSkillsService } from './skills-service.ts';
+import type { SkillsService } from './skills-service.ts';
+
+let userData = '';
+let builtinSource = '';
+let service: SkillsService;
+
+const writeSkillFolder = (base: string, folder: string, frontmatter: string, body = '# Skill\n'): string => {
+  const dir = join(base, folder);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'SKILL.md'), `---\n${frontmatter}\n---\n\n${body}`);
+  return dir;
+};
+
+beforeEach(() => {
+  userData = mkdtempSync(join(tmpdir(), 'studio-skills-'));
+  builtinSource = mkdtempSync(join(tmpdir(), 'studio-builtin-'));
+  writeSkillFolder(builtinSource, 'ask-marcel-office', 'name: ask-marcel-office\ndescription: Read the user Microsoft 365.');
+  service = createSkillsService({ userData, builtinSource, builtinNames: ['ask-marcel-office'] });
+});
+
+afterEach(() => {
+  rmSync(userData, { recursive: true, force: true });
+  rmSync(builtinSource, { recursive: true, force: true });
+});
+
+describe('what the agent can do out of the box', () => {
+  test('a fresh install lists nothing rather than failing on a missing folder', async () => {
+    const listed = await service.list();
+
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) return;
+    expect(listed.value).toEqual([]);
+  });
+
+  test('the built-in office skill is seeded on launch and marked as built in', async () => {
+    await service.seedBuiltins();
+
+    const listed = await service.list();
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) return;
+    expect(listed.value).toHaveLength(1);
+    expect(listed.value[0]).toMatchObject({ name: 'ask-marcel-office', isBuiltIn: true });
+  });
+
+  test('seeding again overwrites the bundled copy, so an app update ships an updated skill', async () => {
+    await service.seedBuiltins();
+    writeSkillFolder(builtinSource, 'ask-marcel-office', 'name: ask-marcel-office\ndescription: A newer description.');
+
+    await service.seedBuiltins();
+
+    const listed = await service.list();
+    expect(listed.ok && listed.value[0]?.description).toBe('A newer description.');
+  });
+
+  test('a built-in the user deleted by hand comes back on the next launch', async () => {
+    await service.seedBuiltins();
+    rmSync(join(userData, 'claude-config', 'skills', 'ask-marcel-office'), { recursive: true, force: true });
+
+    await service.seedBuiltins();
+
+    const listed = await service.list();
+    expect(listed.ok && listed.value).toHaveLength(1);
+  });
+
+  test('a built-in cannot be removed, since it would reappear on the next launch anyway', async () => {
+    await service.seedBuiltins();
+
+    const removed = await service.remove('ask-marcel-office');
+
+    expect(removed.ok).toBe(false);
+    if (removed.ok) return;
+    expect(removed.error.kind).toBe('built-in');
+    expect(existsSync(join(userData, 'claude-config', 'skills', 'ask-marcel-office'))).toBe(true);
+  });
+});
+
+describe('adding a skill the user picked', () => {
+  test('a folder with a SKILL.md is installed under its own name', async () => {
+    const source = writeSkillFolder(tmpdir(), `pirate-${String(Date.now())}`, 'name: pirate-voice\ndescription: Speak like a pirate.');
+
+    const added = await service.add(source);
+
+    expect(added.ok).toBe(true);
+    if (!added.ok) return;
+    expect(added.value).toMatchObject({ name: 'pirate-voice', folder: 'pirate-voice', isBuiltIn: false });
+    expect(existsSync(join(userData, 'claude-config', 'skills', 'pirate-voice', 'SKILL.md'))).toBe(true);
+    rmSync(source, { recursive: true, force: true });
+  });
+
+  test('the whole folder is copied, not just the SKILL.md, since a skill may ship scripts', async () => {
+    const source = writeSkillFolder(tmpdir(), `withrefs-${String(Date.now())}`, 'name: withrefs\ndescription: Has references.');
+    mkdirSync(join(source, 'references'), { recursive: true });
+    writeFileSync(join(source, 'references', 'deep.md'), 'detail');
+
+    await service.add(source);
+
+    expect(existsSync(join(userData, 'claude-config', 'skills', 'withrefs', 'references', 'deep.md'))).toBe(true);
+    rmSync(source, { recursive: true, force: true });
+  });
+
+  test('an added skill is listed alongside the built-in, and is removable', async () => {
+    await service.seedBuiltins();
+    const source = writeSkillFolder(tmpdir(), `extra-${String(Date.now())}`, 'name: extra\ndescription: Extra.');
+    await service.add(source);
+
+    const listed = await service.list();
+
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) return;
+    expect(listed.value.map((s) => s.name)).toEqual(['ask-marcel-office', 'extra']);
+    expect(listed.value.find((s) => s.name === 'extra')?.isBuiltIn).toBe(false);
+
+    const removed = await service.remove('extra');
+    expect(removed.ok).toBe(true);
+
+    const after = await service.list();
+    expect(after.ok).toBe(true);
+    if (!after.ok) return;
+    expect(after.value.map((s) => s.name)).toEqual(['ask-marcel-office']);
+    rmSync(source, { recursive: true, force: true });
+  });
+
+  test('adding the same skill twice is refused rather than overwriting what is there', async () => {
+    const source = writeSkillFolder(tmpdir(), `dup-${String(Date.now())}`, 'name: dup\ndescription: First.');
+    await service.add(source);
+
+    const again = await service.add(source);
+
+    expect(again.ok).toBe(false);
+    if (again.ok) return;
+    expect(again.error.kind).toBe('already-installed');
+    rmSync(source, { recursive: true, force: true });
+  });
+
+  test('a folder with no SKILL.md is refused, and nothing is copied', async () => {
+    const source = mkdtempSync(join(tmpdir(), 'notaskill-'));
+    writeFileSync(join(source, 'README.md'), '# not a skill');
+
+    const added = await service.add(source);
+
+    expect(added.ok).toBe(false);
+    if (added.ok) return;
+    expect(added.error.kind).toBe('not-a-skill');
+    expect(existsSync(join(userData, 'claude-config', 'skills'))).toBe(false);
+    rmSync(source, { recursive: true, force: true });
+  });
+
+  test('a SKILL.md with no frontmatter is refused before anything is copied', async () => {
+    const source = mkdtempSync(join(tmpdir(), 'bare-'));
+    writeFileSync(join(source, 'SKILL.md'), '# Just a heading\n');
+
+    const added = await service.add(source);
+
+    expect(added.ok).toBe(false);
+    if (added.ok) return;
+    expect(added.error.kind).toBe('not-a-skill');
+    rmSync(source, { recursive: true, force: true });
+  });
+
+  test('a skill whose name is a path traversal is refused, and writes nothing at all', async () => {
+    // The name comes from a SKILL.md this app did not write, so it is untrusted.
+    const source = writeSkillFolder(tmpdir(), `eviltrav-${String(Date.now())}`, 'name: ../../../evil\ndescription: Tries to escape.');
+    await service.seedBuiltins();
+
+    const added = await service.add(source);
+
+    expect(added.ok).toBe(false);
+    if (added.ok) return;
+    expect(added.error.kind).toBe('bad-name');
+    // Asserted against THIS run's skills folder, not a shared tmpdir sibling: a
+    // sibling path under tmpdir() is shared with every other process on the machine,
+    // so a stale folder from anywhere would fail this for the wrong reason.
+    const listed = await service.list();
+    expect(listed.ok && listed.value.map((s) => s.name)).toEqual(['ask-marcel-office']);
+    expect(existsSync(join(userData, 'claude-config', 'skills', 'evil'))).toBe(false);
+    rmSync(source, { recursive: true, force: true });
+  });
+});
+
+describe('listing a skills folder the user has been poking at', () => {
+  test('a folder that is not a skill does not break the panel, it simply does not list', async () => {
+    await service.seedBuiltins();
+    mkdirSync(join(userData, 'claude-config', 'skills', 'junk'), { recursive: true });
+    writeFileSync(join(userData, 'claude-config', 'skills', 'junk', 'notes.txt'), 'not a skill');
+
+    const listed = await service.list();
+
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) return;
+    expect(listed.value.map((s) => s.name)).toEqual(['ask-marcel-office']);
+  });
+
+  test('removing a skill that is not installed reports not-found', async () => {
+    const removed = await service.remove('ghost');
+
+    expect(removed.ok).toBe(false);
+    if (removed.ok) return;
+    expect(removed.error.kind).toBe('not-found');
+  });
+
+  test('removing by a traversal name is refused', async () => {
+    const removed = await service.remove('../../../etc');
+
+    expect(removed.ok).toBe(false);
+    if (removed.ok) return;
+    expect(removed.error.kind).toBe('bad-name');
+  });
+});

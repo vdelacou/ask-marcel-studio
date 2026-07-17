@@ -27,16 +27,20 @@ const isMissingFile = (e: unknown): boolean => typeof e === 'object' && e !== nu
 
 // Returns not-found rather than a default, so the caller decides what "missing"
 // means: first launch is empty settings, but a missing conversation is an error.
-export const readJsonFile = async (path: string): Promise<Result<unknown, JsonFileError>> => {
-  let text: string;
+export const readTextFile = async (path: string): Promise<Result<string, JsonFileError>> => {
   try {
-    text = await readFile(path, 'utf8');
+    return ok(await readFile(path, 'utf8'));
   } catch (e) {
     if (isMissingFile(e)) return err({ kind: 'not-found', message: `no file at ${path}` });
     return err({ kind: 'unreadable', message: formatError(e) });
   }
+};
+
+export const readJsonFile = async (path: string): Promise<Result<unknown, JsonFileError>> => {
+  const text = await readTextFile(path);
+  if (!text.ok) return text;
   try {
-    return ok(JSON.parse(text));
+    return ok(JSON.parse(text.value));
   } catch (e) {
     // The file exists but is not JSON: truncated by a crash, or hand-edited.
     return err({ kind: 'unreadable', message: `${path} is not valid json: ${formatError(e)}` });
