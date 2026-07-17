@@ -39,6 +39,11 @@ const api: StudioApi = {
       };
     },
   },
+  skills: {
+    list: () => ipcRenderer.invoke(CHANNEL.skillsList),
+    add: () => ipcRenderer.invoke(CHANNEL.skillsAdd),
+    remove: (name: string) => ipcRenderer.invoke(CHANNEL.skillsRemove, name),
+  },
 };
 
 contextBridge.exposeInMainWorld('studio', api);

@@ -16,7 +16,9 @@ import { registerIpc } from './ipc/register.ts';
 import { createAgentRuntime } from './services/agent/agent-runtime.ts';
 import { createConversationsStore } from './services/store/conversations-store.ts';
 import { createSettingsStore } from './services/store/settings-store.ts';
+import { createSkillsService } from './services/skills/skills-service.ts';
 import type { AgentRuntime } from './services/agent/agent-runtime.ts';
+import type { SkillsService } from './services/skills/skills-service.ts';
 import type { UIEvent } from '../shared/ipc-contract.ts';
 
 const createWindow = (): BrowserWindow => {
@@ -61,14 +63,21 @@ const createWindow = (): BrowserWindow => {
   return window;
 };
 
-const buildRuntime = (emit: (event: UIEvent) => void): AgentRuntime => {
+// Bundled skills ship in resources/. In dev that is the repo folder; packaged, it is
+// inside the app bundle. app.isPackaged is the only thing that knows which.
+const builtinSkillsSource = (): string => (app.isPackaged ? join(process.resourcesPath, 'builtin-skills') : join(__dirname, '../../resources/builtin-skills'));
+
+const BUILTIN_SKILLS = ['ask-marcel-office'];
+
+const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; skills: SkillsService } => {
   const userData = app.getPath('userData');
   const now = (): string => new Date().toISOString();
   const settings = createSettingsStore({ userData });
   const conversations = createConversationsStore({ userData, now });
+  const skills = createSkillsService({ userData, builtinSource: builtinSkillsSource(), builtinNames: BUILTIN_SKILLS });
   const agent = createAgentRuntime({ settings, conversations, userData, now, emit, inheritedEnv: process.env });
-  registerIpc({ settings, conversations, agent });
-  return agent;
+  registerIpc({ settings, conversations, agent, skills });
+  return { agent, skills };
 };
 
 void app.whenReady().then(() => {
@@ -78,9 +87,14 @@ void app.whenReady().then(() => {
   const window = createWindow();
   // Events go to the window that exists now. There is one window in v1 (multi-window
   // is a stated non-goal), so a lookup per event would be ceremony.
-  const runtime = buildRuntime((event) => {
+  const { agent: runtime, skills } = buildRuntime((event) => {
     if (!window.isDestroyed()) window.webContents.send(CHAT_EVENT, event);
   });
+
+  // Re-seeded every launch so an app update ships an updated skill, and a folder the
+  // user deleted by hand comes back. Not awaited: a skill lands before the first
+  // message can possibly be sent, and blocking startup on a copy would be worse.
+  void skills.seedBuiltins();
 
   // A turn left running would keep an orphaned agent subprocess alive after quit.
   app.on('before-quit', () => runtime.cancelAll());

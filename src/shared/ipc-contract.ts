@@ -22,6 +22,9 @@ export const CHANNEL = {
   conversationsDelete: 'conversations:delete',
   chatSend: 'chat:send',
   chatCancel: 'chat:cancel',
+  skillsList: 'skills:list',
+  skillsAdd: 'skills:add',
+  skillsRemove: 'skills:remove',
 } as const;
 
 // The one main-to-renderer stream. Everything the UI learns during a turn arrives here.
@@ -41,6 +44,31 @@ export type UIEvent =
   | { readonly type: 'turn-done'; readonly conversationId: string; readonly usage: TurnUsage }
   | { readonly type: 'error'; readonly conversationId: string; readonly message: string }
   | { readonly type: 'title'; readonly conversationId: string; readonly title: string };
+
+export type Skill = {
+  // The folder it lives in, which is its checkpointed name (skill-name.ts).
+  readonly folder: string;
+  // The name from its frontmatter, which is what the agent sees.
+  readonly name: string;
+  readonly description: string;
+  // Shipped with the app: re-seeded every launch, so removing it is refused rather
+  // than silently undone on the next start.
+  readonly isBuiltIn: boolean;
+};
+
+//   not-a-skill       the folder has no SKILL.md, or it has no usable frontmatter
+//   bad-name          the name could not be a folder (it reaches a path)
+//   already-installed a skill of that name is already there; we never overwrite
+//   built-in          ships with the app; removal is refused
+export type SkillsError =
+  | { readonly kind: 'not-a-skill'; readonly message: string }
+  | { readonly kind: 'bad-name'; readonly message: string }
+  | { readonly kind: 'already-installed'; readonly message: string }
+  | { readonly kind: 'built-in'; readonly message: string }
+  | { readonly kind: 'not-found'; readonly message: string }
+  | { readonly kind: 'cancelled'; readonly message: string }
+  | { readonly kind: 'unreadable'; readonly message: string }
+  | { readonly kind: 'write-failed'; readonly message: string };
 
 export type ChatSendInput = {
   readonly conversationId: string;
@@ -111,5 +139,13 @@ export type StudioApi = {
     readonly cancel: (conversationId: string) => Promise<Result<null, ChatError>>;
     // Returns an unsubscribe function; the renderer attaches one listener at mount.
     readonly onEvent: (listener: (event: UIEvent) => void) => () => void;
+  };
+  readonly skills: {
+    readonly list: () => Promise<Result<readonly Skill[], SkillsError>>;
+    // Opens the folder picker in MAIN and installs what was chosen. The renderer
+    // never sees a path: a path chosen in the renderer would be an untrusted string
+    // reaching the filesystem.
+    readonly add: () => Promise<Result<Skill, SkillsError>>;
+    readonly remove: (name: string) => Promise<Result<null, SkillsError>>;
   };
 };

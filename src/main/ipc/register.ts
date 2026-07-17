@@ -9,16 +9,19 @@
  * Nothing arriving here is trusted: it crossed a process boundary as JSON, so every
  * id is re-branded and every document re-validated by the store it reaches.
  */
-import { ipcMain } from 'electron';
+import { dialog, ipcMain } from 'electron';
 import { CHANNEL } from '../../shared/ipc-contract.ts';
 import type { AgentRuntime } from '../services/agent/agent-runtime.ts';
+import type { SkillsService } from '../services/skills/skills-service.ts';
 import type { ConversationsStore } from '../services/store/conversations-store.ts';
 import type { SettingsStore } from '../services/store/settings-store.ts';
+import { err } from '../../shared/result.ts';
 
 export type IpcDeps = {
   readonly settings: SettingsStore;
   readonly conversations: ConversationsStore;
   readonly agent: AgentRuntime;
+  readonly skills: SkillsService;
 };
 
 const asString = (value: unknown): string => (typeof value === 'string' ? value : '');
@@ -41,4 +44,15 @@ export const registerIpc = (deps: IpcDeps): void => {
     return deps.agent.send({ conversationId: asString(draft?.conversationId), text: asString(draft?.text) });
   });
   ipcMain.handle(CHANNEL.chatCancel, (_event, conversationId: unknown) => deps.agent.cancel(asString(conversationId)));
+
+  ipcMain.handle(CHANNEL.skillsList, () => deps.skills.list());
+  ipcMain.handle(CHANNEL.skillsRemove, (_event, name: unknown) => deps.skills.remove(asString(name)));
+  // The picker opens HERE, in main, and the renderer never names a path. A path
+  // chosen renderer-side would be an untrusted string reaching the filesystem.
+  ipcMain.handle(CHANNEL.skillsAdd, async () => {
+    const picked = await dialog.showOpenDialog({ title: 'Choose a skill folder', properties: ['openDirectory'], buttonLabel: 'Add skill' });
+    const dir = picked.filePaths[0];
+    if (picked.canceled || dir === undefined) return err({ kind: 'cancelled', message: 'no folder chosen' });
+    return deps.skills.add(dir);
+  });
 };
