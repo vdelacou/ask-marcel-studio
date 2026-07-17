@@ -54,6 +54,20 @@ describe('naming a conversation after what the user first asked', () => {
     expect(title.endsWith('…')).toBe(true);
   });
 
+  test('a question of exactly the limit is kept whole, not truncated by one character', () => {
+    // The <= boundary: at exactly 60 the title fits and must not lose its last
+    // character to an ellipsis.
+    const exact = 'a'.repeat(60);
+
+    expect(titleFromFirstMessage(exact)).toBe(exact);
+  });
+
+  test('a question one character over the limit is the shortest one that gets cut', () => {
+    const title = titleFromFirstMessage('a'.repeat(61));
+
+    expect(title).toBe(`${'a'.repeat(59)}…`);
+  });
+
   test('a question spread over several lines becomes one line', () => {
     expect(titleFromFirstMessage('what is\n\n  in my   inbox\t')).toBe('what is in my inbox');
   });
@@ -89,6 +103,20 @@ describe('reopening a conversation saved by an earlier run', () => {
     expect(part.input).toEqual({ command: 'ask-marcel-office list-mail' });
     expect(part.result).toBe('3 messages');
     expect(part.status).toBe('done');
+  });
+
+  test('a tool that failed last session comes back marked as an error', () => {
+    // The third status. Without this the 'error' arm is never exercised and a
+    // failed tool could silently load as something else.
+    const failed = {
+      ...onDisk,
+      messages: [{ id: 'm1', role: 'assistant', createdAt: NOW, parts: [{ type: 'tool', toolUseId: 't1', name: 'Bash', input: {}, status: 'error', result: 'boom' }] }],
+    };
+    const parsed = parseConversation(failed);
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.messages[0]?.parts[0]).toMatchObject({ status: 'error', result: 'boom' });
   });
 
   test('a conversation interrupted mid-turn keeps its still-running tool call', () => {
@@ -186,6 +214,7 @@ describe('refusing a conversation file that cannot be trusted', () => {
 
       expect(parsed.ok).toBe(false);
       if (parsed.ok) return;
+      expect(parsed.error.kind).toBe('unreadable');
       expect(parsed.error.message).toBe(rejection.message);
     });
   }
