@@ -7,6 +7,9 @@
 import { join } from 'node:path';
 import { electronApp, is, optimizer } from '@electron-toolkit/utils';
 import { BrowserWindow, app, shell } from 'electron';
+import { registerIpc } from './ipc/register.ts';
+import { createConversationsStore } from './services/store/conversations-store.ts';
+import { createSettingsStore } from './services/store/settings-store.ts';
 
 const createWindow = (): void => {
   const window = new BrowserWindow({
@@ -49,8 +52,20 @@ const createWindow = (): void => {
   void window.loadFile(join(__dirname, '../renderer/index.html'));
 };
 
+// Composition root: every state-source is read once, here, and injected downward
+// as a parameter. Nothing below reaches for app.getPath or the clock itself, which
+// is what keeps the stores testable (references/architecture.md).
+const buildDeps = (): Parameters<typeof registerIpc>[0] => {
+  const userData = app.getPath('userData');
+  return {
+    settings: createSettingsStore({ userData }),
+    conversations: createConversationsStore({ userData, now: () => new Date().toISOString() }),
+  };
+};
+
 void app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.askmarcel.studio');
+  registerIpc(buildDeps());
   app.on('browser-window-created', (_event, window) => optimizer.watchWindowShortcuts(window));
   createWindow();
   app.on('activate', () => {
