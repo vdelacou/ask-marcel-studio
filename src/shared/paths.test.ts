@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { binDir, claudeConfigDir, conversationFilePath, conversationsDir, settingsFilePath, workspaceDir, workspacesDir } from './paths.ts';
+import { binDir, claudeConfigDir, conversationFilePath, conversationsDir, settingsFilePath, skillDir, skillsDir, workspaceDir, workspacesDir } from './paths.ts';
+import { skillFolderName } from './skill-name.ts';
 import { conversationId } from './conversation-id.ts';
 import { unwrap } from './result.ts';
 
@@ -32,6 +33,22 @@ describe('locating the files the app owns inside its own data folder', () => {
 
   test('the shim folder that goes first on the agent path lives in the data folder', () => {
     expect(binDir(USER_DATA)).toBe(`${USER_DATA}/bin`);
+  });
+
+  test('skills live under the agent config folder, which is what settingSources loads', () => {
+    expect(skillsDir(USER_DATA)).toBe(`${USER_DATA}/claude-config/skills`);
+  });
+
+  test('each skill gets its own folder, named by its checkpointed name', () => {
+    const folder = unwrap(skillFolderName('pirate-voice'));
+
+    expect(skillDir(USER_DATA, folder)).toBe(`${USER_DATA}/claude-config/skills/pirate-voice`);
+  });
+
+  test('a skill folder never escapes the skills folder', () => {
+    const folder = unwrap(skillFolderName('pirate-voice'));
+
+    expect(skillDir(USER_DATA, folder).startsWith(`${USER_DATA}/claude-config/skills/`)).toBe(true);
   });
 });
 

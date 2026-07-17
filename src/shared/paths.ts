@@ -16,6 +16,7 @@
  */
 import { join } from 'node:path';
 import type { ConversationId } from './conversation-id.ts';
+import type { SkillFolderName } from './skill-name.ts';
 
 // node:path is path manipulation, not IO, so it is allowed anywhere (rule 20).
 
@@ -32,6 +33,11 @@ export const workspaceDir = (userData: string, id: ConversationId): string => jo
 // CLAUDE_CONFIG_DIR for the agent subprocess. Its skills/ subfolder is what
 // settingSources: ['user'] loads.
 export const claudeConfigDir = (userData: string): string => join(userData, 'claude-config');
+
+// What settingSources: ['user'] loads. One folder per skill, each with a SKILL.md.
+export const skillsDir = (userData: string): string => join(claudeConfigDir(userData), 'skills');
+
+export const skillDir = (userData: string, folder: SkillFolderName): string => join(skillsDir(userData), folder);
 
 // Prepended to the agent's PATH so `ask-marcel-office` resolves to our shim (M4).
 export const binDir = (userData: string): string => join(userData, 'bin');
