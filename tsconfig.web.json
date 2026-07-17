@@ -4,6 +4,7 @@
   "compilerOptions": {
     "composite": true,
     "moduleDetection": "force",
+    "noUncheckedIndexedAccess": true,
     "jsx": "react-jsx",
     "noImplicitAny": true,
     "verbatimModuleSyntax": true,

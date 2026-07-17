@@ -4,6 +4,7 @@
   "compilerOptions": {
     "composite": true,
     "moduleDetection": "force",
+    "noUncheckedIndexedAccess": true,
     "types": ["electron-vite/node", "bun"],
     "noImplicitAny": true,
     "verbatimModuleSyntax": true,
