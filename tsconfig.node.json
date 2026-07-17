@@ -1,0 +1,13 @@
+{
+  "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
+  "include": ["electron.vite.config.ts", "src/main/**/*", "src/preload/**/*", "src/shared/**/*", "src/test-helpers/**/*", "scripts/**/*"],
+  "compilerOptions": {
+    "composite": true,
+    "moduleDetection": "force",
+    "types": ["electron-vite/node", "bun"],
+    "noImplicitAny": true,
+    "verbatimModuleSyntax": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true
+  }
+}

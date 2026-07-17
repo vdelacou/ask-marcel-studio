@@ -1,0 +1,11 @@
+[test]
+coverage = true
+coverageSkipTestFiles = true
+coverageReporter = ["text"]
+# NOTE: no `coverageThreshold` here — per-tier enforcement is in
+# scripts/check-coverage.ts. A global threshold would make `bun test --coverage`
+# exit non-zero before the script can parse, and the per-file violation
+# breakdown would never print.
+# NOTE: no `preload` here — the coverage preload is loaded only by
+# `bun run coverage` (via --preload on the spawned bun-test command),
+# so plain `bun test` runs stay fast.
