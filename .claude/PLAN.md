@@ -1,5 +1,5 @@
 # PLAN: Ask Marcel Studio M0-M2 (scaffold through first demo)
-Status: in progress. Started 2026-07-17. M0 complete; M1 next.
+Status: in progress. Started 2026-07-17. M0 and M1 complete (M1 unstaged, awaiting commit); M2 next.
 
 ## Goal
 
@@ -31,9 +31,31 @@ designated first demo, for user review before the gateway and packaging are buil
 8. [x] Verify the `commit-msg` hook rejects a junk message  DoD: junk exits non-zero [met — rejects junk/wip:/Fix:/trailing period, accepts valid]
 
 ### M1 Storage + settings
-9. [ ] `src/shared/types.ts` + `ipc-contract.ts` + `result.ts`  DoD: typecheck green
-10. [ ] `json-file.ts` atomic write (tmp+rename) + settings-store + conversations-store  DoD: bun tests pass against real temp dirs
-11. [ ] Settings screen: providers CRUD  DoD: settings survive an app restart
+
+Both decisions resolved with the user 2026-07-17:
+
+- **Store shape = pure core + IO shell.** Each store splits into a pure module in `src/shared/`
+  (parse / validate / merge, 100% coverage + mutation tier) plus a thin electron-side shell that
+  only reads and writes. The same split is what makes the M2 folds testable.
+- **API key at rest = Electron `safeStorage`** (OS keychain), not plaintext.
+
+Consequence of combining the two: encryption belongs in the IO **shell**, never the pure core, so
+the core stays free of electron and never sees a plaintext key. The core's on-disk type therefore
+carries an opaque envelope, NOT `docs/PLAN.md`'s `apiKey: string`:
+
+```ts
+// on disk (pure core owns this shape)         // in memory (after the shell decrypts)
+{ apiKey: { enc: string } }                    { apiKey: string }
+```
+
+So `Provider` needs two shapes: a stored one and a runtime one. Do not let `safeStorage` leak into
+`src/shared/**` — it would import electron and break the 100% tier (see LESSONS, bun test decision).
+`safeStorage.isEncryptionAvailable()` can be false (no keychain); the shell must return a typed err,
+not throw.
+
+9. [x] `src/shared/types.ts` + `ipc-contract.ts`  DoD: typecheck green [met]
+10. [x] `json-file.ts` atomic write (tmp+rename) + settings-store + conversations-store  DoD: bun tests pass against real temp dirs [met — json-file and conversations-store import no electron, so both are bun-tested against real temp dirs and gate-enforced; settings-store imports safeStorage and is verified live instead]
+11. [x] Settings screen: providers CRUD  DoD: settings survive an app restart [met — drove the built app in two separate Electron processes against one userData: saved in process 1, reloaded and rendered in process 2, key decrypted via keychain]
 
 ### M2 Anthropic chat (FIRST DEMO)
 12. [ ] Step zero: read the installed `@anthropic-ai/claude-agent-sdk@0.3.185` .d.ts and confirm every option name (`systemPrompt` preset, `settingSources`, `resume`, interrupt) (risk R3)  DoD: any divergence from `docs/PLAN.md` captured as a `[gotcha]` in LESSONS.md
@@ -46,7 +68,11 @@ designated first demo, for user review before the gateway and packaging are buil
 
 ## Notes / breadcrumbs
 
+- M0 committed as `4e1ef2a` on 2026-07-17, with `--no-verify` (gate 1 size cap; sanctioned for an
+  initial scaffold). Gates 2-8 were run manually and all passed before committing.
 - Scope decided with the user 2026-07-17: M0-M2 only. M3-M7 explicitly out of scope this run.
+- M1 starts at step 9. `src/shared/result.ts` already exists and is committed, so step 9 is really
+  just `types.ts` + `ipc-contract.ts`.
 - Office CLI: user publishes `ask-marcel-office-cli@2.2.0` to npm first. Blocks M4 only; not this run.
   npm latest is 2.1.0; local 2.2.0 is a symlink to `../ask-marcel-office-cli`.
 - `ai` package is at v7.0.30, not the v4/v5 `docs/PLAN.md` assumed. Only matters at M5 (gateway);

@@ -5,9 +5,11 @@ your Microsoft 365 in reach. A radically simplified Cherry Studio, stripped to t
 
 Electron + React, MIT licensed. Built to the atelier engineering standard.
 
-> **Status: M0 (scaffold) complete.** The app opens a styled window and the full gate suite is
-> green. Chat, settings, skills, the office CLI, and the OpenAI-compatible gateway are not built
-> yet. See `docs/PLAN.md` for the milestone plan and `.claude/PLAN.md` for the current run.
+> **Status: M1 complete.** The app opens on a settings screen where you can add providers
+> (Anthropic, or any OpenAI-compatible endpoint); settings persist across a restart and API keys
+> are encrypted with your OS keychain. Chat, skills, the office CLI, and the OpenAI-compatible
+> gateway are not built yet. See `docs/PLAN.md` for the milestone plan and `.claude/PLAN.md` for
+> the current run.
 
 ## Requirements
 
@@ -52,10 +54,15 @@ improve: the incremental cache reports stale survivors after a test change.
 
 ```
 src/shared/       pure kernel, zero electron imports, 100% coverage tier
-src/main/         electron main process (composition root, services, IPC)
+src/main/         electron main process
+  index.ts        composition root: reads userData + clock once, injects downward
+  ipc/            channel wiring; every handler returns a Result
+  services/store/ IO shells around the pure document modules in src/shared
 src/preload/      contextBridge typed api — the renderer's only door to main
 src/renderer/     React + Tailwind v4
-  src/components/ design system (atoms, organisms): all styling lives here
+  src/components/ design system (atoms, molecules, organisms): all styling lives here
+  src/lib/        renderer logic (pure, tested)
+  src/page/       page shells: own all state, carry no class strings
   src/styles/globals.css                            design tokens (@theme)
 src/test-helpers/ test-only helpers; never imported by production code
 scripts/          atelier gate scripts
@@ -63,6 +70,20 @@ scripts/          atelier gate scripts
 docs/PLAN.md      the full 7-milestone plan
 .claude/          PLAN.md (current run), LESSONS.md (append-only memory)
 ```
+
+## How a setting reaches disk
+
+Worth knowing before changing the stores, because the split is deliberate:
+
+```
+settings screen → draftsToSettings (lib) → IPC → settings-store (shell)
+                                                   ├── validateSettings   (pure, src/shared)
+                                                   ├── seal via safeStorage  ← the ONLY place
+                                                   └── writeJsonFileAtomic   keys are encrypted
+```
+
+The pure core never sees a plaintext key and never imports electron, which is what keeps it in
+the 100% coverage tier. On disk an API key is `{"enc":"…"}`, never the key itself.
 
 ## Testing
 

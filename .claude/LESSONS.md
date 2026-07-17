@@ -6,6 +6,31 @@ Each entry is one of `[mistake]`, `[decision]`, or `[gotcha]`. Newest first.
 
 ---
 
+## [mistake] 2026-07-17 | main validated the api key but stored the untrimmed one
+
+`validateSettings` rejected a blank key with `apiKey.trim().length === 0` and then stored the raw `apiKey`, so a key pasted with a trailing newline was encrypted verbatim and would have been sent to the provider, returning a 401 that reads like a bad key. Every unit test passed because the renderer's `draftsToSettings` trims first, so no test ever handed main an untrimmed key; only driving the real app and calling `studio.settings.save()` directly exposed it. Main is the authoritative validator and must never depend on the caller having normalised its input.
+Rule for next time: when a validator checks `x.trim()`, it must store `x.trim()` — and test the boundary directly, not through the layer that already cleans the input.
+
+## [gotcha] 2026-07-17 | a branded type is a compile-time proof and does not survive IPC
+
+`RenameConversationInput.id` was typed as the branded `ConversationId`, which typechecked and looked safe but was a lie: a brand is erased at runtime, and anything crossing IPC is JSON, so whatever the renderer sends arrives in main as an untrusted plain string. Typing an IPC payload as branded claims a validation that has not happened and invites a caller to skip the checkpoint. Every id entering main over IPC is therefore typed `string` and re-branded at the boundary via `conversationId()`; the same applies to any future branded value on the wire.
+Rule for next time: brands stop at the process boundary — re-validate on arrival, never type the wire as branded.
+
+## [decision] 2026-07-17 | hard rule 20 (Bun file API) cannot apply in the Electron main process
+
+Rule 20 requires all file IO under `src/**` to go through `Bun.file` / `Bun.write`, but the main process runs in Electron's Node runtime where the `Bun` global does not exist, so `node:fs/promises` is the only option there. The IO is confined to `src/main/services/store/json-file.ts`, which is the single adapter that touches bytes, and the atomic write is tmp-plus-rename in the SAME directory because rename(2) is only atomic within a filesystem (a temp file in os.tmpdir() would degrade to a non-atomic copy). Rule 20 still binds anything that runs under Bun, including every test.
+Applies to: any new file IO in the main process.
+
+## [decision] 2026-07-17 | provider API keys are encrypted at rest with Electron safeStorage
+
+`docs/PLAN.md` types `Provider.apiKey` as a plain `string` in `settings.json` under `userData`, which for a single-user local app is defensible but leaves a real secret readable in a plaintext file. The user chose `safeStorage` (macOS Keychain-backed) over plaintext, so the key is encrypted before write and decrypted on read. The encryption lives in the store's IO shell and never in its pure core, which keeps electron out of `src/shared/**` and out of the 100% coverage tier. This forks `Provider` into a stored shape carrying an opaque `{ enc }` envelope and a runtime shape carrying the plaintext string, and the shell must return a typed err when `safeStorage.isEncryptionAvailable()` is false rather than throwing.
+Applies to: the Provider type, the settings store, and any future secret this app persists.
+
+## [decision] 2026-07-17 | stores split into a pure core plus a thin IO shell
+
+Store modules are main-process IO, so under the retuned COVERAGE_RULES they fall in the skipped "electron surface" tier and would carry no coverage or mutation gate at all. Each store therefore splits into a pure module under `src/shared/` holding the parse, validate and merge logic (100% tier, inside the Stryker glob) and a thin electron-side shell that only reads and writes bytes. This is the same pressure Clean Architecture already applies and it is what makes the M2 event folds testable, so it costs one extra file per store and buys back the gate.
+Applies to: settings-store, conversations-store, and every later module that mixes logic with electron IO.
+
 ## [mistake] 2026-07-17 | sealed rule 22 by enumerating globs, which left new renderer files unsealed
 
 The styling-seal block originally listed `page/**`, `lib/**`, `app.tsx` and `main.tsx`, which looked complete and linted green. Any other `.tsx` added directly under `src/renderer/src/` would have carried Tailwind classes with no rule firing at all, because a non-matching glob fails open silently rather than erroring. A smoke test with a deliberately violating file caught it; the fix was to seal by exclusion (`files: ['src/renderer/src/**/*.tsx']`, `ignores: ['src/renderer/src/components/**']`) so the default is sealed and the design system is the carve-out.

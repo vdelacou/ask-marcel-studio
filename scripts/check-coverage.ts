@@ -49,7 +49,18 @@ type SkipRule = {
 // SKIPPED must match a tier prefix here, or it passes the gate by being invisible.
 // That is why the electron surface is SKIPPED explicitly rather than left to fall
 // through unmatched.
-const COVERAGE_RULES: ReadonlyArray<Tier> = [{ name: 'shared', prefix: 'src/shared/', threshold: 100 }];
+// Main-process files that import NO electron and so CAN run under the bun test
+// runner. They are exempt from the electron-surface skip below and gated at the
+// atelier's infra tier (80%). Add a file here only after proving `bun test` can
+// execute it; if it ever imports electron, the runner dies at import time.
+const BUN_TESTABLE_MAIN: ReadonlyArray<string> = ['src/main/services/store/json-file.ts', 'src/main/services/store/conversations-store.ts'];
+
+const COVERAGE_RULES: ReadonlyArray<Tier> = [
+  { name: 'shared', prefix: 'src/shared/', threshold: 100 },
+  // Prefix is the exact file path: these are gated individually, not as a tree,
+  // because their siblings in the same folder do import electron.
+  ...BUN_TESTABLE_MAIN.map((prefix) => ({ name: 'store io', prefix, threshold: 80 })),
+];
 
 const SKIPPED: ReadonlyArray<SkipRule> = [
   { name: 'test-helpers', match: (p) => p.startsWith('src/test-helpers/') },
@@ -57,7 +68,10 @@ const SKIPPED: ReadonlyArray<SkipRule> = [
   // Electron-importing and React-rendering code: unreachable from the bun test runner
   // (it has no electron runtime), and for src/renderer/src/components/** explicitly
   // not unit-tested by rule 21 (prop-pure components are verified by lint and review).
-  { name: 'electron surface', match: (p) => p.startsWith('src/main/') || p.startsWith('src/preload/') || p.startsWith('src/renderer/') },
+  {
+    name: 'electron surface',
+    match: (p) => !BUN_TESTABLE_MAIN.includes(p) && (p.startsWith('src/main/') || p.startsWith('src/preload/') || p.startsWith('src/renderer/')),
+  },
 ];
 // Resist adding composition/wiring files here: any composition root is
 // 100%-testable once its state-sources (paths, env, clock) are parameters

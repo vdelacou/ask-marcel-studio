@@ -39,6 +39,13 @@ export default [
       'no-restricted-imports': ['error', { paths: MOCK_BAN_PATHS }],
       '@typescript-eslint/explicit-function-return-type': ['error', { allowExpressions: true, allowTypedFunctionExpressions: true }],
       '@typescript-eslint/consistent-type-definitions': ['error', 'type'],
+      // ignoreRestSiblings: omitting a key via rest destructuring
+      // (`const { messages: _messages, ...meta } = conversation`) is the idiomatic
+      // way to build a narrower record, and the omitted binding is unused BY DESIGN.
+      // The alternative is re-listing every surviving field by hand, which silently
+      // drops new fields as the type grows. Project-level option with a reason —
+      // never an inline ignore (rule 15).
+      '@typescript-eslint/no-unused-vars': ['error', { ignoreRestSiblings: true }],
     },
   },
   {
@@ -215,6 +222,12 @@ export default [
       'sonarjs/no-unused-vars': 'off', // duplicates @typescript-eslint/no-unused-vars
       'sonarjs/no-empty-test-file': 'off', // false positives on `describe` test layout
       'sonarjs/cognitive-complexity': 'off', // we already cap function size; this is noise
+      // This app's model reference is `providerId::modelId`, and every literal of
+      // that shape ('a::b', 'anthropic::claude-opus-4-8') is read by the rule as a
+      // compressed IPv6 address. Every hit is a false positive on the core domain
+      // idiom, and there is no real IP literal anywhere in this codebase.
+      // Project-level severity change with a reason — never an inline ignore (rule 15).
+      'sonarjs/no-hardcoded-ip': 'off',
     },
   },
   // Non-source paths must not be linted: Stryker copies the tree into .stryker-tmp/
