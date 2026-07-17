@@ -1,15 +1,30 @@
 /*
  * The renderer's only door to the main process (contextIsolation is on).
  *
- * M0 exposes just the app version, enough to prove the bridge works end to end.
- * The typed IPC surface (conversations, chat, settings, skills, office) lands in M1/M2.
+ * This is a transport, not a place for logic: each member forwards to its channel
+ * and returns whatever Result main sent back. Anything smarter belongs in a store
+ * on the main side, where it can be tested.
+ *
+ * The api shape is declared by StudioApi in the shared ipc-contract, so main and
+ * renderer cannot drift apart without a typecheck failure.
  */
-import { contextBridge } from 'electron';
+import { contextBridge, ipcRenderer } from 'electron';
+import { CHANNEL } from '../shared/ipc-contract.ts';
+import type { CreateConversationInput, RenameConversationInput, StudioApi } from '../shared/ipc-contract.ts';
+import type { Settings } from '../shared/types.ts';
 
-const api = {
-  version: process.versions.electron,
-} as const;
-
-export type StudioApi = typeof api;
+const api: StudioApi = {
+  settings: {
+    get: () => ipcRenderer.invoke(CHANNEL.settingsGet),
+    save: (settings: Settings) => ipcRenderer.invoke(CHANNEL.settingsSave, settings),
+  },
+  conversations: {
+    list: () => ipcRenderer.invoke(CHANNEL.conversationsList),
+    create: (input: CreateConversationInput) => ipcRenderer.invoke(CHANNEL.conversationsCreate, input),
+    get: (id: string) => ipcRenderer.invoke(CHANNEL.conversationsGet, id),
+    rename: (input: RenameConversationInput) => ipcRenderer.invoke(CHANNEL.conversationsRename, input),
+    remove: (id: string) => ipcRenderer.invoke(CHANNEL.conversationsDelete, id),
+  },
+};
 
 contextBridge.exposeInMainWorld('studio', api);

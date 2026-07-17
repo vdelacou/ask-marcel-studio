@@ -6,7 +6,7 @@
  * keyword that hard rule 3 bans. A global const needs neither, and reads the
  * same at the call site.
  */
-import type { StudioApi } from './index.ts';
+import type { StudioApi } from '../shared/ipc-contract.ts';
 
 declare global {
   const studio: StudioApi;

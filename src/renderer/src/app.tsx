@@ -1,22 +1,19 @@
 /*
- * Page shell. Owns wiring, resolves values, hands plain props to the design system.
+ * The app shell. Owns wiring, hands plain props to the design system.
  *
  * Carries no class string of its own (hard rule 22) and calls no hook inside a
- * component (hard rule 21): styling and structure live in src/components/**.
+ * design-system component (hard rule 21).
+ *
+ * M1 has one screen. The chat/settings split and the sidebar arrive in M2.
  */
 import type { FC } from 'react';
-import { Welcome } from './components/organisms/welcome/index.tsx';
-import { formatModelRef } from '../../shared/model-ref.ts';
-
-const DEFAULT_MODEL = formatModelRef({ providerId: 'anthropic', modelId: 'claude-opus-4-8' });
+import { AppFrame } from './components/organisms/app-frame/index.tsx';
+import { SettingsPage } from './page/settings-page.tsx';
 
 export const App: FC = () => (
-  <Welcome
-    title="Ask Marcel Studio"
-    tagline="Models, skills, and one conversation panel with Microsoft 365 always in reach."
-    runtimeLabel={`electron ${studio.version}`}
-    modelLabel={DEFAULT_MODEL}
-  />
+  <AppFrame title="Ask Marcel Studio">
+    <SettingsPage />
+  </AppFrame>
 );
 
 App.displayName = 'App';
