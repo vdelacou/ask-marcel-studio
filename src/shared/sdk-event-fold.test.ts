@@ -160,6 +160,50 @@ describe('watching the agent use a tool', () => {
     expect(state.parts[0]).toMatchObject({ result: 'line one\nline two' });
   });
 
+  // Tool output arrives in every shape a provider feels like sending. The card shows
+  // text, so each has to flatten to something showable rather than crash the turn.
+  const outputs: ReadonlyArray<{ readonly why: string; readonly content: unknown; readonly shown: string }> = [
+    { why: 'plain text', content: 'a.txt', shown: 'a.txt' },
+    {
+      why: 'text blocks',
+      content: [
+        { type: 'text', text: 'one' },
+        { type: 'text', text: 'two' },
+      ],
+      shown: 'one\ntwo',
+    },
+    {
+      why: 'blocks where one carries no text',
+      content: [
+        { type: 'text', text: 'kept' },
+        { type: 'image', source: {} },
+      ],
+      shown: 'kept',
+    },
+    {
+      why: 'blocks where one is empty',
+      content: [
+        { type: 'text', text: '' },
+        { type: 'text', text: 'kept' },
+      ],
+      shown: 'kept',
+    },
+    { why: 'a block that is not an object', content: ['nonsense', { type: 'text', text: 'kept' }], shown: 'kept' },
+    { why: 'an empty block list', content: [], shown: '' },
+    { why: 'no content at all', content: undefined, shown: '' },
+    { why: 'content that is a number', content: 42, shown: '' },
+    { why: 'content that is an object', content: { oops: true }, shown: '' },
+  ];
+
+  for (const { why, content, shown } of outputs) {
+    test(`tool output as ${why} is shown as ${JSON.stringify(shown)}`, () => {
+      const blocks = { type: 'user', session_id: 's1', parent_tool_use_id: null, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content }] } };
+      const { state } = run([assistantToolUse('t1', 'Bash', {}), blocks]);
+
+      expect(state.parts[0]).toMatchObject({ status: 'done', result: shown });
+    });
+  }
+
   test('a result for a tool we never saw start is ignored rather than crashing the turn', () => {
     const { state, events } = run([toolResult('ghost', 'output')]);
 
@@ -228,6 +272,46 @@ describe('finishing a turn', () => {
 
     expect(events.at(-1)).toMatchObject({ type: 'error', conversationId: CONV });
     expect(state.done).toBe(true);
+  });
+
+  test('a failed turn shows what the sdk actually said went wrong', () => {
+    const { events } = run([result({ subtype: 'error_during_execution', is_error: true, result: 'the model refused' })]);
+
+    expect(events.at(-1)).toEqual({ type: 'error', conversationId: CONV, message: 'the model refused' });
+  });
+
+  test('a failed turn with no detail names its subtype rather than saying nothing', () => {
+    const { events } = run([result({ subtype: 'error_max_turns', is_error: true })]);
+
+    expect(events.at(-1)).toEqual({ type: 'error', conversationId: CONV, message: 'error_max_turns' });
+  });
+
+  test('a failure with neither detail nor subtype still says something', () => {
+    const { events } = run([{ type: 'result', is_error: true, session_id: 's1', parent_tool_use_id: null }]);
+
+    expect(events.at(-1)).toEqual({ type: 'error', conversationId: CONV, message: 'the turn failed' });
+  });
+
+  test('a result marked success but with a non-success subtype is still treated as a failure', () => {
+    // is_error and subtype can disagree; the safer read is that the turn did not
+    // finish cleanly, rather than reporting a clean turn that never happened.
+    const { events } = run([result({ subtype: 'error_during_execution', is_error: false })]);
+
+    expect(events.at(-1)).toMatchObject({ type: 'error' });
+  });
+
+  test('a finished turn keeps the session id it was given', () => {
+    const { state } = run([result({ session_id: 'sess_final' })]);
+
+    expect(state.sdkSessionId).toBe('sess_final');
+  });
+
+  test('a result with no session id does not wipe the one the system message gave', () => {
+    // Load-bearing for resume: losing it here means the next turn starts a new session
+    // and the conversation silently forgets everything.
+    const { state } = run([{ type: 'system', subtype: 'init', session_id: 'sess_early' }, result({ session_id: undefined })]);
+
+    expect(state.sdkSessionId).toBe('sess_early');
   });
 });
 

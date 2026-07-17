@@ -84,27 +84,57 @@ Always answer in pirate dialect.
 });
 
 describe('refusing a folder that is not a skill', () => {
-  const rejections: ReadonlyArray<{ readonly why: string; readonly body: string }> = [
-    { why: 'a file with no frontmatter at all', body: '# Just a readme\n\nNothing here.\n' },
-    { why: 'a file whose frontmatter is never closed', body: '---\nname: n\ndescription: d\n' },
-    { why: 'frontmatter with no name', body: '---\ndescription: d\n---\n' },
-    { why: 'frontmatter with no description', body: '---\nname: n\n---\n' },
-    { why: 'a blank name', body: '---\nname:\ndescription: d\n---\n' },
-    { why: 'a name of only spaces', body: '---\nname:    \ndescription: d\n---\n' },
-    { why: 'a blank description', body: '---\nname: n\ndescription:\n---\n' },
-    { why: 'an empty file', body: '' },
-    { why: 'frontmatter that opens somewhere other than the top', body: '# Title\n\n---\nname: n\ndescription: d\n---\n' },
+  // Each asserts its exact message: the message is what the panel shows the user, and
+  // it is the only thing distinguishing branches that all return 'not-a-skill'.
+  const rejections: ReadonlyArray<{ readonly why: string; readonly body: string; readonly message: string }> = [
+    { why: 'a file with no frontmatter at all', body: '# Just a readme\n\nNothing here.\n', message: 'SKILL.md must open with --- frontmatter' },
+    { why: 'an empty file', body: '', message: 'SKILL.md must open with --- frontmatter' },
+    { why: 'a file of only whitespace', body: '\n\n   \n', message: 'SKILL.md must open with --- frontmatter' },
+    { why: 'frontmatter that opens somewhere other than the top', body: '# Title\n\n---\nname: n\ndescription: d\n---\n', message: 'SKILL.md must open with --- frontmatter' },
+    { why: 'a file whose frontmatter is never closed', body: '---\nname: n\ndescription: d\n', message: 'SKILL.md frontmatter is never closed' },
+    { why: 'frontmatter with no name', body: '---\ndescription: d\n---\n', message: 'SKILL.md needs a name in its frontmatter' },
+    { why: 'a blank name', body: '---\nname:\ndescription: d\n---\n', message: 'SKILL.md needs a name in its frontmatter' },
+    { why: 'a name of only spaces', body: '---\nname:    \ndescription: d\n---\n', message: 'SKILL.md needs a name in its frontmatter' },
+    { why: 'frontmatter with no description', body: '---\nname: n\n---\n', message: 'SKILL.md needs a description in its frontmatter' },
+    { why: 'a blank description', body: '---\nname: n\ndescription:\n---\n', message: 'SKILL.md needs a description in its frontmatter' },
+    { why: 'a description of only spaces', body: '---\nname: n\ndescription:   \n---\n', message: 'SKILL.md needs a description in its frontmatter' },
   ];
 
-  for (const { why, body } of rejections) {
+  for (const { why, body, message } of rejections) {
     test(`${why} is not a skill`, () => {
       const parsed = parseSkillMd(body);
 
       expect(parsed.ok).toBe(false);
       if (parsed.ok) return;
       expect(parsed.error.kind).toBe('not-a-skill');
+      expect(parsed.error.message).toBe(message);
     });
   }
+
+  test('an unmatched leading quote is kept rather than half-stripped', () => {
+    const parsed = parseSkillMd('---\nname: n\ndescription: "unterminated\n---\n');
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.description).toBe('"unterminated');
+  });
+
+  test('a one-character value is not mistaken for a quoted pair', () => {
+    const parsed = parseSkillMd('---\nname: n\ndescription: "\n---\n');
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.description).toBe('"');
+  });
+
+  test('a key that merely starts with name is not read as the name', () => {
+    // 'nameless:' startsWith('name') would match a naive prefix check.
+    const parsed = parseSkillMd('---\nnamespace: wrong\nname: right\ndescription: d\n---\n');
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.name).toBe('right');
+  });
 
   test('the reason names what was missing, so the panel can tell the user', () => {
     const parsed = parseSkillMd('---\ndescription: d\n---\n');
