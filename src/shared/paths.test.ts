@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { conversationFilePath, conversationsDir, settingsFilePath, workspaceDir, workspacesDir } from './paths.ts';
+import { binDir, claudeConfigDir, conversationFilePath, conversationsDir, settingsFilePath, workspaceDir, workspacesDir } from './paths.ts';
 import { conversationId } from './conversation-id.ts';
 import { unwrap } from './result.ts';
 
@@ -22,6 +22,16 @@ describe('locating the files the app owns inside its own data folder', () => {
   test('the conversations and workspaces folders sit side by side under the data folder', () => {
     expect(conversationsDir(USER_DATA)).toBe(`${USER_DATA}/conversations`);
     expect(workspacesDir(USER_DATA)).toBe(`${USER_DATA}/workspaces`);
+  });
+
+  test('the agent reads its config from the app folder, not the developer own', () => {
+    // Handed to the subprocess as CLAUDE_CONFIG_DIR, which is what makes the app's
+    // skills load instead of whatever is in the developer's home directory.
+    expect(claudeConfigDir(USER_DATA)).toBe(`${USER_DATA}/claude-config`);
+  });
+
+  test('the shim folder that goes first on the agent path lives in the data folder', () => {
+    expect(binDir(USER_DATA)).toBe(`${USER_DATA}/bin`);
   });
 });
 

@@ -28,3 +28,10 @@ export const conversationFilePath = (userData: string, id: ConversationId): stri
 export const workspacesDir = (userData: string): string => join(userData, 'workspaces');
 
 export const workspaceDir = (userData: string, id: ConversationId): string => join(workspacesDir(userData), id);
+
+// CLAUDE_CONFIG_DIR for the agent subprocess. Its skills/ subfolder is what
+// settingSources: ['user'] loads.
+export const claudeConfigDir = (userData: string): string => join(userData, 'claude-config');
+
+// Prepended to the agent's PATH so `ask-marcel-office` resolves to our shim (M4).
+export const binDir = (userData: string): string => join(userData, 'bin');
