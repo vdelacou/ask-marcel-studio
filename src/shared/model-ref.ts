@@ -11,7 +11,10 @@
 import type { Result } from './result.ts';
 import { err, ok } from './result.ts';
 
-const SEPARATOR = '::';
+// Exported so settings-doc can reject a provider id containing it, rather than
+// hardcoding '::' in a second place where the two could drift apart.
+export const MODEL_REF_SEPARATOR = '::';
+const SEPARATOR = MODEL_REF_SEPARATOR;
 
 export type ModelRef = {
   readonly providerId: string;
