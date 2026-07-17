@@ -6,6 +6,21 @@ Each entry is one of `[mistake]`, `[decision]`, or `[gotcha]`. Newest first.
 
 ---
 
+## [mistake] 2026-07-17 | a test asserted against a shared tmpdir path and failed for the wrong reason
+
+The skills traversal test asserted `existsSync(join(userData, '..', 'evil'))` is false, but `userData` is an mkdtemp under `tmpdir()`, so the sibling resolves to a path shared with every other process on the machine. A stale folder left by an earlier run in the same session failed the test while the production code was provably correct — deleting the folder and re-running proved `add()` never recreates it. Scoping the assertion to this run's own skills folder makes it deterministic. Note `grep -c` also prints `0` AND exits non-zero, so `n=$(grep -c … || echo 0)` yields `"0\n0"` and every equality check against `"0"` silently reports a leak; that pattern produced a second false alarm in the same hour.
+Rule for next time: assert inside the fixture you created, never a sibling of it, and never build a shell check on `grep -c … || echo 0`.
+
+## [gotcha] 2026-07-17 | CLAUDE_CONFIG_DIR isolates the user's own skills, but the SDK's built-ins still load
+
+Verified by capturing what the agent actually sends: with `CLAUDE_CONFIG_DIR` pointed at userData and `settingSources: ['user']`, none of the developer's personal `~/.claude` skills reach the app's agent, while both of the app's own do. The list the model sees is NOT only ours, though: `systemPrompt: { preset: 'claude_code' }` also brings the SDK's bundled skills (code-review, verify, run, deep-research and friends). That is expected rather than a leak, but it means the agent in this app can reach for tools the product never advertised, and the skills panel will not list them.
+Applies to: any future claim that the app controls exactly which skills the agent has.
+
+## [decision] 2026-07-17 | risk R7 confirmed: a new skill applies on the next message, no hot reload needed
+
+`docs/PLAN.md` assumes a fresh SDK process per turn means an added skill is picked up on the next message. Confirmed by capturing the agent's actual API request: a skill copied into `claude-config/skills` after launch appears in the very next turn's payload, with no restart. So the panel needs no reload machinery and no restart prompt. Verified by planting a marker string in the skill's description and grepping the captured request body.
+Applies to: the skills panel, which can stay stateless.
+
 ## [gotcha] 2026-07-17 | noUncheckedIndexedAccess was off, so the types lied about array access
 
 `lint:strict` flagged `providers[0] === undefined` as "always false", which looked like dead code but was the opposite: without `noUncheckedIndexedAccess`, TypeScript types every index access as present, so `providers[0]` on an EMPTY array is typed `Provider` while returning `undefined` at runtime. The defensive checks were correct and the type system was wrong. Neither `strict: true` nor `@electron-toolkit/tsconfig` enables the flag, so it was silently off from M0. Turning it on in both tsconfigs produced zero new errors, because the code already guarded every index access.

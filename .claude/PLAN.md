@@ -1,99 +1,59 @@
-# PLAN: Ask Marcel Studio M0-M2 (scaffold through first demo)
-Status: M0, M1 and M2 complete. M2 unstaged, awaiting commit. This plan (M0-M2) is DONE bar the live-key checks.
+# PLAN: Ask Marcel Studio M3 (skills)
+Status: M3 complete, unstaged and awaiting commit. Started 2026-07-17.
+
+Previous plan (M0-M2: scaffold, storage + settings, Anthropic chat) is COMPLETE and committed
+through `5ccc11a`. Its lessons live in `.claude/LESSONS.md`; the milestone list is `docs/PLAN.md`.
 
 ## Goal
 
-Build the first three milestones of `docs/PLAN.md`: an atelier-conforming Electron + React
-scaffold, JSON storage plus a settings screen, and a working Anthropic-backed agent chat with
-streamed text, visible tool calls, persistence, resume, and cancel. Stop at M2, the plan's
-designated first demo, for user review before the gateway and packaging are built on top.
+Let the user add and remove agent skills, seed the built-in office skill on launch, and have a
+newly added skill change the agent's behaviour on the next message. `CLAUDE_CONFIG_DIR` is already
+wired and tested by `session-env.ts`, so this milestone is mostly the service, the panel, and the
+proof that the SDK actually loads what we write.
 
 ## Definition of done (whole task)
 
-- `bun test` green; `bun run lint:strict` 0 errors 0 warnings; `bun run typecheck` clean;
-  `bun run coverage` passes its per-tier gates; `bun run mutate` clears the 90% break threshold.
-- `bun run dev` opens a styled window with HMR.
-- Settings survive an app restart.
-- A live Anthropic key streams text and renders visible tool calls into a persisted conversation.
-- Killing the app mid-conversation and reopening resumes the same conversation.
-- Tree staged with a proposed Conventional-Commits message, awaiting the user's yes (rule 25).
+- All eight gates green; the final slice commits through the real hook with no bypass.
+- Skills panel lists, adds and removes; the built-in office skill is seeded and cannot be removed.
+- A skill added through the UI is loaded by the agent on the NEXT message (fresh SDK process per
+  turn means no hot-reload machinery is needed — risk R7, cheap to confirm here).
+- `bun run dev` still opens and chats.
 
 ## Steps
 
-### M0 Scaffold
-1. [x] git init + repo-local neutral commit identity + `core.hooksPath`  DoD: `git config --local user.email` is the neutral one [met]
-2. [x] Seed `CLAUDE.md`, `.claude/LESSONS.md`, `.claude/PLAN.md`, `.gitignore`  DoD: all exist, LESSONS carries the deviation entries [met]
-3. [x] Copy atelier gate assets into `scripts/` + `.githooks/`  DoD: files present and executable [met]
-4. [x] `package.json` + tsconfig split + `electron.vite.config.ts` + Tailwind v4 `globals.css`  DoD: `bun install` resolves; electron binary present [met — R1 obsolete, see LESSONS]
-5. [x] Retune `COVERAGE_RULES` + stryker mutate globs for `src/{shared,main,preload,renderer}`  DoD: coverage + mutate pass [met — mutation 100%]
-6. [x] `eslint.config.js` incl. a design-system block enforcing rules 21-22  DoD: lint:strict 0 errors 0 warnings [met]
-7. [x] Walking skeleton: `src/shared/model-ref.ts` (+test) + BrowserWindow + styled React window  DoD: dev opens a styled window; bun test green [met — probed live: h1, preload bridge, shared kernel, @theme tokens all render]
-8. [x] Verify the `commit-msg` hook rejects a junk message  DoD: junk exits non-zero [met — rejects junk/wip:/Fix:/trailing period, accepts valid]
+1. [x] `src/shared/skill-md.ts` (+test)  DoD: bun test green, 100% tier [met — 18 tests; also parses all 4 real vendored skills, descriptions up to 1022 chars intact]
+2. [x] `resources/builtin-skills/ask-marcel-office/SKILL.md`  DoD: exists, parses [met — every command and flag it names was verified against the installed CLI first]
+3. [x] `skills-service.ts`  DoD: bun-testable [met — imports no electron (the picker lives in the IPC layer), so 15 tests against real temp dirs, gate-enforced]
+4. [x] IPC `skills:list/add/remove` + preload  DoD: typecheck green [met — the picker opens in MAIN; the renderer never names a path]
+5. [x] Skills panel  DoD: renders [met — built-in seeds on launch, is marked, and its Remove button is hidden rather than shown-and-refusing]
+6. [x] Verify R7  DoD: skill reaches the API request [met — planted a marker in the description and found it in the captured 101KB turn payload, alongside the built-in office skill. No restart needed]
 
-### M1 Storage + settings
+## Verified live (capturing what the agent actually sends)
 
-Both decisions resolved with the user 2026-07-17:
-
-- **Store shape = pure core + IO shell.** Each store splits into a pure module in `src/shared/`
-  (parse / validate / merge, 100% coverage + mutation tier) plus a thin electron-side shell that
-  only reads and writes. The same split is what makes the M2 folds testable.
-- **API key at rest = Electron `safeStorage`** (OS keychain), not plaintext.
-
-Consequence of combining the two: encryption belongs in the IO **shell**, never the pure core, so
-the core stays free of electron and never sees a plaintext key. The core's on-disk type therefore
-carries an opaque envelope, NOT `docs/PLAN.md`'s `apiKey: string`:
-
-```ts
-// on disk (pure core owns this shape)         // in memory (after the shell decrypts)
-{ apiKey: { enc: string } }                    { apiKey: string }
-```
-
-So `Provider` needs two shapes: a stored one and a runtime one. Do not let `safeStorage` leak into
-`src/shared/**` — it would import electron and break the 100% tier (see LESSONS, bun test decision).
-`safeStorage.isEncryptionAvailable()` can be false (no keychain); the shell must return a typed err,
-not throw.
-
-9. [x] `src/shared/types.ts` + `ipc-contract.ts`  DoD: typecheck green [met]
-10. [x] `json-file.ts` atomic write (tmp+rename) + settings-store + conversations-store  DoD: bun tests pass against real temp dirs [met — json-file and conversations-store import no electron, so both are bun-tested against real temp dirs and gate-enforced; settings-store imports safeStorage and is verified live instead]
-11. [x] Settings screen: providers CRUD  DoD: settings survive an app restart [met — drove the built app in two separate Electron processes against one userData: saved in process 1, reloaded and rendered in process 2, key decrypted via keychain]
-
-### M2 Anthropic chat (FIRST DEMO)
-12. [x] Step zero: read the installed SDK .d.ts (risk R3)  DoD: divergence captured [met — interrupt() is a no-op with a string prompt; cancel uses Options.abortController. See LESSONS]
-13. [x] `session-env.ts` (+test), pure env builder  DoD: bun test green incl. model-var pinning [met — 21 tests, 100%]
-14. [x] `sdk-event-fold.ts` (+test)  DoD: fixture-array tests green [met — 25 tests, 100%; verified against real SDK output via the fake endpoint]
-15. [x] `agent-runtime.ts`  DoD: one in-flight run per conversation [met — cancel via abortController, verified live: partial text kept, no error toast, 0 orphaned subprocesses]
-16. [x] IPC register/emit + preload contextBridge  DoD: renderer receives `chat:event` [met — verified live]
-17. [x] Renderer: `ui-event-fold.ts` (+test), chat-thread, composer, tool-call-card  DoD: streamed text + visible tool calls render [met — verified live in the DOM. zustand NOT used: M2 has one page and no sidebar, so it was ceremony; dep removed. Re-add when the sidebar needs cross-component state]
-18. [x] Zero-provider empty state  DoD: err({kind:'no-provider'}) + CTA [met — verified live: "No model yet", no composer, CTA lands on Providers, no conversation created]
-
-## Verified live (against scripts/fake-anthropic.mjs, no key spent)
-
-- Streamed text -> Bash tool card (done, with input and result) -> streamed text, all rendered.
-- The agent really executed `echo MARCEL_WAS_HERE`; the output came back into the card.
-- Persisted in order; `sdkSessionId` captured.
-- Relaunch in a fresh process reloads the whole transcript, and does not create a second conversation.
-- Stop mid-stream: partial text kept, spinner cleared, no error toast, 0 orphaned subprocesses.
-- Fresh install with no providers: "No model yet" + CTA, no composer, no conversation created.
-
-## Still needs a real Anthropic key (cannot be done by the agent)
-
-- A live turn against the real API (the fake proves the wiring, not the model).
-- SDK-level resume: `sdkSessionId` is captured and passed as `resume`, but only a real
-  session proves the server honours it.
+- Built-in office skill seeds on launch; removing it is refused with kind `built-in`.
+- A skill copied in after launch reaches the VERY NEXT turn's API payload. R7 confirmed:
+  fresh SDK process per turn, so no hot-reload machinery and no restart prompt.
+- CLAUDE_CONFIG_DIR isolates: none of the developer's own ~/.claude skills reach the app's
+  agent. The SDK's OWN bundled skills (code-review, verify, run, deep-research) DO load via
+  the claude_code preset — expected, but the panel does not list them.
 
 ## Notes / breadcrumbs
 
-- M0 committed as `4e1ef2a` on 2026-07-17, with `--no-verify` (gate 1 size cap; sanctioned for an
-  initial scaffold). Gates 2-8 were run manually and all passed before committing.
-- Scope decided with the user 2026-07-17: M0-M2 only. M3-M7 explicitly out of scope this run.
-- M1 starts at step 9. `src/shared/result.ts` already exists and is committed, so step 9 is really
-  just `types.ts` + `ipc-contract.ts`.
-- Office CLI: user publishes `ask-marcel-office-cli@2.2.0` to npm first. Blocks M4 only; not this run.
-  npm latest is 2.1.0; local 2.2.0 is a symlink to `../ask-marcel-office-cli`.
-- `ai` package is at v7.0.30, not the v4/v5 `docs/PLAN.md` assumed. Only matters at M5 (gateway);
-  risk R4 says verify `fullStream` part names against the installed package before coding the reducer.
-- Gate assets copied from `.claude/skills/atelier/assets/` (repo-local, not `~/.claude`).
-- `format-error.ts` placed at `src/shared/utilities/` (asset assumes `src/domain/utilities/`).
-- gitleaks IS installed, so pre-commit gate 3 runs for real rather than degrading.
-- Two gated items need the user and cannot be done by the agent: the live-key chat test and the
-  restart-resume test (both need a real Anthropic API key).
+- The folder picker needs `dialog.showOpenDialog` from electron, so the service will import
+  electron and fall OUT of the bun-testable set. Keep the pure part (validation, collision
+  detection) in `src/shared/` so it stays gated, exactly like the stores.
+- Verification without a key: `scripts/fake-anthropic.mjs` logs what the agent sends. A loaded
+  skill's name/description reaches the API in the request payload, so R7 is provable by grepping
+  that body — no live model needed.
+- Skills apply on the NEXT message because each turn spawns a fresh SDK process (docs/PLAN.md).
+  That is the assumption R7 asks to confirm; if it is wrong, the panel needs a restart prompt.
+- The built-in skill is doctrine only, not enforcement: under `bypassPermissions` the agent CAN
+  run `ask-marcel-office login`. That is accepted risk R8 in docs/PLAN.md.
+- M4 (office CLI) stays blocked until `ask-marcel-office-cli@2.2.0` is published to npm. The
+  built-in SKILL.md is just markdown, so it does not need the CLI installed and lands here.
+
+## Gated on the user (unchanged from M0-M2)
+
+- A live turn against the real Anthropic API, and SDK-level resume. The fake proves the wiring,
+  not the model. Both need a real key.
+- M6 targets a mac arm64 DMG, but this machine is Intel x64. Decide the target arch before M6.

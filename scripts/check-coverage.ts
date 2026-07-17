@@ -53,7 +53,11 @@ type SkipRule = {
 // runner. They are exempt from the electron-surface skip below and gated at the
 // atelier's infra tier (80%). Add a file here only after proving `bun test` can
 // execute it; if it ever imports electron, the runner dies at import time.
-const BUN_TESTABLE_MAIN: ReadonlyArray<string> = ['src/main/services/store/json-file.ts', 'src/main/services/store/conversations-store.ts'];
+const BUN_TESTABLE_MAIN: ReadonlyArray<string> = [
+  'src/main/services/store/json-file.ts',
+  'src/main/services/store/conversations-store.ts',
+  'src/main/services/skills/skills-service.ts',
+];
 
 const COVERAGE_RULES: ReadonlyArray<Tier> = [
   { name: 'shared', prefix: 'src/shared/', threshold: 100 },

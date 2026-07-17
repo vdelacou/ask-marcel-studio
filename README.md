@@ -5,9 +5,10 @@ your Microsoft 365 in reach. A radically simplified Cherry Studio, stripped to t
 
 Electron + React, MIT licensed. Built to the atelier engineering standard.
 
-> **Status: M2 complete — the app chats.** Add an Anthropic provider in settings, and you get a
-> working agent conversation: streamed text, visible tool calls it actually executes, a persisted
-> transcript that survives a restart, and a Stop button. Skills, the office CLI, the
+> **Status: M3 complete — the app chats, and takes skills.** Add an Anthropic provider in settings
+> and you get a working agent conversation: streamed text, visible tool calls it actually executes,
+> a persisted transcript that survives a restart, and a Stop button. Settings also manages skills;
+> a skill you add applies from your next message. The office CLI integration, the
 > OpenAI-compatible gateway, and packaging are not built yet. See `docs/PLAN.md` for the milestone
 > plan and `.claude/PLAN.md` for the current run.
 
@@ -70,6 +71,23 @@ scripts/          atelier gate scripts
 docs/PLAN.md      the full 7-milestone plan
 .claude/          PLAN.md (current run), LESSONS.md (append-only memory)
 ```
+
+## Skills
+
+Settings manages the agent's skills. A skill is a folder with a `SKILL.md` whose frontmatter
+carries a `name` and a `description`; the whole folder is copied into
+`<userData>/claude-config/skills/`, which is what the agent reads.
+
+A skill you add applies from your **next message** — each turn spawns a fresh agent process, so
+there is nothing to reload and no need to restart.
+
+`ask-marcel-office` ships with the app: it teaches the agent to read your Microsoft 365 through
+the read-only CLI, and to send you to Settings rather than trying to sign in itself. It is
+re-seeded on every launch, so it cannot be removed and an update always ships the current version.
+
+Two things the panel does not show: the agent also gets the SDK's own bundled skills (code-review,
+verify, run, and friends) via the `claude_code` preset, and your personal `~/.claude` skills are
+deliberately **not** loaded — the app points the agent at its own config directory.
 
 ## Trying it without an API key
 
