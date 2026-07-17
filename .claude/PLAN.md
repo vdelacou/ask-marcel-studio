@@ -1,59 +1,81 @@
-# PLAN: Ask Marcel Studio M3 (skills)
-Status: M3 complete, unstaged and awaiting commit. Started 2026-07-17.
+# PLAN: Ask Marcel Studio M5 (OpenAI-compatible gateway)
+Status: M5 complete, unstaged and awaiting commit. Started 2026-07-17.
 
-Previous plan (M0-M2: scaffold, storage + settings, Anthropic chat) is COMPLETE and committed
-through `5ccc11a`. Its lessons live in `.claude/LESSONS.md`; the milestone list is `docs/PLAN.md`.
+M0-M3 are COMPLETE and committed through `b968a5e`. M4 (office CLI) is BLOCKED on the user
+publishing `ask-marcel-office-cli@2.2.0` to npm, so M5 is taken first. Lessons: `.claude/LESSONS.md`.
 
 ## Goal
 
-Let the user add and remove agent skills, seed the built-in office skill on launch, and have a
-newly added skill change the agent's behaviour on the next message. `CLAUDE_CONFIG_DIR` is already
-wired and tested by `session-env.ts`, so this milestone is mostly the service, the panel, and the
-proof that the SDK actually loads what we write.
+Let an OpenAI-compatible provider drive a full agent turn, tool use included. A loopback HTTP
+server speaks the Anthropic wire protocol to the SDK and translates to the OpenAI API via the
+Vercel AI SDK. The agent subprocess gets `ANTHROPIC_BASE_URL=http://127.0.0.1:<port>` and never
+knows.
 
-## Definition of done (whole task)
+## Step zero (risk R4) — DONE, and it changes the design
 
-- All eight gates green; the final slice commits through the real hook with no bypass.
-- Skills panel lists, adds and removes; the built-in office skill is seeded and cannot be removed.
-- A skill added through the UI is loaded by the agent on the NEXT message (fresh SDK process per
-  turn means no hot-reload machinery is needed — risk R7, cheap to confirm here).
-- `bun run dev` still opens and chats.
+The installed `ai` is v7, not the v4/v5 `docs/PLAN.md` assumed. Verified against the installed
+.d.ts, `fullStream` yields:
+
+  text-start / text-delta (field `text`, NOT v4's `textDelta`) / text-end
+  tool-input-start (id, toolName) / tool-input-delta (id, delta) / tool-input-end
+  tool-call (the whole call, ALSO emitted)
+  start / start-step / finish-step / finish (finishReason, totalUsage) / error / abort
+
+So v7 streams tool arguments natively and maps almost 1:1 onto Anthropic's wire format. Two
+consequences the plan did not anticipate:
+- `tool-call` arrives IN ADDITION to the input deltas. Folding both double-emits the tool — the
+  same trap as the assistant message repeating streamed text in sdk-event-fold.
+- The plan's "if upstream yields whole tool-call parts, emit one input_json_delta" is still needed
+  as a FALLBACK for providers that skip the deltas, not as the primary path.
+
+## Also known from M2's recon (not in docs/PLAN.md)
+
+The SDK does not just POST `/v1/messages`. It probes `HEAD /` first, and posts to
+`/v1/messages?beta=true`. A gateway matching the bare path only will never be hit.
+
+## Definition of done
+
+- All eight gates green; final slice commits through the real hook with no bypass.
+- A provider of kind `openai` drives a real agent turn through the gateway, including a tool call
+  the agent actually executes, verified live against a local OpenAI-compatible stub.
+- Exhaustive bun fixtures on both translators and the SSE encoder.
 
 ## Steps
 
-1. [x] `src/shared/skill-md.ts` (+test)  DoD: bun test green, 100% tier [met — 18 tests; also parses all 4 real vendored skills, descriptions up to 1022 chars intact]
-2. [x] `resources/builtin-skills/ask-marcel-office/SKILL.md`  DoD: exists, parses [met — every command and flag it names was verified against the installed CLI first]
-3. [x] `skills-service.ts`  DoD: bun-testable [met — imports no electron (the picker lives in the IPC layer), so 15 tests against real temp dirs, gate-enforced]
-4. [x] IPC `skills:list/add/remove` + preload  DoD: typecheck green [met — the picker opens in MAIN; the renderer never names a path]
-5. [x] Skills panel  DoD: renders [met — built-in seeds on launch, is marked, and its Remove button is hidden rather than shown-and-refusing]
-6. [x] Verify R7  DoD: skill reaches the API request [met — planted a marker in the description and found it in the captured 101KB turn payload, alongside the built-in office skill. No restart needed]
+1. [x] Step zero: verify the installed `ai` package's fullStream part names (risk R4)  DoD: names confirmed against the .d.ts [met — see above]
+2. [x] `anthropic-sse.ts` (+test)  DoD: 100% tier [met — 8 tests]
+3. [x] `translate-stream.ts` (+test)  DoD: exhaustive fixtures [met — 31 tests, 100%. Uses result.stream: fullStream is DEPRECATED in v7]
+4. [x] `translate-request.ts` (+test)  DoD: tool round trip, cache_control stripped [met — 45 tests, 100%]
+5. [x] `gateway-server.ts`  DoD: HEAD / and POST /v1/messages?beta=true answered [met — matched on PATH, since the SDK appends ?beta=true]
+6. [x] session-env openai branch  DoD: bun test green [met — 27 tests; the agent never sees the upstream key]
+7. [x] Verify  DoD: driven live [met — agent -> gateway -> openai stub -> back, with a real tool execution. See below]
 
-## Verified live (capturing what the agent actually sends)
+## Verified live (scripts/fake-openai.mjs, no key spent)
 
-- Built-in office skill seeds on launch; removing it is refused with kind `built-in`.
-- A skill copied in after launch reaches the VERY NEXT turn's API payload. R7 confirmed:
-  fresh SDK process per turn, so no hot-reload machinery and no restart prompt.
-- CLAUDE_CONFIG_DIR isolates: none of the developer's own ~/.claude skills reach the app's
-  agent. The SDK's OWN bundled skills (code-review, verify, run, deep-research) DO load via
-  the claude_code preset — expected, but the panel does not list them.
+A full turn ran agent -> (Anthropic wire) -> gateway -> (OpenAI wire) -> stub -> back:
+streamed text, a Bash tool the agent actually executed (`echo GATEWAY_WAS_HERE`), the
+result round-tripping through the translator, and a closing line. The stub's log shows
+`turn-1 (text + tool_call)` then `turn-2 (after tool result)`.
+
+Two bugs only a live turn could find, both now covered by tests:
+- The SDK sends system-role messages INSIDE `messages`; the translator rejected them
+  and 400'd every real turn. ai needs `allowSystemInMessages: true` (defaults false).
+- query's `model` option overrides ANTHROPIC_MODEL, so the bare model id reached the
+  gateway and it could not route. Both must carry `providerId::modelId`.
 
 ## Notes / breadcrumbs
 
-- The folder picker needs `dialog.showOpenDialog` from electron, so the service will import
-  electron and fall OUT of the bun-testable set. Keep the pure part (validation, collision
-  detection) in `src/shared/` so it stays gated, exactly like the stores.
-- Verification without a key: `scripts/fake-anthropic.mjs` logs what the agent sends. A loaded
-  skill's name/description reaches the API in the request payload, so R7 is provable by grepping
-  that body — no live model needed.
-- Skills apply on the NEXT message because each turn spawns a fresh SDK process (docs/PLAN.md).
-  That is the assumption R7 asks to confirm; if it is wrong, the panel needs a restart prompt.
-- The built-in skill is doctrine only, not enforcement: under `bypassPermissions` the agent CAN
-  run `ask-marcel-office login`. That is accepted risk R8 in docs/PLAN.md.
-- M4 (office CLI) stays blocked until `ask-marcel-office-cli@2.2.0` is published to npm. The
-  built-in SKILL.md is just markdown, so it does not need the CLI installed and lands here.
+- The translators are pure and live in `src/shared/gateway/` so they carry the 100% tier and the
+  mutation gate. The server is the thin shell.
+- `scripts/fake-anthropic.mjs` emits exactly the wire format the gateway must produce, so it is
+  the spec to compare against. M5 needs a second stub: an OpenAI-compatible endpoint for the
+  gateway to CALL.
+- Risk R9: loopback only, per-run random key, constant-time compare. Accepted for a local app.
+- `count_tokens`: the plan says stub it (chars/4) and delete if unused. M2's recon never saw the
+  SDK call it, so leave it out until something 404s. Do not build it speculatively.
 
-## Gated on the user (unchanged from M0-M2)
+## Gated on the user (unchanged)
 
-- A live turn against the real Anthropic API, and SDK-level resume. The fake proves the wiring,
-  not the model. Both need a real key.
-- M6 targets a mac arm64 DMG, but this machine is Intel x64. Decide the target arch before M6.
+- A live turn against the real Anthropic API, and SDK-level resume. Both need a real key.
+- M4 needs `ask-marcel-office-cli@2.2.0` on npm.
+- M6 targets a mac arm64 DMG, but this machine is Intel x64.

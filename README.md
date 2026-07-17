@@ -5,12 +5,12 @@ your Microsoft 365 in reach. A radically simplified Cherry Studio, stripped to t
 
 Electron + React, MIT licensed. Built to the atelier engineering standard.
 
-> **Status: M3 complete — the app chats, and takes skills.** Add an Anthropic provider in settings
-> and you get a working agent conversation: streamed text, visible tool calls it actually executes,
-> a persisted transcript that survives a restart, and a Stop button. Settings also manages skills;
-> a skill you add applies from your next message. The office CLI integration, the
-> OpenAI-compatible gateway, and packaging are not built yet. See `docs/PLAN.md` for the milestone
-> plan and `.claude/PLAN.md` for the current run.
+> **Status: M5 complete — chat, skills, and any OpenAI-compatible model.** Add a provider in
+> settings (Anthropic, or any OpenAI-compatible endpoint) and you get a working agent
+> conversation: streamed text, visible tool calls it actually executes, a persisted transcript
+> that survives a restart, and a Stop button. Settings also manages skills; a skill you add
+> applies from your next message. The office CLI integration (M4) and packaging (M6) are not
+> built yet. See `docs/PLAN.md` for the milestone plan and `.claude/PLAN.md` for the current run.
 
 ## Requirements
 
@@ -89,17 +89,36 @@ Two things the panel does not show: the agent also gets the SDK's own bundled sk
 verify, run, and friends) via the `claude_code` preset, and your personal `~/.claude` skills are
 deliberately **not** loaded — the app points the agent at its own config directory.
 
+## OpenAI-compatible providers
+
+An `openai` provider does not talk to the model directly. The main process runs a loopback
+gateway that speaks Anthropic's wire protocol to the agent and translates to the OpenAI API:
+
+```
+agent subprocess ──Anthropic wire──▶ gateway (127.0.0.1, OS-assigned port)
+                                       └──OpenAI wire──▶ your endpoint
+```
+
+The agent never sees your provider's key — it authenticates to the gateway with a per-run key,
+and the real credentials stay in the main process. The gateway starts on the first turn that
+needs it, so an Anthropic-only setup never opens a socket.
+
 ## Trying it without an API key
 
-`scripts/fake-anthropic.mjs` is a stand-in endpoint that speaks the real Anthropic SSE wire
-protocol. Everything except the model is real: real SDK, real agent subprocess, real tool
-execution, real IPC. It answers the first turn with some text plus a `Bash` tool call, and the
-second (once it sees a `tool_result`) with a closing line.
+Two stand-in endpoints let the whole thing be exercised with no credentials. Everything except
+the model is real: real SDK, real agent subprocess, real tool execution, real IPC.
 
 ```bash
-node scripts/fake-anthropic.mjs        # prints FAKE_PORT <port>
-bun run dev                            # add a provider: baseUrl http://127.0.0.1:<port>, any key
+# an Anthropic stand-in, for the agent path
+node scripts/fake-anthropic.mjs   # prints FAKE_PORT <port>
+# an OpenAI-compatible stand-in, for the gateway path
+node scripts/fake-openai.mjs      # prints FAKE_OPENAI_PORT <port>
+
+bun run dev   # add a provider with baseUrl http://127.0.0.1:<port> and any key
 ```
+
+Both answer the first turn with text plus a `Bash` tool call, and the second (once they see the
+tool result) with a closing line — so a full tool round trip runs end to end.
 
 ## How a setting reaches disk
 

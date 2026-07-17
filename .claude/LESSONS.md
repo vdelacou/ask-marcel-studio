@@ -6,6 +6,21 @@ Each entry is one of `[mistake]`, `[decision]`, or `[gotcha]`. Newest first.
 
 ---
 
+## [gotcha] 2026-07-17 | the sdk sends system-role messages inside `messages`, and ai rejects them by default
+
+The gateway's first real turn died on `400 unknown message role: system`, from the translator's own guard. Anthropic documents `system` as a top-level field, so accepting only user and assistant roles looked right and even had a test asserting the rejection — the test encoded a false assumption that live traffic disproved in one request. The SDK really does put system-role messages in the array. ai v7 accepts them only when `allowSystemInMessages: true`, which defaults to false, so BOTH the translator and the streamText call had to change.
+Rule for next time: a guard rejecting something "the API does not allow" is a guess until a real client has been through it.
+
+## [gotcha] 2026-07-17 | query's `model` option overrides ANTHROPIC_MODEL, so the gateway needs the full reference twice
+
+session-env correctly set `ANTHROPIC_MODEL=lmstudio::qwen2.5` for the gateway path, but the turn still failed with "an issue with the selected model (qwen2.5)": agent-runtime passed the BARE model id as `query({ options: { model } })`, and that option wins over the env var. The gateway then could not parse a providerId out of it and 404'd. Both the env var and the query option must carry `providerId::modelId` when routing through the gateway, and the bare id when talking to Anthropic directly.
+Applies to: any future option that also exists as an ANTHROPIC_* env var.
+
+## [gotcha] 2026-07-17 | ai v7 renamed the stream property and the text field; fullStream is deprecated
+
+`docs/PLAN.md` was written against ai v4/v5 and both of its assumptions are stale. `result.fullStream` is deprecated in v7 in favour of `result.stream` (identical type), and the text part carries `text` where v4 called it `textDelta`. v7 also streams tool arguments natively as tool-input-start/delta/end, and emits a whole `tool-call` part IN ADDITION — relaying both hands the agent the same tool twice, the same trap as the assistant message repeating streamed text in sdk-event-fold. The plan's "emit one input_json_delta with the full JSON" is still needed, but as a fallback for providers that skip the deltas.
+Applies to: the gateway reducer, and any future ai upgrade — re-read the part names first.
+
 ## [mistake] 2026-07-17 | a test asserted against a shared tmpdir path and failed for the wrong reason
 
 The skills traversal test asserted `existsSync(join(userData, '..', 'evil'))` is false, but `userData` is an mkdtemp under `tmpdir()`, so the sibling resolves to a path shared with every other process on the machine. A stale folder left by an earlier run in the same session failed the test while the production code was provably correct — deleting the folder and re-running proved `add()` never recreates it. Scoping the assertion to this run's own skills folder makes it deterministic. Note `grep -c` also prints `0` AND exits non-zero, so `n=$(grep -c … || echo 0)` yields `"0\n0"` and every equality check against `"0"` silently reports a leak; that pattern produced a second false alarm in the same hour.
