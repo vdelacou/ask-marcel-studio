@@ -35,6 +35,9 @@ export type ConversationsStore = {
   readonly rename: (input: RenameConversationInput) => Promise<Result<ConversationMeta, StoreError>>;
   readonly remove: (id: string) => Promise<Result<null, StoreError>>;
   readonly workspaceFor: (id: string) => Promise<Result<string, StoreError>>;
+  // Writes a whole conversation back. The agent runtime calls this once per turn end
+  // (risk R11: one write per turn, one in-flight turn per conversation).
+  readonly save: (conversation: Conversation) => Promise<Result<Conversation, StoreError>>;
 };
 
 export const createConversationsStore = (deps: ConversationsStoreDeps): ConversationsStore => {
@@ -122,5 +125,5 @@ export const createConversationsStore = (deps: ConversationsStoreDeps): Conversa
     }
   };
 
-  return { list, create, get: readOne, rename, remove, workspaceFor };
+  return { list, create, get: readOne, rename, remove, workspaceFor, save: writeOne };
 };

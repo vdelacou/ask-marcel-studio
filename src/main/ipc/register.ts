@@ -11,12 +11,14 @@
  */
 import { ipcMain } from 'electron';
 import { CHANNEL } from '../../shared/ipc-contract.ts';
+import type { AgentRuntime } from '../services/agent/agent-runtime.ts';
 import type { ConversationsStore } from '../services/store/conversations-store.ts';
 import type { SettingsStore } from '../services/store/settings-store.ts';
 
 export type IpcDeps = {
   readonly settings: SettingsStore;
   readonly conversations: ConversationsStore;
+  readonly agent: AgentRuntime;
 };
 
 const asString = (value: unknown): string => (typeof value === 'string' ? value : '');
@@ -33,4 +35,10 @@ export const registerIpc = (deps: IpcDeps): void => {
     return deps.conversations.rename({ id: asString(draft?.id), title: asString(draft?.title) });
   });
   ipcMain.handle(CHANNEL.conversationsDelete, (_event, id: unknown) => deps.conversations.remove(asString(id)));
+
+  ipcMain.handle(CHANNEL.chatSend, (_event, input: unknown) => {
+    const draft = input as { conversationId?: unknown; text?: unknown } | undefined;
+    return deps.agent.send({ conversationId: asString(draft?.conversationId), text: asString(draft?.text) });
+  });
+  ipcMain.handle(CHANNEL.chatCancel, (_event, conversationId: unknown) => deps.agent.cancel(asString(conversationId)));
 };

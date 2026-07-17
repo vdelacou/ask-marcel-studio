@@ -1,17 +1,25 @@
 /*
  * Electron main entry and composition root.
  *
- * The single top-level catch lives here (rule 17): everything below returns
- * Result. M0 wires only the window; services and IPC land in M1/M2.
+ * Every state-source (userData, the clock, the inherited environment) is read once,
+ * here, and injected downward as a parameter. Nothing below reaches for app.getPath
+ * or process.env itself, which is what keeps the services testable
+ * (references/architecture.md).
+ *
+ * The single top-level catch lives here (rule 17): everything below returns Result.
  */
 import { join } from 'node:path';
 import { electronApp, is, optimizer } from '@electron-toolkit/utils';
 import { BrowserWindow, app, shell } from 'electron';
+import { CHAT_EVENT } from '../shared/ipc-contract.ts';
 import { registerIpc } from './ipc/register.ts';
+import { createAgentRuntime } from './services/agent/agent-runtime.ts';
 import { createConversationsStore } from './services/store/conversations-store.ts';
 import { createSettingsStore } from './services/store/settings-store.ts';
+import type { AgentRuntime } from './services/agent/agent-runtime.ts';
+import type { UIEvent } from '../shared/ipc-contract.ts';
 
-const createWindow = (): void => {
+const createWindow = (): BrowserWindow => {
   const window = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -47,27 +55,36 @@ const createWindow = (): void => {
   const devUrl = process.env['ELECTRON_RENDERER_URL'];
   if (is.dev && devUrl !== undefined) {
     void window.loadURL(devUrl);
-    return;
+    return window;
   }
   void window.loadFile(join(__dirname, '../renderer/index.html'));
+  return window;
 };
 
-// Composition root: every state-source is read once, here, and injected downward
-// as a parameter. Nothing below reaches for app.getPath or the clock itself, which
-// is what keeps the stores testable (references/architecture.md).
-const buildDeps = (): Parameters<typeof registerIpc>[0] => {
+const buildRuntime = (emit: (event: UIEvent) => void): AgentRuntime => {
   const userData = app.getPath('userData');
-  return {
-    settings: createSettingsStore({ userData }),
-    conversations: createConversationsStore({ userData, now: () => new Date().toISOString() }),
-  };
+  const now = (): string => new Date().toISOString();
+  const settings = createSettingsStore({ userData });
+  const conversations = createConversationsStore({ userData, now });
+  const agent = createAgentRuntime({ settings, conversations, userData, now, emit, inheritedEnv: process.env });
+  registerIpc({ settings, conversations, agent });
+  return agent;
 };
 
 void app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.askmarcel.studio');
-  registerIpc(buildDeps());
   app.on('browser-window-created', (_event, window) => optimizer.watchWindowShortcuts(window));
-  createWindow();
+
+  const window = createWindow();
+  // Events go to the window that exists now. There is one window in v1 (multi-window
+  // is a stated non-goal), so a lookup per event would be ceremony.
+  const runtime = buildRuntime((event) => {
+    if (!window.isDestroyed()) window.webContents.send(CHAT_EVENT, event);
+  });
+
+  // A turn left running would keep an orphaned agent subprocess alive after quit.
+  app.on('before-quit', () => runtime.cancelAll());
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
