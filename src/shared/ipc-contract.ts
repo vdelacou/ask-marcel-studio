@@ -20,7 +20,42 @@ export const CHANNEL = {
   conversationsGet: 'conversations:get',
   conversationsRename: 'conversations:rename',
   conversationsDelete: 'conversations:delete',
+  chatSend: 'chat:send',
+  chatCancel: 'chat:cancel',
 } as const;
+
+// The one main-to-renderer stream. Everything the UI learns during a turn arrives here.
+export const CHAT_EVENT = 'chat:event';
+
+export type TurnUsage = {
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly costUsd?: number;
+};
+
+export type UIEvent =
+  | { readonly type: 'turn-start'; readonly conversationId: string; readonly messageId: string }
+  | { readonly type: 'text-delta'; readonly conversationId: string; readonly messageId: string; readonly delta: string }
+  | { readonly type: 'tool-start'; readonly conversationId: string; readonly messageId: string; readonly toolUseId: string; readonly name: string; readonly input: unknown }
+  | { readonly type: 'tool-result'; readonly conversationId: string; readonly messageId: string; readonly toolUseId: string; readonly result: string; readonly isError: boolean }
+  | { readonly type: 'turn-done'; readonly conversationId: string; readonly usage: TurnUsage }
+  | { readonly type: 'error'; readonly conversationId: string; readonly message: string }
+  | { readonly type: 'title'; readonly conversationId: string; readonly title: string };
+
+export type ChatSendInput = {
+  readonly conversationId: string;
+  readonly text: string;
+};
+
+//   no-provider  nothing configured yet: the UI shows a settings call to action
+//   busy         a turn is already in flight for this conversation
+//   agent-failed the SDK turn itself failed
+export type ChatError =
+  | { readonly kind: 'no-provider'; readonly message: string }
+  | { readonly kind: 'busy'; readonly message: string }
+  | { readonly kind: 'unknown-model'; readonly message: string }
+  | { readonly kind: 'agent-failed'; readonly message: string }
+  | StoreError;
 
 // Why every kind exists, so the renderer can say something true to the user:
 //   malformed-id   the conversation id failed its checkpoint (never trust IPC input)
@@ -68,5 +103,13 @@ export type StudioApi = {
     readonly get: (id: string) => Promise<Result<Conversation, StoreError>>;
     readonly rename: (input: RenameConversationInput) => Promise<Result<ConversationMeta, StoreError>>;
     readonly remove: (id: string) => Promise<Result<null, StoreError>>;
+  };
+  readonly chat: {
+    // Resolves when the turn is ACCEPTED, not when it finishes. Everything the turn
+    // produces arrives on onChatEvent.
+    readonly send: (input: ChatSendInput) => Promise<Result<null, ChatError>>;
+    readonly cancel: (conversationId: string) => Promise<Result<null, ChatError>>;
+    // Returns an unsubscribe function; the renderer attaches one listener at mount.
+    readonly onEvent: (listener: (event: UIEvent) => void) => () => void;
   };
 };
