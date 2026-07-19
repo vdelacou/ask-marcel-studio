@@ -1,37 +1,37 @@
 /*
- * The app shell. Owns the view toggle and the bootstrap, hands plain props to the
- * design system.
+ * The app shell. Owns the view toggle and provider bootstrap, drives the conversation
+ * list through the use-conversations hook, and hands plain props to the design system.
  *
  * Carries no class string (rule 22) and calls no hook inside a design-system
- * component (rule 21).
+ * component (rule 21): every hook lives here or in src/renderer/src/hooks.
  *
- * M2 shows ONE conversation: the most recent, or a new one. The sidebar and the
- * conversation list are not in M2's definition of done, so state stays local here.
- * docs/PLAN.md names zustand for the renderer; it earns its place when the sidebar
- * needs cross-component state, not before.
+ * Bootstrap resolves the provider and the default model only; listing, opening and
+ * creating conversations belongs to the hook, which owns that state for the sidebar.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FC } from 'react';
 import { AppFrame } from './components/organisms/app-frame/index.tsx';
 import type { AppView } from './components/organisms/app-frame/index.tsx';
 import { NoProviderNotice } from './components/organisms/no-provider-notice/index.tsx';
+import { EmptyConversations } from './components/organisms/empty-conversations/index.tsx';
+import { Sidebar } from './components/organisms/sidebar/index.tsx';
+import { Toast } from './components/molecules/toast/index.tsx';
 import { ChatPage } from './page/chat-page.tsx';
 import { SettingsPage } from './page/settings-page.tsx';
+import { useConversations } from './hooks/use-conversations.ts';
 import { formatModelRef } from '../../shared/model-ref.ts';
 
 type Boot =
   | { readonly step: 'loading' }
   | { readonly step: 'no-provider' }
-  | { readonly step: 'ready'; readonly conversationId: string }
+  | { readonly step: 'ready'; readonly defaultModel: string }
   | { readonly step: 'failed'; readonly message: string };
 
 export const App: FC = () => {
   const [view, setView] = useState<AppView>('chat');
   const [boot, setBoot] = useState<Boot>({ step: 'loading' });
-  // Bootstrap lists conversations and creates one if there are none, which is a
-  // read-then-write race: two concurrent runs both see an empty list and both create.
-  // That really happens — StrictMode double-invokes the effect, and switching back to
-  // chat calls bootstrap again. Caught live: it produced two conversations 5ms apart.
+  // Same read guard the hook documents: StrictMode double-invokes the effect and
+  // switching back to chat calls bootstrap again.
   const bootstrapping = useRef(false);
 
   const bootstrap = useCallback((): void => {
@@ -39,36 +39,13 @@ export const App: FC = () => {
     bootstrapping.current = true;
     void (async (): Promise<void> => {
       const settings = await studio.settings.get();
-      if (!settings.ok) {
-        setBoot({ step: 'failed', message: settings.error.message });
-        return;
-      }
+      if (!settings.ok) return setBoot({ step: 'failed', message: settings.error.message });
       const first = settings.value.providers[0];
       const firstModel = first?.modelIds[0];
-      if (first === undefined || firstModel === undefined) {
-        setBoot({ step: 'no-provider' });
-        return;
-      }
-
-      // Reopen the most recent conversation, so quitting and relaunching lands the
-      // user back where they were. That is what makes resume visible.
-      const listed = await studio.conversations.list();
-      if (!listed.ok) {
-        setBoot({ step: 'failed', message: listed.error.message });
-        return;
-      }
-      const existing = listed.value[0];
-      if (existing !== undefined) {
-        setBoot({ step: 'ready', conversationId: existing.id });
-        return;
-      }
-
-      const model = settings.value.defaultModel ?? formatModelRef({ providerId: first.id, modelId: firstModel });
-      const created = await studio.conversations.create({ model });
-      setBoot(created.ok ? { step: 'ready', conversationId: created.value.id } : { step: 'failed', message: created.error.message });
+      if (first === undefined || firstModel === undefined) return setBoot({ step: 'no-provider' });
+      const defaultModel = settings.value.defaultModel ?? formatModelRef({ providerId: first.id, modelId: firstModel });
+      return setBoot({ step: 'ready', defaultModel });
     })().finally(() => {
-      // Released on every path, including the early returns above: a guard that
-      // leaks would wedge the app on a transient settings read failure.
       bootstrapping.current = false;
     });
   }, []);
@@ -84,13 +61,45 @@ export const App: FC = () => {
     [bootstrap]
   );
 
+  const conversations = useConversations(boot.step === 'ready' ? boot.defaultModel : undefined);
+  const list = conversations.view;
+  const isChatReady = view === 'chat' && boot.step === 'ready';
+
+  // Built unconditionally, mounted only in chat view: keeping the ternaries out of one
+  // another is what satisfies sonarjs/no-nested-conditional, and the spreads are how an
+  // optional prop stays absent rather than explicitly undefined (exactOptionalPropertyTypes).
+  const sidebar = (
+    <Sidebar
+      conversations={list.conversations.map((c) => ({ id: c.id, title: c.title }))}
+      {...(list.activeId === undefined ? {} : { activeId: list.activeId })}
+      {...(conversations.editingId === undefined ? {} : { editingId: conversations.editingId })}
+      draftTitle={conversations.draftTitle}
+      {...(conversations.confirmingDeleteId === undefined ? {} : { confirmingDeleteId: conversations.confirmingDeleteId })}
+      onNew={conversations.create}
+      onSelect={conversations.select}
+      onStartRename={conversations.startRename}
+      onDraftChange={conversations.changeDraft}
+      onCommitRename={conversations.commitRename}
+      onCancelRename={conversations.cancelRename}
+      onStartDelete={conversations.startDelete}
+      onConfirmDelete={conversations.confirmDelete}
+      onCancelDelete={conversations.cancelDelete}
+    />
+  );
+
+  const onOpenSettings = useCallback((): void => setView('settings'), []);
+
   return (
-    <AppFrame title="Ask Marcel Studio" view={view} onSelectView={onSelectView}>
-      {view === 'settings' && <SettingsPage />}
-      {view === 'chat' && boot.step === 'no-provider' && <NoProviderNotice onOpenSettings={() => setView('settings')} />}
-      {view === 'chat' && boot.step === 'ready' && <ChatPage conversationId={boot.conversationId} />}
-      {view === 'chat' && boot.step === 'failed' && <NoProviderNotice onOpenSettings={() => setView('settings')} />}
-    </AppFrame>
+    <>
+      <AppFrame title="Ask Marcel Studio" view={view} onSelectView={onSelectView} {...(isChatReady ? { sidebar } : {})}>
+        {view === 'settings' && <SettingsPage />}
+        {view === 'chat' && boot.step === 'no-provider' && <NoProviderNotice onOpenSettings={onOpenSettings} />}
+        {view === 'chat' && boot.step === 'failed' && <NoProviderNotice onOpenSettings={onOpenSettings} />}
+        {isChatReady && list.activeId !== undefined && <ChatPage key={list.activeId} conversationId={list.activeId} />}
+        {isChatReady && list.activeId === undefined && <EmptyConversations onNew={conversations.create} />}
+      </AppFrame>
+      {conversations.error !== undefined && <Toast message={conversations.error} onDismiss={conversations.dismissError} />}
+    </>
   );
 };
 
