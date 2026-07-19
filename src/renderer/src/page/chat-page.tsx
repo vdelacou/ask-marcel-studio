@@ -10,9 +10,12 @@ import type { FC } from 'react';
 import { ChatThread } from '../components/organisms/chat-thread/index.tsx';
 import type { ThreadMessage } from '../components/organisms/chat-thread/index.tsx';
 import { Composer } from '../components/organisms/composer/index.tsx';
+import { ConversationHeader } from '../components/molecules/conversation-header/index.tsx';
 import type { ChatPart } from '../components/molecules/chat-message/index.tsx';
 import { appendUserMessage, applyUIEvent, emptyChat } from '../lib/ui-event-fold.ts';
 import type { ChatView } from '../lib/ui-event-fold.ts';
+import { formatUsage } from '../lib/format-usage.ts';
+import { renderMarkdown } from '../render/markdown.tsx';
 import type { Message } from '../../../shared/types.ts';
 
 export type ChatPageProps = {
@@ -26,7 +29,8 @@ const toThreadMessage = (message: Message): ThreadMessage => ({
   role: message.role,
   parts: message.parts.map((part): ChatPart =>
     part.type === 'text'
-      ? { kind: 'text', text: part.text }
+      ? // The assistant speaks markdown; the user's own text is shown verbatim.
+        { kind: 'text', content: message.role === 'assistant' ? renderMarkdown(part.text) : part.text }
       : {
           kind: 'tool',
           id: part.toolUseId,
@@ -81,6 +85,7 @@ export const ChatPage: FC<ChatPageProps> = ({ conversationId }) => {
 
   return (
     <>
+      <ConversationHeader title={view.title === '' ? 'New conversation' : view.title} usage={formatUsage(view.lastUsage)} />
       <ChatThread
         messages={view.messages.map(toThreadMessage)}
         isStreaming={view.isStreaming}

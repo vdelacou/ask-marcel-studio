@@ -48,3 +48,17 @@ body,
 #root {
   height: 100%;
 }
+
+/*
+ * Shiki dual-theme swap. The highlighter (render/markdown) emits both themes inline: the
+ * light theme as the element's own color, the dark one behind `--shiki-dark` variables.
+ * Following prefers-color-scheme (the app's only theme signal) means promoting those
+ * dark variables here, on shiki's generated `.shiki` class, which no component authors.
+ */
+@media (prefers-color-scheme: dark) {
+  .shiki,
+  .shiki span {
+    color: var(--shiki-dark) !important;
+    background-color: var(--shiki-dark-bg) !important;
+  }
+}
