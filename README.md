@@ -5,12 +5,14 @@ your Microsoft 365 in reach. A radically simplified Cherry Studio, stripped to t
 
 Electron + React, MIT licensed. Built to the atelier engineering standard.
 
-> **Status: M5 complete — chat, skills, and any OpenAI-compatible model.** Add a provider in
-> settings (Anthropic, or any OpenAI-compatible endpoint) and you get a working agent
-> conversation: streamed text, visible tool calls it actually executes, a persisted transcript
-> that survives a restart, and a Stop button. Settings also manages skills; a skill you add
-> applies from your next message. The office CLI integration (M4) and packaging (M6) are not
-> built yet. See `docs/PLAN.md` for the milestone plan and `.claude/PLAN.md` for the current run.
+> **Status: M5 complete, M7 polish landing — chat, skills, any OpenAI-compatible model.** Add a
+> provider in settings (Anthropic, or any OpenAI-compatible endpoint) and you get a working agent
+> conversation: replies rendered as markdown with syntax-highlighted code, visible tool calls it
+> actually executes, a persisted transcript that survives a restart, and a Stop button. A sidebar
+> lists your conversations, and lets you start, switch, rename, and delete them; each turn's token
+> usage shows in the header. Settings also manages skills; a skill you add applies from your next
+> message. The office CLI integration (M4) and packaging (M6) are not built yet. See `docs/PLAN.md`
+> for the milestone plan and `.claude/PLAN.md` for the current run.
 
 ## Requirements
 
@@ -62,7 +64,9 @@ src/main/         electron main process
 src/preload/      contextBridge typed api — the renderer's only door to main
 src/renderer/     React + Tailwind v4
   src/components/ design system (atoms, molecules, organisms): all styling lives here
-  src/lib/        renderer logic (pure, tested)
+  src/lib/        renderer logic (pure, tested — the 100% coverage tier)
+  src/hooks/      React hooks (impure wiring; skipped tier, like components)
+  src/render/     markdown + shiki rendering (app-side, injected into the design system)
   src/page/       page shells: own all state, carry no class strings
   src/styles/globals.css                            design tokens (@theme)
 src/test-helpers/ test-only helpers; never imported by production code

@@ -1,81 +1,73 @@
-# PLAN: Ask Marcel Studio M5 (OpenAI-compatible gateway)
-Status: M5 complete, unstaged and awaiting commit. Started 2026-07-17.
+# PLAN: Ask Marcel Studio M7 (polish)
+Status: M7 code-complete, all eight gates green, awaiting commit. Live visual pass pending
+(computer-use screen capture is blocked in this environment; app boots clean with no console
+errors). Started 2026-07-18.
 
-M0-M3 are COMPLETE and committed through `b968a5e`. M4 (office CLI) is BLOCKED on the user
-publishing `ask-marcel-office-cli@2.2.0` to npm, so M5 is taken first. Lessons: `.claude/LESSONS.md`.
+M0-M3 and M5 are COMPLETE and committed (M5 through `3fc5d6c`). M4 (office CLI) and M6
+(packaging) remain BLOCKED on the user (see Gated below). Lessons: `.claude/LESSONS.md`.
 
 ## Goal
 
-Let an OpenAI-compatible provider drive a full agent turn, tool use included. A loopback HTTP
-server speaks the Anthropic wire protocol to the SDK and translates to the OpenAI API via the
-Vercel AI SDK. The agent subprocess gets `ANTHROPIC_BASE_URL=http://127.0.0.1:<port>` and never
-knows.
+Finish the app's user-visible surface so it reads as done. M7's six one-liners in
+`docs/PLAN.md` decompose into three real chunks plus a README audit, because two of them
+(rename/delete UX, shiki) presuppose surfaces that were deferred and never built.
 
-## Step zero (risk R4) — DONE, and it changes the design
+## What already exists (do NOT rebuild)
 
-The installed `ai` is v7, not the v4/v5 `docs/PLAN.md` assumed. Verified against the installed
-.d.ts, `fullStream` yields:
-
-  text-start / text-delta (field `text`, NOT v4's `textDelta`) / text-end
-  tool-input-start (id, toolName) / tool-input-delta (id, delta) / tool-input-end
-  tool-call (the whole call, ALSO emitted)
-  start / start-step / finish-step / finish (finishReason, totalUsage) / error / abort
-
-So v7 streams tool arguments natively and maps almost 1:1 onto Anthropic's wire format. Two
-consequences the plan did not anticipate:
-- `tool-call` arrives IN ADDITION to the input deltas. Folding both double-emits the tool — the
-  same trap as the assistant message repeating streamed text in sdk-event-fold.
-- The plan's "if upstream yields whole tool-call parts, emit one input_json_delta" is still needed
-  as a FALLBACK for providers that skip the deltas, not as the primary path.
-
-## Also known from M2's recon (not in docs/PLAN.md)
-
-The SDK does not just POST `/v1/messages`. It probes `HEAD /` first, and posts to
-`/v1/messages?beta=true`. A gateway matching the bare path only will never be hit.
-
-## Definition of done
-
-- All eight gates green; final slice commits through the real hook with no bypass.
-- A provider of kind `openai` drives a real agent turn through the gateway, including a tool call
-  the agent actually executes, verified live against a local OpenAI-compatible stub.
-- Exhaustive bun fixtures on both translators and the SSE encoder.
+- `title` is emitted on the first turn (`agent-runtime.ts:133`), folded into `ChatView.title`
+  (`ui-event-fold.ts`), but never RENDERED. AppFrame shows a hardcoded "Ask Marcel Studio".
+- `usage` is folded into `ChatView.lastUsage`, never rendered.
+- `error` is already rendered as an inline `role="alert"` banner in `chat-thread`. It works.
+  "Toasts" is only worth it where an action has no inline home (rename/delete/settings-save
+  failures) — fold that into chunk B, do not gratuitously replace the working banner.
+- Assistant text renders as a plain `<p whitespace-pre-wrap>`. No markdown, no `react-markdown`,
+  no `shiki` in deps yet.
+- The app opens exactly ONE conversation (`app.tsx`). No sidebar, no list, no new/switch. The
+  `conversations.rename`/`.remove` IPC exists but nothing in the UI calls it.
 
 ## Steps
 
-1. [x] Step zero: verify the installed `ai` package's fullStream part names (risk R4)  DoD: names confirmed against the .d.ts [met — see above]
-2. [x] `anthropic-sse.ts` (+test)  DoD: 100% tier [met — 8 tests]
-3. [x] `translate-stream.ts` (+test)  DoD: exhaustive fixtures [met — 31 tests, 100%. Uses result.stream: fullStream is DEPRECATED in v7]
-4. [x] `translate-request.ts` (+test)  DoD: tool round trip, cache_control stripped [met — 45 tests, 100%]
-5. [x] `gateway-server.ts`  DoD: HEAD / and POST /v1/messages?beta=true answered [met — matched on PATH, since the SDK appends ?beta=true]
-6. [x] session-env openai branch  DoD: bun test green [met — 27 tests; the agent never sees the upstream key]
-7. [x] Verify  DoD: driven live [met — agent -> gateway -> openai stub -> back, with a real tool execution. See below]
+### Chunk A — render title + usage (small; state already folded)
+1. [x] `format-usage.ts` (+test) pure formatter TurnUsage -> compact string  DoD met: 3 tests, 100%
+2. [x] `conversation-header` molecule (props-only: title, usage summary)  DoD met: lint green, no hooks/src imports
+3. [x] wire header into ChatPage from `view.title` + `formatUsage(view.lastUsage)`  [live visual pending]
 
-## Verified live (scripts/fake-openai.mjs, no key spent)
+### Chunk B — conversation sidebar (large; the deferred M2 feature)
+4. [x] pure conversation-list fold (+test): add/rename/remove/select/retitle  DoD met: 10 tests, 100%
+5. [x] `use-conversations` hook wiring the list IPC + the fold  [moved to src/renderer/src/hooks, NOT lib: lib is the 100% tier and a hook is not bun-testable]
+6. [x] design-system: `conversation-item` molecule + `sidebar` organism (list, new, active, inline rename, inline delete-confirm)  DoD met: props-only, lint green
+7. [x] wire sidebar into AppFrame/app shell; switch active conversation  [live visual pending]
+8. [x] error surface for rename/delete failures = `toast` molecule wired to hook.error  DoD met
 
-A full turn ran agent -> (Anthropic wire) -> gateway -> (OpenAI wire) -> stub -> back:
-streamed text, a Bash tool the agent actually executed (`echo GATEWAY_WAS_HERE`), the
-result round-tripping through the translator, and a closing line. The stub's log shows
-`turn-1 (text + tool_call)` then `turn-2 (after tool result)`.
+### Chunk C — markdown + shiki (medium; new deps + a sanitization boundary)
+9. [x] approach: shiki `createHighlighterCoreSync` (sync singleton, curated langs) + `@shikijs/rehype/core` inside react-markdown; emits React elements, NO html sink (rule 12 clean). "lazy-loaded" -> sync-bundled (sanctioned deviation)
+10. [x] added react-markdown, remark-gfm, shiki, @shikijs/{rehype,langs,themes}; `markdown-view` atom  DoD met
+11. [x] wire markdown into chat-message assistant text; code blocks highlighted; dual-theme via globals.css  [live visual pending]
 
-Two bugs only a live turn could find, both now covered by tests:
-- The SDK sends system-role messages INSIDE `messages`; the translator rejected them
-  and 400'd every real turn. ai needs `allowSystemInMessages: true` (defaults false).
-- query's `model` option overrides ANTHROPIC_MODEL, so the bare model id reached the
-  gateway and it could not route. Both must carry `providerId::modelId`.
+### Chunk D — README + close
+12. [x] README audit: status blurb, layout (hooks/render dirs) updated  DoD met
+13. [~] gates: typecheck + lint + test(423) + coverage all green locally; production build succeeds; commits NOT yet made (awaiting user yes, rule 25)
 
-## Notes / breadcrumbs
+## Remaining before M7 is truly done
+- Live VISUAL/interactive pass: sidebar create/switch/rename/delete, markdown+shiki render (light+dark),
+  usage+title display. Blocked here by screen-capture permission; app boots clean. Needs the user's eyes
+  or a working capture, ideally with the fake-anthropic stub for a real turn (usage/title need a turn).
+- Commit the work in gate-sized slices (plan below), then propose LESSONS entries.
 
-- The translators are pure and live in `src/shared/gateway/` so they carry the 100% tier and the
-  mutation gate. The server is the thin shell.
-- `scripts/fake-anthropic.mjs` emits exactly the wire format the gateway must produce, so it is
-  the spec to compare against. M5 needs a second stub: an OpenAI-compatible endpoint for the
-  gateway to CALL.
-- Risk R9: loopback only, per-run random key, constant-time compare. Accepted for a local app.
-- `count_tokens`: the plan says stub it (chars/4) and delete if unused. M2's recon never saw the
-  SDK call it, so leave it out until something 404s. Do not build it speculatively.
+## Notes / discipline
 
-## Gated on the user (unchanged)
+- TDD per slice (rule 11/24): propose the failing test, get a yes, then write it. Never touch an
+  existing test without sign-off.
+- Design-system components are props-only, no hooks, no `src/lib`/`src/shared` imports (rule 21);
+  Tailwind stays sealed under `src/components/**` (rule 22).
+- Commit per coherent green slice, <=10 files / <=300 lines, Conventional Commits, only on the
+  user's explicit yes (rule 25).
+- Not fanning this out to parallel agents: the work is sequential and gated (test + commit
+  confirmations), so it is driven inline.
+
+## Gated on the user (carried from M5, unchanged)
 
 - A live turn against the real Anthropic API, and SDK-level resume. Both need a real key.
-- M4 needs `ask-marcel-office-cli@2.2.0` on npm.
-- M6 targets a mac arm64 DMG, but this machine is Intel x64.
+- M4 needs `ask-marcel-office-cli@2.2.0` on npm (registry latest is 2.1.0).
+- M6 targets a mac arm64 DMG; this machine is Intel x64, so the arm64 smoke test needs real
+  Apple Silicon hardware.
