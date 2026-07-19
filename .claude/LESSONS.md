@@ -6,6 +6,16 @@ Each entry is one of `[mistake]`, `[decision]`, or `[gotcha]`. Newest first.
 
 ---
 
+## [decision] 2026-07-19 | untestable renderer wiring lives outside src/renderer/src/lib, the 100% coverage tier
+
+M7 added a React hook (`use-conversations`) and the markdown/shiki renderer (`render/markdown`), and `bun test` can run neither: a hook needs a React runtime and react-markdown needs a DOM. `check-coverage.ts` gives `src/renderer/src/lib/` the 100% tier on the premise that everything there is pure logic the runner executes for real, so these two do not belong in it. They live in `src/renderer/src/hooks/` and `src/renderer/src/render/`, which fall into the skipped tier alongside the components. Pure, tested renderer logic (format-usage, conversation-list, ui-event-fold) stays in lib.
+Rule for next time: if `bun test` cannot run a renderer module, it does not go in `src/renderer/src/lib`. See the paired gotcha below.
+
+## [gotcha] 2026-07-19 | a renderer/src/lib file no test imports is invisible to the coverage gate, not failed by it
+
+`bun test --coverage` only reports files a test actually loads, and `check-coverage.ts` only judges files present in that report. A module placed in the 100% `src/renderer/src/lib/` tier but imported by nothing the runner can execute never appears, so the gate passes it by absence rather than proving it covered. That is the "silently ungated by invisibility" hazard the script's own WARNING names, and it was live during M7: `use-conversations` and `markdown` would have sat in lib at an unmeasured 0% and the run would still have been green. The fix was to move them out of lib, not to trust the green.
+Rule for next time: a file's absence from the coverage report is not coverage. Only the shared kernel is force-imported by the coverage preload, so nothing else is proven merely by a passing run.
+
 ## [gotcha] 2026-07-17 | the sdk sends system-role messages inside `messages`, and ai rejects them by default
 
 The gateway's first real turn died on `400 unknown message role: system`, from the translator's own guard. Anthropic documents `system` as a top-level field, so accepting only user and assistant roles looked right and even had a test asserting the rejection — the test encoded a false assumption that live traffic disproved in one request. The SDK really does put system-role messages in the array. ai v7 accepts them only when `allowSystemInMessages: true`, which defaults to false, so BOTH the translator and the streamText call had to change.
