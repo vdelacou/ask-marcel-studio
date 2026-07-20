@@ -24,7 +24,7 @@ export const emptyDraft = (): ProviderDraft => ({
   label: '',
   baseUrl: '',
   apiKey: '',
-  modelIds: '',
+  modelIds: [],
 });
 
 const toDraft = (provider: Provider): ProviderDraft => ({
@@ -35,17 +35,10 @@ const toDraft = (provider: Provider): ProviderDraft => ({
   // An absent baseUrl must render as an empty field, never as the string 'undefined'.
   baseUrl: provider.baseUrl ?? '',
   apiKey: provider.apiKey,
-  modelIds: provider.modelIds.join(', '),
+  modelIds: [...provider.modelIds],
 });
 
 export const settingsToDrafts = (settings: Settings): readonly ProviderDraft[] => settings.providers.map(toDraft);
-
-const splitModelIds = (line: string): string[] =>
-  line
-    .split(',')
-    .map((m) => m.trim())
-    // A trailing comma is what a half-finished list looks like; it is not a blank model.
-    .filter((m) => m.length > 0);
 
 const toProvider = (draft: ProviderDraft): Provider => {
   const baseUrl = draft.baseUrl.trim();
@@ -55,7 +48,8 @@ const toProvider = (draft: ProviderDraft): Provider => {
     // Trimmed because a pasted key routinely carries a trailing newline, which would
     // otherwise be encrypted and sent to the provider verbatim.
     apiKey: draft.apiKey.trim(),
-    modelIds: splitModelIds(draft.modelIds),
+    // Trim each model and drop the blank rows an in-progress edit leaves behind.
+    modelIds: draft.modelIds.map((m) => m.trim()).filter((m) => m.length > 0),
   };
   if (draft.kind === 'openai') return { ...common, kind: 'openai', baseUrl };
   // Omitted, not blank: settings-doc distinguishes an absent baseUrl (use the real

@@ -38,7 +38,6 @@ export const SettingsPage: FC = () => {
   const [drafts, setDrafts] = useState<readonly ProviderDraft[]>([]);
   const [defaultModel, setDefaultModel] = useState<string | undefined>(undefined);
   const [notice, setNotice] = useState<PanelNotice | undefined>(undefined);
-  const [isSaving, setIsSaving] = useState(false);
   const [skills, setSkills] = useState<readonly SkillRow[]>([]);
   const [skillsError, setSkillsError] = useState<string | undefined>(undefined);
   const [isAdding, setIsAdding] = useState(false);
@@ -146,28 +145,24 @@ export const SettingsPage: FC = () => {
     setDrafts((current) => [...current, emptyDraft()]);
   }, []);
 
+  // A provider's Save button persists the whole set. Re-seed from what main echoed back
+  // (trimmed, ids assigned) so the form shows exactly what was stored.
   const onSave = useCallback((): void => {
-    setIsSaving(true);
     void (async (): Promise<void> => {
       const saved = await studio.settings.save(draftsToSettings(drafts, defaultModel));
-      setIsSaving(false);
       if (!saved.ok) {
-        // The main process is the only real validator, so its message is the one to
-        // show: it is what actually refused to write the file.
         setNotice({ tone: 'error', message: saved.error.message });
         return;
       }
-      // Re-seed from what main echoed back, not from local state: main trims and
-      // normalises, and the form should show what was actually stored.
       setDrafts(settingsToDrafts(saved.value));
-      setNotice({ tone: 'saved', message: 'Settings saved' });
+      setNotice({ tone: 'saved', message: 'Saved' });
     })();
   }, [drafts, defaultModel]);
 
   return (
     <SettingsLayout nav={<SettingsNav groups={NAV_GROUPS} activeId={section} onSelect={setSection} />}>
       {section === 'providers' && (
-        <ProvidersPanel drafts={drafts} notice={notice} isSaving={isSaving} onChangeDraft={onChangeDraft} onRemoveDraft={onRemoveDraft} onAddDraft={onAddDraft} onSave={onSave} />
+        <ProvidersPanel drafts={drafts} notice={notice} onChangeDraft={onChangeDraft} onRemoveDraft={onRemoveDraft} onAddDraft={onAddDraft} onSave={onSave} />
       )}
       {section === 'skills' && <SkillsPanel skills={skills} error={skillsError} isAdding={isAdding} onAdd={onAddSkill} onRemove={onRemoveSkill} />}
       {section === 'office' && <OfficePanel view={officeView} isLoggingIn={isLoggingIn} error={officeError} onLogin={onLogin} />}

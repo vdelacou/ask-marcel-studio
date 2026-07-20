@@ -9,8 +9,8 @@ export type PanelNotice = { readonly tone: 'saved' | 'error'; readonly message: 
 
 export type ProvidersPanelProps = {
   drafts: readonly ProviderDraft[];
+  // The result of the last save (a provider's Save button persists the whole set).
   notice?: PanelNotice;
-  isSaving: boolean;
   onChangeDraft: (rowId: string, patch: Partial<ProviderDraft>) => void;
   onRemoveDraft: (rowId: string) => void;
   onAddDraft: () => void;
@@ -22,12 +22,12 @@ const noticeStyles: Record<PanelNotice['tone'], string> = {
   error: 'border-danger text-danger',
 };
 
-export const ProvidersPanel: FC<ProvidersPanelProps> = ({ drafts, notice, isSaving, onChangeDraft, onRemoveDraft, onAddDraft, onSave }) => (
+export const ProvidersPanel: FC<ProvidersPanelProps> = ({ drafts, notice, onChangeDraft, onRemoveDraft, onAddDraft, onSave }) => (
   <section className="flex flex-col gap-y-4">
     <header className="flex items-baseline justify-between">
       <div className="flex flex-col gap-y-1">
         <h2 className="text-lg font-semibold tracking-tight text-ink">Providers</h2>
-        <p className="text-sm text-ink-muted">Add an Anthropic key, or any OpenAI-compatible endpoint.</p>
+        <p className="text-sm text-ink-muted">Add an Anthropic or OpenAI-compatible provider.</p>
       </div>
       <Button variant="secondary" onClick={onAddDraft}>
         Add provider
@@ -39,19 +39,14 @@ export const ProvidersPanel: FC<ProvidersPanelProps> = ({ drafts, notice, isSavi
     )}
 
     {drafts.map((draft) => (
-      <ProviderForm key={draft.rowId} draft={draft} onChange={(patch) => onChangeDraft(draft.rowId, patch)} onRemove={() => onRemoveDraft(draft.rowId)} />
+      <ProviderForm key={draft.rowId} draft={draft} onChange={(patch) => onChangeDraft(draft.rowId, patch)} onRemove={() => onRemoveDraft(draft.rowId)} onSave={onSave} />
     ))}
 
-    <footer className="flex items-center justify-end gap-x-3">
-      {notice !== undefined && (
-        <p role="status" className={`rounded-md border px-2.5 py-1.5 text-xs ${notice.tone === 'saved' ? noticeStyles.saved : noticeStyles.error}`}>
-          {notice.message}
-        </p>
-      )}
-      <Button onClick={onSave} disabled={isSaving}>
-        {isSaving ? 'Saving…' : 'Save settings'}
-      </Button>
-    </footer>
+    {notice !== undefined && (
+      <p role="status" className={`self-end rounded-md border px-2.5 py-1.5 text-xs ${notice.tone === 'saved' ? noticeStyles.saved : noticeStyles.error}`}>
+        {notice.message}
+      </p>
+    )}
   </section>
 );
 

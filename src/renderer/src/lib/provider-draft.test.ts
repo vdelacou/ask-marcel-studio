@@ -11,13 +11,13 @@ const anthropic: Settings['providers'][number] = {
 };
 
 describe('opening the settings screen on what is already saved', () => {
-  test('a saved provider fills the form, with its models on one editable line', () => {
+  test('a saved provider fills the form, its models ready to edit as a list', () => {
     const drafts = settingsToDrafts({ providers: [anthropic] });
 
     expect(drafts).toHaveLength(1);
     expect(drafts[0]?.label).toBe('Anthropic');
     expect(drafts[0]?.apiKey).toBe('sk-ant-real');
-    expect(drafts[0]?.modelIds).toBe('claude-opus-4-8, claude-sonnet-5');
+    expect(drafts[0]?.modelIds).toEqual(['claude-opus-4-8', 'claude-sonnet-5']);
   });
 
   test('an anthropic provider with no base url shows a blank field rather than the word undefined', () => {
@@ -51,20 +51,20 @@ describe('saving what the user typed', () => {
     expect(settings.providers[0]).toEqual(anthropic);
   });
 
-  test('the models line is split back into a list, ignoring the spaces the user typed', () => {
-    const draft = { ...emptyDraft(), id: 'p', label: 'P', apiKey: 'k', modelIds: ' a ,b,  c ' };
+  test('each model is trimmed of the spaces the user typed', () => {
+    const draft = { ...emptyDraft(), id: 'p', label: 'P', apiKey: 'k', modelIds: [' a ', 'b', '  c '] };
 
     expect(draftsToSettings([draft]).providers[0]?.modelIds).toEqual(['a', 'b', 'c']);
   });
 
-  test('a trailing comma does not become a blank model id', () => {
-    const draft = { ...emptyDraft(), id: 'p', label: 'P', apiKey: 'k', modelIds: 'a, b,' };
+  test('a blank model row left behind by an edit is dropped', () => {
+    const draft = { ...emptyDraft(), id: 'p', label: 'P', apiKey: 'k', modelIds: ['a', 'b', ''] };
 
     expect(draftsToSettings([draft]).providers[0]?.modelIds).toEqual(['a', 'b']);
   });
 
   test('an anthropic provider left without a base url omits the field entirely', () => {
-    const draft = { ...emptyDraft(), id: 'p', label: 'P', apiKey: 'k', modelIds: 'm', baseUrl: '   ' };
+    const draft = { ...emptyDraft(), id: 'p', label: 'P', apiKey: 'k', modelIds: ['m'], baseUrl: '   ' };
 
     // Omitted rather than sent as an empty string: settings-doc treats a present-but-blank
     // baseUrl differently from an absent one.
@@ -72,7 +72,7 @@ describe('saving what the user typed', () => {
   });
 
   test('an openai provider keeps the base url the user typed', () => {
-    const draft = { ...emptyDraft(), kind: 'openai' as const, id: 'p', label: 'P', apiKey: 'k', modelIds: 'm', baseUrl: 'http://127.0.0.1:1234/v1' };
+    const draft = { ...emptyDraft(), kind: 'openai' as const, id: 'p', label: 'P', apiKey: 'k', modelIds: ['m'], baseUrl: 'http://127.0.0.1:1234/v1' };
 
     const provider = draftsToSettings([draft]).providers[0];
 
@@ -80,7 +80,7 @@ describe('saving what the user typed', () => {
   });
 
   test('surrounding whitespace is trimmed off every field the user typed', () => {
-    const draft = { ...emptyDraft(), id: '  p  ', label: '  P  ', apiKey: '  k  ', modelIds: 'm' };
+    const draft = { ...emptyDraft(), id: '  p  ', label: '  P  ', apiKey: '  k  ', modelIds: ['m'] };
 
     const provider = draftsToSettings([draft]).providers[0];
 

@@ -3,11 +3,11 @@ import { Button } from '../../atoms/button/index.tsx';
 import { Field } from '../../atoms/field/index.tsx';
 import { Select } from '../../atoms/select/index.tsx';
 import { TextInput } from '../../atoms/text-input/index.tsx';
+import { ModelList } from '../model-list/index.tsx';
 
-// What one provider looks like while it is being edited. Everything is a string
-// because that is what an <input> holds: modelIds is a comma-separated line here
-// and only becomes an array when the page shell saves it. Keeping the half-typed
-// state as text is what lets the user type a comma without the field fighting back.
+// What one provider looks like while it is being edited. Text fields hold strings; the
+// models are a list edited one entry at a time. The page shell saves it, trimming each
+// model and dropping the blank rows an in-progress edit leaves behind.
 export type ProviderDraft = {
   readonly rowId: string;
   readonly id: string;
@@ -15,7 +15,7 @@ export type ProviderDraft = {
   readonly label: string;
   readonly baseUrl: string;
   readonly apiKey: string;
-  readonly modelIds: string;
+  readonly modelIds: readonly string[];
 };
 
 export type ProviderFormProps = {
@@ -24,6 +24,7 @@ export type ProviderFormProps = {
   // not hold anything.
   onChange: (patch: Partial<ProviderDraft>) => void;
   onRemove: () => void;
+  onSave: () => void;
 };
 
 const KIND_OPTIONS = [
@@ -31,7 +32,7 @@ const KIND_OPTIONS = [
   { value: 'openai', label: 'OpenAI compatible' },
 ];
 
-export const ProviderForm: FC<ProviderFormProps> = ({ draft, onChange, onRemove }) => (
+export const ProviderForm: FC<ProviderFormProps> = ({ draft, onChange, onRemove, onSave }) => (
   <section className="flex flex-col gap-y-3 rounded-panel border border-border-subtle bg-surface-raised p-4">
     <div className="grid grid-cols-2 gap-3">
       <Field label="Name" htmlFor={`${draft.rowId}-label`}>
@@ -50,18 +51,20 @@ export const ProviderForm: FC<ProviderFormProps> = ({ draft, onChange, onRemove 
       <TextInput id={`${draft.rowId}-baseUrl`} value={draft.baseUrl} placeholder="https://api.anthropic.com" onChange={(e) => onChange({ baseUrl: e.target.value })} />
     </Field>
 
-    <Field label="API key" htmlFor={`${draft.rowId}-apiKey`} hint="Encrypted with your OS keychain before it is written to disk.">
+    <Field label="API key" htmlFor={`${draft.rowId}-apiKey`} hint="Encrypted and stored only on your device.">
       <TextInput id={`${draft.rowId}-apiKey`} type="password" value={draft.apiKey} placeholder="sk-…" autoComplete="off" onChange={(e) => onChange({ apiKey: e.target.value })} />
     </Field>
 
-    <Field label="Models" htmlFor={`${draft.rowId}-models`} hint="Comma separated.">
-      <TextInput id={`${draft.rowId}-models`} value={draft.modelIds} placeholder="claude-opus-4-8, claude-sonnet-5" onChange={(e) => onChange({ modelIds: e.target.value })} />
-    </Field>
+    <div className="flex flex-col gap-y-1.5">
+      <span className="text-xs font-medium text-ink-muted">Models</span>
+      <ModelList models={draft.modelIds} onChange={(models) => onChange({ modelIds: models })} />
+    </div>
 
-    <div className="flex justify-end">
+    <div className="flex justify-end gap-x-2">
       <Button variant="danger" onClick={onRemove}>
         Remove provider
       </Button>
+      <Button onClick={onSave}>Save</Button>
     </div>
   </section>
 );
