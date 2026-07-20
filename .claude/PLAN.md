@@ -60,21 +60,26 @@ FULL MECHANISM PROVEN on host: download+checksum -> extract -> venv (pip 26.1.2)
 `pip install --no-index --find-links` openpyxl -> import ok, all under `env -i` (offline).
 6. [x] `scripts/fetch-python.ts` + `fetch:python` + vendor/ gitignored  DoD MET: host fetch
        verifies checksum (25MB) and extracts; binary runs Python 3.13.14
-7. [~] wheels fetch: PROVEN manually (openpyxl+certifi+et_xmlfile pure wheels, offline
-       install works). A `fetch:wheels` script + numpy/pandas per-platform still to script.
+7. [x] `fetch-wheels.ts` + `fetch:wheels`: pip download openpyxl+pandas (pulls numpy,
+       dateutil, six, et_xmlfile) into vendor/wheels/  DoD MET: offline install of ALL
+       into a fresh venv + `import pandas` proven
 8. [x] `python-paths.ts` (+NEW test): runtime binary, venv layout, marker, platformOf
        DoD MET: 100% coverage + 100% mutation, Windows branch tested via win32.join
-9. [ ] python shim entries in `tool-shims.ts` (python3/python/pip3, SSL_CERT_FILE ->
-       venv certifi, PYTHONNOUSERSITE=1, PIP_CACHE_DIR)  DoD: 100%
-10. [ ] `python-service.ts` (+NEW test, BUN_TESTABLE_MAIN): provision = venv create +
-        wheel seed + version marker; re-provision on runtime version change; timeout +
-        failed status (never hangs)  DoD: 80%+, hand-written fakes
-11. [ ] `python:status` IPC + preload + CHANNEL pin (+2 lines ipc-contract.test.ts,
-        SIGN-OFF) + settings row  DoD: typecheck green, panel shows ready/provisioning
-12. [ ] live verify: agent turn runs `python3 -c "import openpyxl"` offline  DoD: tool card
-13. [ ] docs: README runtimes section + docs/PLAN.md M6 addendum (extraResources matrix,
-        mac sign walk + disable-library-validation entitlement, npm-in-asar check,
-        MAX_PATH short venv root `%APPDATA%/ask-marcel-studio/py`)  DoD: docs updated
+9. [x] python shim entries in `tool-shims.ts` (python3/python + pip3/pip, PYTHONNOUSERSITE=1,
+       PIP_CACHE_DIR). SSL_CERT_FILE DEFERRED (pip's own certs work; local data needs no SSL;
+       follow-up for agent HTTPS from python)  DoD MET: 100% coverage + 100% mutation
+10. [x] `python-status.ts` (shared) + `python-service.ts`/`python-io.ts` (BUN_TESTABLE_MAIN):
+        venv create + offline wheel seed + marker + rebuild-on-version-change + single-flight
+        + timeout  DoD MET: 100% coverage/mutation; live provision + import openpyxl proven
+10w [x] index.ts wiring: provisionPython at launch (packaged -> resources, dev -> vendor/),
+        seed ['openpyxl','pandas'], build 3.13.14+20260718  DoD MET: typecheck+lint green
+11. [ ] `python:status` IPC + preload + CHANNEL pin (ipc-contract.test.ts, SIGN-OFF) +
+        settings row  DoD: panel shows ready/provisioning
+12. [~] live verify: MECHANISM fully proven (shim->venv->import, provision end to end, all
+        offline). In-app launch provision + an agent turn need the running app (gated, HMR).
+13. [~] docs: README node/npm/python paragraph done; docs/PLAN.md M6 addendum (extraResources
+        runtime+wheels matrix, mac sign walk + disable-library-validation, cross-platform
+        wheel --platform fetch, npm-in-asar) still to write.
 
 ## Risks
 

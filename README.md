@@ -94,6 +94,13 @@ re-seeded on every launch, so it cannot be removed and an update always ships th
 app's own Electron binary runs as Node (`ELECTRON_RUN_AS_NODE`), and the bundled `npm` keeps its
 global installs and cache inside the app's data folder. The shims are re-seeded every launch.
 
+`python3` and `pip3` are there as well. The app bundles a standalone CPython (Astral's
+python-build-standalone) and, on first launch, builds a private virtualenv under its data folder
+and seeds it offline with `openpyxl` and `pandas` from bundled wheels, so the agent can read a
+spreadsheet or crunch a CSV with nothing installed and no network. The venv is rebuilt when the
+runtime version changes. Fetch the runtime and wheels for local dev with `bun run fetch:python`
+and `bun run fetch:wheels`.
+
 Two things the panel does not show: the agent also gets the SDK's own bundled skills (code-review,
 verify, run, and friends) via the `claude_code` preset, and your personal `~/.claude` skills are
 deliberately **not** loaded — the app points the agent at its own config directory.

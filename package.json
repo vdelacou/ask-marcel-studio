@@ -18,7 +18,8 @@
     "mutate": "stryker run",
     "mutate:changed": "bash scripts/mutate-changed.sh",
     "mutate:staged": "bash scripts/mutate-staged.sh",
-    "fetch:python": "bun run scripts/fetch-python.ts"
+    "fetch:python": "bun run scripts/fetch-python.ts",
+    "fetch:wheels": "bun run scripts/fetch-wheels.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.15",

@@ -22,6 +22,9 @@ import { createGateway } from './services/gateway/gateway-server.ts';
 import { createOfficeService } from './services/office/office-service.ts';
 import { createOfficeRun, writeOfficeShim } from './services/office/office-io.ts';
 import { writeToolShims } from './services/shims/tool-shims-io.ts';
+import { createPythonService } from './services/python/python-service.ts';
+import { createPythonIo } from './services/python/python-io.ts';
+import { platformOf, pythonVenvDir, runtimePythonPath, venvPythonPath } from '../shared/python-paths.ts';
 import type { OfficeCliLocation } from './services/office/office-io.ts';
 import type { ToolCliLocation } from './services/shims/tool-shims-io.ts';
 import type { AgentRuntime } from './services/agent/agent-runtime.ts';
@@ -95,6 +98,38 @@ const toolCliLocation = (): ToolCliLocation => {
   return { execPath: process.execPath, npmCliPath: join(npmDir, 'bin', 'npm-cli.js'), npxCliPath: join(npmDir, 'bin', 'npx-cli.js') };
 };
 
+// The embedded Python runtime and its seed wheels (M8 Phase B). The build string is the
+// runtime pin from scripts/fetch-python.ts; a change forces the venv to be rebuilt.
+const PYTHON_BUILD = '3.13.14+20260718';
+const PYTHON_SEED = ['openpyxl', 'pandas'];
+
+// dev on darwin resolves the vendored triple; any other host falls through to a name with
+// no vendor dir, so provisioning just fails to launch rather than crashing the app.
+const hostPythonTriple = (): string => {
+  if (process.platform !== 'darwin') return 'x86_64-pc-windows-msvc';
+  return process.arch === 'arm64' ? 'aarch64-apple-darwin' : 'x86_64-apple-darwin';
+};
+
+// Packaged, the runtime and wheels ship as extraResources; in dev they are the fetched
+// vendor/ folders (bun run fetch:python && bun run fetch:wheels).
+const provisionPython = (userData: string): void => {
+  const runtimeDir = app.isPackaged ? join(process.resourcesPath, 'python-runtime') : join(__dirname, '../../vendor/python', hostPythonTriple());
+  const wheelsDir = app.isPackaged ? join(process.resourcesPath, 'python-wheels') : join(__dirname, '../../vendor/wheels');
+  const platform = platformOf(process.platform);
+  const venvDir = pythonVenvDir(userData);
+  const python = createPythonService(createPythonIo(userData, process.env), {
+    runtimePython: runtimePythonPath(runtimeDir, platform),
+    venvPython: venvPythonPath(venvDir, platform),
+    venvDir,
+    wheelsDir,
+    seedPackages: PYTHON_SEED,
+    build: PYTHON_BUILD,
+  });
+  // Not awaited: the venv builds in the background and is a no-op once the marker matches.
+  // A python3 call before it finishes simply fails, like the office CLI before sign-in.
+  void python.provision();
+};
+
 const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; skills: SkillsService; gateway: Gateway } => {
   const userData = app.getPath('userData');
   const now = (): string => new Date().toISOString();
@@ -119,6 +154,8 @@ const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; sk
   void writeOfficeShim(userData, location);
   // Same reasoning for node/npm/npx: rewritten every launch, lands well before a turn.
   void writeToolShims(userData, toolCliLocation());
+  // Build the per-user Python venv in the background so python3 resolves offline.
+  provisionPython(userData);
 
   registerIpc({ settings, conversations, agent, skills, office });
   return { agent, skills, gateway };
