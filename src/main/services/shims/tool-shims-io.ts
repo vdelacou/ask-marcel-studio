@@ -11,7 +11,8 @@ import { chmod, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { toolShimScripts } from '../../../shared/tool-shims.ts';
 import type { ShimPair } from '../../../shared/tool-shims.ts';
-import { binDir, npmCacheDir, npmPrefixDir } from '../../../shared/paths.ts';
+import { binDir, npmCacheDir, npmPrefixDir, pipCacheDir } from '../../../shared/paths.ts';
+import { platformOf, pythonVenvDir, venvPythonPath } from '../../../shared/python-paths.ts';
 
 export type ToolCliLocation = {
   readonly execPath: string;
@@ -30,8 +31,17 @@ export const writeToolShims = async (userData: string, location: ToolCliLocation
   const dir = binDir(userData);
   // Directory boundary: Bun has no mkdir, so node:fs is the sanctioned tool (rule 20).
   await mkdir(dir, { recursive: true });
-  const scripts = toolShimScripts({ ...location, npmPrefixDir: npmPrefixDir(userData), npmCacheDir: npmCacheDir(userData) });
-  await writeShimPair(dir, 'node', scripts.node);
-  await writeShimPair(dir, 'npm', scripts.npm);
-  await writeShimPair(dir, 'npx', scripts.npx);
+  const pythonPath = venvPythonPath(pythonVenvDir(userData), platformOf(process.platform));
+  const scripts = toolShimScripts({ ...location, npmPrefixDir: npmPrefixDir(userData), npmCacheDir: npmCacheDir(userData), pythonPath, pipCacheDir: pipCacheDir(userData) });
+  // python3/pip3 are aliases of python/pip: the agent reaches for either name.
+  const shims: readonly (readonly [string, ShimPair])[] = [
+    ['node', scripts.node],
+    ['npm', scripts.npm],
+    ['npx', scripts.npx],
+    ['python', scripts.python],
+    ['python3', scripts.python],
+    ['pip', scripts.pip],
+    ['pip3', scripts.pip],
+  ];
+  await Promise.all(shims.map(([name, pair]) => writeShimPair(dir, name, pair)));
 };

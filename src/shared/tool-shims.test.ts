@@ -6,8 +6,10 @@ const npmCliPath = '/Applications/Ask Marcel Studio.app/Contents/Resources/app.a
 const npxCliPath = '/Applications/Ask Marcel Studio.app/Contents/Resources/app.asar/node_modules/npm/bin/npx-cli.js';
 const npmPrefixDir = '/Users/x/Library/Application Support/ask-marcel-studio/npm-global';
 const npmCacheDir = '/Users/x/Library/Application Support/ask-marcel-studio/npm-cache';
+const venvPython = '/Users/x/Library/Application Support/ask-marcel-studio/py/bin/python';
+const pipCacheDir = '/Users/x/Library/Application Support/ask-marcel-studio/pip-cache';
 
-const input = { execPath, npmCliPath, npxCliPath, npmPrefixDir, npmCacheDir };
+const input = { execPath, npmCliPath, npxCliPath, npmPrefixDir, npmCacheDir, pythonPath: venvPython, pipCacheDir };
 
 describe('the node PATH shim', () => {
   test('the unix shim runs the app binary as node with every arg passed on', () => {
@@ -59,5 +61,23 @@ describe('the npm and npx PATH shims', () => {
 
     expect(node.unix).toContain(`"${execPath}"`);
     expect(npm.windows).toContain(`"${npmCliPath}"`);
+  });
+});
+
+describe('the python and pip PATH shims', () => {
+  test('python runs the venv interpreter with user site-packages off', () => {
+    const { python } = toolShimScripts(input);
+
+    expect(python.unix).toContain(`exec "${venvPython}" "$@"`);
+    expect(python.unix).toContain('PYTHONNOUSERSITE=1');
+    expect(python.windows).toContain(`"${venvPython}" %*`);
+  });
+
+  test('pip runs the venv interpreter with its cache kept inside the data folder', () => {
+    const { pip } = toolShimScripts(input);
+
+    expect(pip.unix).toContain(`exec "${venvPython}" -m pip "$@"`);
+    expect(pip.unix).toContain(`PIP_CACHE_DIR="${pipCacheDir}"`);
+    expect(pip.windows).toContain(`"${venvPython}" -m pip %*`);
   });
 });

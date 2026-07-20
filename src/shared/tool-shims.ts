@@ -19,6 +19,10 @@ export type ToolShimInput = {
   readonly npxCliPath: string;
   readonly npmPrefixDir: string;
   readonly npmCacheDir: string;
+  // The per-user venv interpreter (M8 Phase B). It need not exist yet when the shims are
+  // written; provisioning creates it, and a python call before then simply fails to run.
+  readonly pythonPath: string;
+  readonly pipCacheDir: string;
 };
 
 export type ShimPair = {
@@ -32,6 +36,8 @@ export type ToolShimScripts = {
   readonly node: ShimPair;
   readonly npm: ShimPair;
   readonly npx: ShimPair;
+  readonly python: ShimPair;
+  readonly pip: ShimPair;
 };
 
 // A literal value (1, false) is left bare on unix; a path value is quoted so a space in
@@ -41,26 +47,31 @@ type EnvEntry = { readonly key: string; readonly value: string; readonly quoteUn
 
 const unixAssign = (e: EnvEntry): string => (e.quoteUnix ? `${e.key}="${e.value}"` : `${e.key}=${e.value}`);
 
-const shimPair = (env: readonly EnvEntry[], execPath: string, cliPath: string | undefined): ShimPair => {
-  const cliArg = cliPath === undefined ? '' : ` "${cliPath}"`;
-  const unix = `#!/bin/sh\n${env.map(unixAssign).join(' ')} exec "${execPath}"${cliArg} "$@"\n`;
+// preArgs are the raw args between the binary and "$@": a quoted cli path for npm/npx, a
+// bare ` -m pip` for pip, or '' when the binary runs directly (node, python).
+const shimPair = (env: readonly EnvEntry[], execPath: string, preArgs: string): ShimPair => {
+  const unix = `#!/bin/sh\n${env.map(unixAssign).join(' ')} exec "${execPath}"${preArgs} "$@"\n`;
   const sets = env.map((e) => `set "${e.key}=${e.value}"\n`).join('');
-  const windows = `@echo off\n${sets}"${execPath}"${cliArg} %*\n`;
+  const windows = `@echo off\n${sets}"${execPath}"${preArgs} %*\n`;
   return { unix, windows };
 };
 
 const RUN_AS_NODE: EnvEntry = { key: 'ELECTRON_RUN_AS_NODE', value: '1', quoteUnix: false };
+const NO_USER_SITE: EnvEntry = { key: 'PYTHONNOUSERSITE', value: '1', quoteUnix: false };
 
-export const toolShimScripts = ({ execPath, npmCliPath, npxCliPath, npmPrefixDir, npmCacheDir }: ToolShimInput): ToolShimScripts => {
+export const toolShimScripts = ({ execPath, npmCliPath, npxCliPath, npmPrefixDir, npmCacheDir, pythonPath, pipCacheDir }: ToolShimInput): ToolShimScripts => {
   const npmEnv: readonly EnvEntry[] = [
     RUN_AS_NODE,
     { key: 'npm_config_prefix', value: npmPrefixDir, quoteUnix: true },
     { key: 'npm_config_cache', value: npmCacheDir, quoteUnix: true },
     { key: 'npm_config_update_notifier', value: 'false', quoteUnix: false },
   ];
+  const pipEnv: readonly EnvEntry[] = [NO_USER_SITE, { key: 'PIP_CACHE_DIR', value: pipCacheDir, quoteUnix: true }];
   return {
-    node: shimPair([RUN_AS_NODE], execPath, undefined),
-    npm: shimPair(npmEnv, execPath, npmCliPath),
-    npx: shimPair(npmEnv, execPath, npxCliPath),
+    node: shimPair([RUN_AS_NODE], execPath, ''),
+    npm: shimPair(npmEnv, execPath, ` "${npmCliPath}"`),
+    npx: shimPair(npmEnv, execPath, ` "${npxCliPath}"`),
+    python: shimPair([NO_USER_SITE], pythonPath, ''),
+    pip: shimPair(pipEnv, pythonPath, ' -m pip'),
   };
 };

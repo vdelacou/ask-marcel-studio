@@ -6,6 +6,7 @@ import {
   conversationsDir,
   npmCacheDir,
   npmPrefixDir,
+  pipCacheDir,
   settingsFilePath,
   skillDir,
   skillsDir,
@@ -50,6 +51,10 @@ describe('locating the files the app owns inside its own data folder', () => {
   test('npm keeps its global installs and cache inside the data folder', () => {
     expect(npmPrefixDir(USER_DATA)).toBe(`${USER_DATA}/npm-global`);
     expect(npmCacheDir(USER_DATA)).toBe(`${USER_DATA}/npm-cache`);
+  });
+
+  test('pip keeps its download cache inside the data folder', () => {
+    expect(pipCacheDir(USER_DATA)).toBe(`${USER_DATA}/pip-cache`);
   });
 
   test('skills live under the agent config folder, which is what settingSources loads', () => {

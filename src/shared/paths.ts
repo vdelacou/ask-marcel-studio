@@ -47,3 +47,7 @@ export const binDir = (userData: string): string => join(userData, 'bin');
 export const npmPrefixDir = (userData: string): string => join(userData, 'npm-global');
 
 export const npmCacheDir = (userData: string): string => join(userData, 'npm-cache');
+
+// pip's download cache, pinned inside the data folder so the embedded Python's installs
+// stay self-contained (M8 Phase B).
+export const pipCacheDir = (userData: string): string => join(userData, 'pip-cache');
