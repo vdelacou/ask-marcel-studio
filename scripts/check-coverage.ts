@@ -58,6 +58,7 @@ const BUN_TESTABLE_MAIN: ReadonlyArray<string> = [
   'src/main/services/store/conversations-store.ts',
   'src/main/services/skills/skills-service.ts',
   'src/main/services/office/office-service.ts',
+  'src/main/services/python/python-service.ts',
 ];
 
 const COVERAGE_RULES: ReadonlyArray<Tier> = [
