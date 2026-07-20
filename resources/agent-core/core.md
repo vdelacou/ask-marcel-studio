@@ -41,7 +41,9 @@ calendar, planner plan, notebook). Do not call it again in the same answer.
 - **`--output-path` is for body-producing commands only** (`download-*`, `convert-*`). The
   `list-*`, `get-*`, and `search-all-files` commands reject it — capture large output with a
   shell redirect (`> out.json`) instead. Ignore any banner claiming it "works on every
-  command". Default text output is fine; add `--output json` only to parse fields.
+  command". Default text output is fine; add `--output json` only to parse fields. JSON
+  is wrapped as `{ ok, data, nextLink, sizeHint }` — list and search results live under
+  `data.value`, not at the top level.
 - Discover commands you are unsure of with `ask-marcel-office --help` (all commands) and
   `ask-marcel-office docs <cmd>` (one command's options, examples, and response shape).
   Never guess a command name or flag.
