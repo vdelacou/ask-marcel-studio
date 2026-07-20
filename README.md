@@ -90,6 +90,10 @@ there is nothing to reload and no need to restart.
 the read-only CLI, and to send you to Settings rather than trying to sign in itself. It is
 re-seeded on every launch, so it cannot be removed and an update always ships the current version.
 
+`node`, `npm`, and `npx` are on the agent's PATH too, with no Node install on the machine: the
+app's own Electron binary runs as Node (`ELECTRON_RUN_AS_NODE`), and the bundled `npm` keeps its
+global installs and cache inside the app's data folder. The shims are re-seeded every launch.
+
 Two things the panel does not show: the agent also gets the SDK's own bundled skills (code-review,
 verify, run, and friends) via the `claude_code` preset, and your personal `~/.claude` skills are
 deliberately **not** loaded — the app points the agent at its own config directory.

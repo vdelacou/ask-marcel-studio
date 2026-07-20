@@ -30,6 +30,12 @@ describe('giving the agent what every conversation needs', () => {
     expect(env['PATH']).toBe(`${USER_DATA}/bin`);
   });
 
+  test('on windows the shim joins the inherited path with a semicolon', () => {
+    const env = buildSessionEnv({ provider: anthropic, modelId: 'm', userData: USER_DATA, inheritedEnv: { PATH: 'C:\\Windows' }, pathDelimiter: ';' });
+
+    expect(env['PATH']).toBe(`${USER_DATA}/bin;C:\\Windows`);
+  });
+
   test('the update notifier is silenced, since its output would land mid-conversation', () => {
     expect(build(anthropic)['NO_UPDATE_NOTIFIER']).toBe('1');
   });

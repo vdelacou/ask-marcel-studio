@@ -21,7 +21,9 @@ import { createSkillsService } from './services/skills/skills-service.ts';
 import { createGateway } from './services/gateway/gateway-server.ts';
 import { createOfficeService } from './services/office/office-service.ts';
 import { createOfficeRun, writeOfficeShim } from './services/office/office-io.ts';
+import { writeToolShims } from './services/shims/tool-shims-io.ts';
 import type { OfficeCliLocation } from './services/office/office-io.ts';
+import type { ToolCliLocation } from './services/shims/tool-shims-io.ts';
 import type { AgentRuntime } from './services/agent/agent-runtime.ts';
 import type { SkillsService } from './services/skills/skills-service.ts';
 import type { Gateway } from './services/gateway/gateway-server.ts';
@@ -84,6 +86,15 @@ const officeCliLocation = (): OfficeCliLocation => {
   return { execPath: process.execPath, cliPath: join(dirname(resolveFrom.resolve('ask-marcel-office-cli/package.json')), 'dist', 'cli.js') };
 };
 
+// The bundled npm package's bin scripts, resolved the same way as the office CLI so it
+// works in dev and packaged alike. node is the app binary itself (run as Node), so it
+// needs no path. This gives the agent node/npm/npx with no Node on the machine (M8).
+const toolCliLocation = (): ToolCliLocation => {
+  const resolveFrom = createRequire(__filename);
+  const npmDir = dirname(resolveFrom.resolve('npm/package.json'));
+  return { execPath: process.execPath, npmCliPath: join(npmDir, 'bin', 'npm-cli.js'), npxCliPath: join(npmDir, 'bin', 'npx-cli.js') };
+};
+
 const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; skills: SkillsService; gateway: Gateway } => {
   const userData = app.getPath('userData');
   const now = (): string => new Date().toISOString();
@@ -106,6 +117,8 @@ const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; sk
   // updates, so a stale shim would exec a binary that is gone. Not awaited, like the
   // skills seed: it lands long before the first turn could call ask-marcel-office.
   void writeOfficeShim(userData, location);
+  // Same reasoning for node/npm/npx: rewritten every launch, lands well before a turn.
+  void writeToolShims(userData, toolCliLocation());
 
   registerIpc({ settings, conversations, agent, skills, office });
   return { agent, skills, gateway };

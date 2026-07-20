@@ -41,3 +41,9 @@ export const skillDir = (userData: string, folder: SkillFolderName): string => j
 
 // Prepended to the agent's PATH so `ask-marcel-office` resolves to our shim (M4).
 export const binDir = (userData: string): string => join(userData, 'bin');
+
+// npm's global prefix and cache, pinned inside the data folder so `npm i -g` and the
+// download cache never touch the system or the signed app bundle (M8).
+export const npmPrefixDir = (userData: string): string => join(userData, 'npm-global');
+
+export const npmCacheDir = (userData: string): string => join(userData, 'npm-cache');

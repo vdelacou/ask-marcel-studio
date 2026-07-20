@@ -1,5 +1,17 @@
 import { describe, expect, test } from 'bun:test';
-import { binDir, claudeConfigDir, conversationFilePath, conversationsDir, settingsFilePath, skillDir, skillsDir, workspaceDir, workspacesDir } from './paths.ts';
+import {
+  binDir,
+  claudeConfigDir,
+  conversationFilePath,
+  conversationsDir,
+  npmCacheDir,
+  npmPrefixDir,
+  settingsFilePath,
+  skillDir,
+  skillsDir,
+  workspaceDir,
+  workspacesDir,
+} from './paths.ts';
 import { skillFolderName } from './skill-name.ts';
 import { conversationId } from './conversation-id.ts';
 import { unwrap } from './result.ts';
@@ -33,6 +45,11 @@ describe('locating the files the app owns inside its own data folder', () => {
 
   test('the shim folder that goes first on the agent path lives in the data folder', () => {
     expect(binDir(USER_DATA)).toBe(`${USER_DATA}/bin`);
+  });
+
+  test('npm keeps its global installs and cache inside the data folder', () => {
+    expect(npmPrefixDir(USER_DATA)).toBe(`${USER_DATA}/npm-global`);
+    expect(npmCacheDir(USER_DATA)).toBe(`${USER_DATA}/npm-cache`);
   });
 
   test('skills live under the agent config folder, which is what settingSources loads', () => {

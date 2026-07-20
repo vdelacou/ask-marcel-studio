@@ -15,9 +15,12 @@
  * vars then carry the FULL 'providerId::modelId' reference, because the gateway needs
  * the providerId to know which upstream to call — the agent is just the courier.
  */
+import { delimiter } from 'node:path';
 import { binDir, claudeConfigDir } from './paths.ts';
 import { formatModelRef } from './model-ref.ts';
 import type { Provider } from './types.ts';
+
+// node:path is path manipulation, not IO, so it is allowed anywhere (rule 20).
 
 export type SessionEnvInput = {
   readonly provider: Provider;
@@ -28,6 +31,9 @@ export type SessionEnvInput = {
   // Where the local gateway is listening, and its per-run key. Required for an
   // openai provider; ignored for anthropic, which talks to the real API.
   readonly gateway?: { readonly baseUrl: string; readonly apiKey: string };
+  // Defaults to the OS path.delimiter (authoritative in the main process); injected in
+  // tests to prove the Windows ';' join without a Windows box.
+  readonly pathDelimiter?: string;
 };
 
 // The SDK appends /v1/messages itself, so a base url ending in /v1 would become
@@ -58,8 +64,10 @@ export const buildSessionEnv = (input: SessionEnvInput): Record<string, string> 
   const inheritedPath = env['PATH'];
 
   env['CLAUDE_CONFIG_DIR'] = claudeConfigDir(input.userData);
-  // Prepended, not replaced: the agent still needs git, node and the rest.
-  env['PATH'] = inheritedPath === undefined ? binDir(input.userData) : `${binDir(input.userData)}:${inheritedPath}`;
+  // Prepended, not replaced: the agent still needs git and the rest. The separator is the
+  // OS delimiter (':' on unix, ';' on Windows), so the shim resolves first on either.
+  const pathSeparator = input.pathDelimiter ?? delimiter;
+  env['PATH'] = inheritedPath === undefined ? binDir(input.userData) : `${binDir(input.userData)}${pathSeparator}${inheritedPath}`;
   env['NO_UPDATE_NOTIFIER'] = '1';
 
   // An openai provider never sees its own key or endpoint: the agent talks to the
