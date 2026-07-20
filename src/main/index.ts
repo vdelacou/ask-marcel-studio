@@ -8,7 +8,8 @@
  *
  * The single top-level catch lives here (rule 17): everything below returns Result.
  */
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { createRequire } from 'node:module';
 import { electronApp, is, optimizer } from '@electron-toolkit/utils';
 import { BrowserWindow, app, shell } from 'electron';
 import { CHAT_EVENT } from '../shared/ipc-contract.ts';
@@ -18,6 +19,9 @@ import { createConversationsStore } from './services/store/conversations-store.t
 import { createSettingsStore } from './services/store/settings-store.ts';
 import { createSkillsService } from './services/skills/skills-service.ts';
 import { createGateway } from './services/gateway/gateway-server.ts';
+import { createOfficeService } from './services/office/office-service.ts';
+import { createOfficeRun, writeOfficeShim } from './services/office/office-io.ts';
+import type { OfficeCliLocation } from './services/office/office-io.ts';
 import type { AgentRuntime } from './services/agent/agent-runtime.ts';
 import type { SkillsService } from './services/skills/skills-service.ts';
 import type { Gateway } from './services/gateway/gateway-server.ts';
@@ -71,6 +75,15 @@ const builtinSkillsSource = (): string => (app.isPackaged ? join(process.resourc
 
 const BUILTIN_SKILLS = ['ask-marcel-office'];
 
+// Resolve the office CLI's cli.js through Node's own resolution, so it works in dev
+// (repo node_modules) and packaged alike. It is launched as `execPath cliPath ...` with
+// ELECTRON_RUN_AS_NODE, i.e. the app's Electron binary run as Node, so a machine with
+// no Node still works.
+const officeCliLocation = (): OfficeCliLocation => {
+  const resolveFrom = createRequire(__filename);
+  return { execPath: process.execPath, cliPath: join(dirname(resolveFrom.resolve('ask-marcel-office-cli/package.json')), 'dist', 'cli.js') };
+};
+
 const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; skills: SkillsService; gateway: Gateway } => {
   const userData = app.getPath('userData');
   const now = (): string => new Date().toISOString();
@@ -86,7 +99,15 @@ const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; sk
     },
   });
   const agent = createAgentRuntime({ settings, conversations, gateway, userData, now, emit, inheritedEnv: process.env });
-  registerIpc({ settings, conversations, agent, skills });
+
+  const location = officeCliLocation();
+  const office = createOfficeService(createOfficeRun(location, process.env));
+  // Rewritten every launch: process.execPath and the cli.js path both move across
+  // updates, so a stale shim would exec a binary that is gone. Not awaited, like the
+  // skills seed: it lands long before the first turn could call ask-marcel-office.
+  void writeOfficeShim(userData, location);
+
+  registerIpc({ settings, conversations, agent, skills, office });
   return { agent, skills, gateway };
 };
 

@@ -13,6 +13,7 @@ import { dialog, ipcMain } from 'electron';
 import { CHANNEL } from '../../shared/ipc-contract.ts';
 import type { AgentRuntime } from '../services/agent/agent-runtime.ts';
 import type { SkillsService } from '../services/skills/skills-service.ts';
+import type { OfficeService } from '../services/office/office-service.ts';
 import type { ConversationsStore } from '../services/store/conversations-store.ts';
 import type { SettingsStore } from '../services/store/settings-store.ts';
 import { err } from '../../shared/result.ts';
@@ -22,6 +23,7 @@ export type IpcDeps = {
   readonly conversations: ConversationsStore;
   readonly agent: AgentRuntime;
   readonly skills: SkillsService;
+  readonly office: OfficeService;
 };
 
 const asString = (value: unknown): string => (typeof value === 'string' ? value : '');
@@ -44,6 +46,11 @@ export const registerIpc = (deps: IpcDeps): void => {
     return deps.agent.send({ conversationId: asString(draft?.conversationId), text: asString(draft?.text) });
   });
   ipcMain.handle(CHANNEL.chatCancel, (_event, conversationId: unknown) => deps.agent.cancel(asString(conversationId)));
+
+  // Status and login take no argument: the CLI reads the one cached token, and login
+  // is a single-flight action with no parameters.
+  ipcMain.handle(CHANNEL.officeStatus, () => deps.office.status());
+  ipcMain.handle(CHANNEL.officeLogin, () => deps.office.login());
 
   ipcMain.handle(CHANNEL.skillsList, () => deps.skills.list());
   ipcMain.handle(CHANNEL.skillsRemove, (_event, name: unknown) => deps.skills.remove(asString(name)));
