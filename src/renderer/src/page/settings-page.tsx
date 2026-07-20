@@ -2,9 +2,9 @@
  * The settings page shell. Owns every piece of state, resolves it, and hands plain
  * props to the design system.
  *
- * Carries no class string (rule 22) and no design decisions: it stacks organisms and
- * wires callbacks. The only logic it contains is orchestration; the transforms live
- * in lib/provider-draft.ts where they are tested.
+ * Carries no class string (rule 22) and no design decisions: it drives the left menu,
+ * shows one section's panel at a time, and wires callbacks. The only logic it contains
+ * is orchestration; the transforms live in lib/provider-draft.ts where they are tested.
  */
 import { useCallback, useEffect, useState } from 'react';
 import type { FC } from 'react';
@@ -14,10 +14,27 @@ import { SkillsPanel } from '../components/organisms/skills-panel/index.tsx';
 import type { SkillRow } from '../components/organisms/skills-panel/index.tsx';
 import { OfficePanel } from '../components/organisms/office-panel/index.tsx';
 import type { OfficeView } from '../components/organisms/office-panel/index.tsx';
+import { SettingsLayout } from '../components/organisms/settings-layout/index.tsx';
+import { SettingsNav } from '../components/organisms/settings-nav/index.tsx';
+import type { SettingsNavGroup } from '../components/organisms/settings-nav/index.tsx';
 import type { ProviderDraft } from '../components/molecules/provider-form/index.tsx';
 import { draftsToSettings, emptyDraft, settingsToDrafts } from '../lib/provider-draft.ts';
 
+// The left-menu structure. Providers and Skills configure the agent; Microsoft 365 is a
+// connected app. Each id matches a section rendered on the right.
+const NAV_GROUPS: readonly SettingsNavGroup[] = [
+  {
+    heading: 'Agent',
+    items: [
+      { id: 'providers', label: 'Providers', icon: 'providers' },
+      { id: 'skills', label: 'Skills', icon: 'skills' },
+    ],
+  },
+  { heading: 'Connections', items: [{ id: 'office', label: 'Microsoft 365', icon: 'office' }] },
+];
+
 export const SettingsPage: FC = () => {
+  const [section, setSection] = useState('providers');
   const [drafts, setDrafts] = useState<readonly ProviderDraft[]>([]);
   const [defaultModel, setDefaultModel] = useState<string | undefined>(undefined);
   const [notice, setNotice] = useState<PanelNotice | undefined>(undefined);
@@ -148,11 +165,13 @@ export const SettingsPage: FC = () => {
   }, [drafts, defaultModel]);
 
   return (
-    <>
-      <ProvidersPanel drafts={drafts} notice={notice} isSaving={isSaving} onChangeDraft={onChangeDraft} onRemoveDraft={onRemoveDraft} onAddDraft={onAddDraft} onSave={onSave} />
-      <SkillsPanel skills={skills} error={skillsError} isAdding={isAdding} onAdd={onAddSkill} onRemove={onRemoveSkill} />
-      <OfficePanel view={officeView} isLoggingIn={isLoggingIn} error={officeError} onLogin={onLogin} />
-    </>
+    <SettingsLayout nav={<SettingsNav groups={NAV_GROUPS} activeId={section} onSelect={setSection} />}>
+      {section === 'providers' && (
+        <ProvidersPanel drafts={drafts} notice={notice} isSaving={isSaving} onChangeDraft={onChangeDraft} onRemoveDraft={onRemoveDraft} onAddDraft={onAddDraft} onSave={onSave} />
+      )}
+      {section === 'skills' && <SkillsPanel skills={skills} error={skillsError} isAdding={isAdding} onAdd={onAddSkill} onRemove={onRemoveSkill} />}
+      {section === 'office' && <OfficePanel view={officeView} isLoggingIn={isLoggingIn} error={officeError} onLogin={onLogin} />}
+    </SettingsLayout>
   );
 };
 
