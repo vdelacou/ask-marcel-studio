@@ -52,13 +52,18 @@ Phase A: node + npm (near-free, no vendor matrix)
        running app + a key (gated, same as the M2 live-turn gap)
 
 Phase B: python (vendor matrix + provision)
-6. [ ] `scripts/fetch-python.ts`: pinned python-build-standalone URL + sha256 per triple
-       (x86_64-apple-darwin dev, aarch64-apple-darwin, x86_64-pc-windows-msvc) into
-       git-ignored `vendor/python/<triple>/`  DoD: fetch for host triple verifies checksum
-7. [ ] wheels fetch into `vendor/wheels/<platform>/`: openpyxl, certifi (pure, shared) +
-       pandas, numpy (per-platform)  DoD: `pip install --no-index --find-links` succeeds
-8. [ ] `python-paths.ts` (+NEW test): runtime binary, venv layout (bin/ vs Scripts\),
-       marker path, per platform  DoD: 100%, mutation-clean
+PINS (verified 2026-07-20, scratchpad/python-pins.md): python-build-standalone tag 20260718,
+CPython 3.13.14 install_only. sha256: aarch64-apple-darwin dca7c3...999c, x86_64-apple-darwin
+2c7daa...db73, x86_64-pc-windows-msvc aeacae...4ded. Layout: tarball -> python/; unix bin
+python/bin/python3, win python/python.exe; venv unix bin/python, win Scripts/python.exe.
+FULL MECHANISM PROVEN on host: download+checksum -> extract -> venv (pip 26.1.2) ->
+`pip install --no-index --find-links` openpyxl -> import ok, all under `env -i` (offline).
+6. [x] `scripts/fetch-python.ts` + `fetch:python` + vendor/ gitignored  DoD MET: host fetch
+       verifies checksum (25MB) and extracts; binary runs Python 3.13.14
+7. [~] wheels fetch: PROVEN manually (openpyxl+certifi+et_xmlfile pure wheels, offline
+       install works). A `fetch:wheels` script + numpy/pandas per-platform still to script.
+8. [x] `python-paths.ts` (+NEW test): runtime binary, venv layout, marker, platformOf
+       DoD MET: 100% coverage + 100% mutation, Windows branch tested via win32.join
 9. [ ] python shim entries in `tool-shims.ts` (python3/python/pip3, SSL_CERT_FILE ->
        venv certifi, PYTHONNOUSERSITE=1, PIP_CACHE_DIR)  DoD: 100%
 10. [ ] `python-service.ts` (+NEW test, BUN_TESTABLE_MAIN): provision = venv create +

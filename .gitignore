@@ -68,3 +68,6 @@ reports/
 
 # Electron
 release/
+
+# Vendored embedded runtimes (fetched per-machine, never committed)
+vendor/
