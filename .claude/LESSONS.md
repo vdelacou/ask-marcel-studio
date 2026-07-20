@@ -6,6 +6,31 @@ Each entry is one of `[mistake]`, `[decision]`, or `[gotcha]`. Newest first.
 
 ---
 
+## [decision] 2026-07-20 | embedded runtimes: node/npm reuse ELECTRON_RUN_AS_NODE, python is vendored
+
+M8 gives the agent language runtimes with no install on the user's machine. node/npm/npx cost nothing extra: Electron IS Node under `ELECTRON_RUN_AS_NODE=1`, so a shim execs the app's own binary, and only the pure-JS `npm` package is vendored (its bin scripts run through that same binary). Python has no equivalent hiding in Electron, so it needs a real vendored runtime: a python-build-standalone `install_only` tarball (pinned by tag + sha256 in `scripts/fetch-python.ts`), extracted to a `python/` folder, plus a first-launch venv under `<userData>/py` seeded offline from bundled wheels (`pip install --no-index --find-links`). The venv is stamped with the runtime build and rebuilt when that changes, because a venv embeds its interpreter's absolute prefix and cannot survive a runtime bump. The shims (`src/shared/tool-shims.ts`) and paths (`src/shared/python-paths.ts`) are pure and platform-keyed so the Windows branch is unit-tested on macOS via `path.win32.join`.
+Applies to: any future runtime the agent should carry, and the M6 packaging (extraResources runtime + wheels per target, hardened-runtime sign-walk, `disable-library-validation` entitlement).
+
+## [gotcha] 2026-07-20 | ESLint flat config does not honor .gitignore, so a fetched vendor/ breaks lint
+
+`bun run fetch:python` extracts an embedded CPython into `vendor/`, which is git-ignored. `lint:strict` runs `eslint` with no path argument, and ESLint's flat config ignores `.gitignore` entirely: it linted the runtime's bundled JS (pip's vendored urllib3) and failed the commit on `no-undef` for `self`, `fetch`, `TextEncoder`. The fix is to add `vendor/**` to ESLint's own `ignores` block. bun test, coverage, typecheck (tsconfig `include` is explicit), and gitleaks (staged-only) were all unaffected; only ESLint's catch-all glob was.
+Rule for next time: anything fetched into the working tree that ESLint could glob needs an entry in the ESLint `ignores`, not just `.gitignore`.
+
+## [gotcha] 2026-07-20 | mutate:changed skips untracked files, so a new shared module is unmutated until staged
+
+`scripts/mutate-changed.sh` collects files via `git diff ... HEAD`, which does not list untracked files. A brand-new `src/shared/*.ts` created in the working tree is therefore silently outside the mutation set, and a green `mutate:changed` says nothing about it. Verify a new shared module with `mutate:staged` (stage it first) or a direct `bunx stryker run --mutate <file>`. Related: stryker's `incremental: true` keys on source hashes, so a test-only edit to kill a mutant reports stale unless `reports/stryker-incremental.json` is deleted first (the mutate scripts do this; a direct `bunx stryker` call does not).
+Rule for next time: absence from a `mutate:changed` run is not coverage; stage new files or target them explicitly.
+
+## [gotcha] 2026-07-20 | pip on python-build-standalone works with an empty env, so SSL_CERT_FILE can wait
+
+Provisioning and package installs were proven under `env -i` (no PATH, no `SSL_CERT_FILE`, no system CA bundle): pip reaches PyPI and installs fine because it ships its own vendored certificates. So the embedded python's `SSL_CERT_FILE` (pointing at certifi's bundle) is only needed for the agent's OWN python code making HTTPS calls, not for pip. That let M8 ship the shims with just `PYTHONNOUSERSITE=1` and `PIP_CACHE_DIR` and defer `SSL_CERT_FILE` as a non-breaking follow-up. `certifi` was dropped from the seed for the same reason.
+Applies to: the deferred SSL work, and any assumption that a standalone python needs CA wiring before pip can run.
+
+## [gotcha] 2026-07-20 | npm re-spawns node through our own PATH shim, so `npm i -g` works offline; asar stays unverified
+
+Verified against the real Electron binary with an empty PATH: `ELECTRON_RUN_AS_NODE=1 electron npm-cli.js --version` runs, and a full `npm install -g leftpad` succeeds with only `<userData>/bin` on PATH, landing in the data-folder prefix (`npm_config_prefix`). This works because when npm re-spawns `node` for its own steps it resolves our `node` shim, which is electron-as-node again, closing the loop. All of this ran in dev where the CLIs resolve from repo `node_modules`; the packaged case reads `npm-cli.js` and `cli.js` out of `app.asar`, which is expected to work but stays UNVERIFIED until M6 (fallback: `asarUnpack` those packages).
+Applies to: the office CLI and node/npm/npx shims alike, and the M6 packaging smoke test.
+
 ## [decision] 2026-07-19 | untestable renderer wiring lives outside src/renderer/src/lib, the 100% coverage tier
 
 M7 added a React hook (`use-conversations`) and the markdown/shiki renderer (`render/markdown`), and `bun test` can run neither: a hook needs a React runtime and react-markdown needs a DOM. `check-coverage.ts` gives `src/renderer/src/lib/` the 100% tier on the premise that everything there is pure logic the runner executes for real, so these two do not belong in it. They live in `src/renderer/src/hooks/` and `src/renderer/src/render/`, which fall into the skipped tier alongside the components. Pure, tested renderer logic (format-usage, conversation-list, ui-event-fold) stays in lib.

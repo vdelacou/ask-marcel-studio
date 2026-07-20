@@ -73,8 +73,9 @@ FULL MECHANISM PROVEN on host: download+checksum -> extract -> venv (pip 26.1.2)
         + timeout  DoD MET: 100% coverage/mutation; live provision + import openpyxl proven
 10w [x] index.ts wiring: provisionPython at launch (packaged -> resources, dev -> vendor/),
         seed ['openpyxl','pandas'], build 3.13.14+20260718  DoD MET: typecheck+lint green
-11. [ ] `python:status` IPC + preload + CHANNEL pin (ipc-contract.test.ts, SIGN-OFF) +
-        settings row  DoD: panel shows ready/provisioning
+11. [x] `python:status` IPC (bare PythonStatus, total type) + preload + CHANNEL pin +
+        PythonPanel under a Runtimes section; status() reports 'provisioning' in-flight
+        DoD MET: typecheck/lint/coverage/mutation green, panel renders every state
 12. [~] live verify: MECHANISM fully proven (shim->venv->import, provision end to end, all
         offline). In-app launch provision + an agent turn need the running app (gated, HMR).
 13. [~] docs: README node/npm/python paragraph done; docs/PLAN.md M6 addendum (extraResources
