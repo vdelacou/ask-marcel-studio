@@ -10,6 +10,7 @@
  * running. See .claude/LESSONS.md.
  */
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import { m365Reader } from './m365-reader.ts';
 import { emptyFold, foldSdkMessage } from '../../../shared/sdk-event-fold.ts';
 import { buildSessionEnv } from '../../../shared/session-env.ts';
 import { formatModelRef, parseModelRef } from '../../../shared/model-ref.ts';
@@ -35,6 +36,11 @@ export type AgentRuntimeDeps = {
   // Parameterised so the composition root stays explicit and this never reads
   // process.env directly.
   readonly inheritedEnv: Readonly<Record<string, string | undefined>>;
+  // The always-on Microsoft 365 core, appended to the claude_code preset system prompt
+  // on every turn. Carried as a string (read from a bundled resource by the composition
+  // root) rather than a seeded CLAUDE.md, because settingSources: ['user'] does not load
+  // CLAUDE.md files (SDK 0.3.185). Empty string is safe: the agent still works via skills.
+  readonly corePrompt: string;
 };
 
 export type AgentRuntime = {
@@ -78,7 +84,11 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
           model,
           cwd: workspace,
           env: buildSessionEnv({ provider, modelId, userData: deps.userData, inheritedEnv: deps.inheritedEnv, ...(gateway === undefined ? {} : { gateway }) }),
-          systemPrompt: { type: 'preset', preset: 'claude_code' },
+          // The M365 core rides `append` on the preset, not a CLAUDE.md: it loads on
+          // every turn regardless of setting sources or cwd. m365-reader is a programmatic
+          // subagent the read skill delegates heavy artifacts to, versioned here in-repo.
+          systemPrompt: { type: 'preset', preset: 'claude_code', append: deps.corePrompt },
+          agents: { 'm365-reader': m365Reader },
           settingSources: ['user'],
           permissionMode: 'bypassPermissions',
           includePartialMessages: true,

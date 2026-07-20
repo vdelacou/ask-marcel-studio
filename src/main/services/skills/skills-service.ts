@@ -31,6 +31,12 @@ export type SkillsServiceDeps = {
   // The names that came with the app. They are re-seeded on launch and cannot be
   // removed from the panel.
   readonly builtinNames: readonly string[];
+  // Names of built-ins the app USED to ship and has since renamed or dropped. Their
+  // folders are deleted from userData on launch, so a renamed pack does not strand the
+  // old skill still loading into every turn. Scoped to this explicit list of former
+  // built-in names, so a skill the user added under any OTHER name is never touched (a
+  // user skill deliberately named after a former built-in is the one accepted collision).
+  readonly retiredBuiltinNames: readonly string[];
 };
 
 export type SkillsService = {
@@ -128,8 +134,22 @@ export const createSkillsService = (deps: SkillsServiceDeps): SkillsService => {
   };
 
   // Re-seeded on every launch so an app update ships an updated skill, and so a user
-  // who deleted the folder by hand gets it back.
+  // who deleted the folder by hand gets it back. Retired names are removed first, so
+  // an app update that renamed the pack does not leave the old skill loading forever.
   const seedBuiltins = async (): Promise<Result<null, SkillsError>> => {
+    for (const name of deps.retiredBuiltinNames) {
+      const checked = skillFolderName(name);
+      // An unparseable retired name is not worth failing the whole seed over: it just
+      // cannot match a folder on disk, so there is nothing to remove.
+      if (!checked.ok) continue;
+      try {
+        // force: true so an already-absent folder (the common case after the first
+        // launch that retired it) is a no-op rather than an error.
+        await rm(skillDir(deps.userData, checked.value), { recursive: true, force: true });
+      } catch (e) {
+        return err({ kind: 'write-failed', message: `could not retire the built-in skill ${name}: ${formatError(e)}` });
+      }
+    }
     for (const name of deps.builtinNames) {
       const checked = skillFolderName(name);
       if (!checked.ok) return err({ kind: 'bad-name', message: checked.error.message });

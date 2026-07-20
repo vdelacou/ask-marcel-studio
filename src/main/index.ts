@@ -15,6 +15,7 @@ import { BrowserWindow, app, shell } from 'electron';
 import { CHAT_EVENT } from '../shared/ipc-contract.ts';
 import { registerIpc } from './ipc/register.ts';
 import { createAgentRuntime } from './services/agent/agent-runtime.ts';
+import { readAgentCore } from './services/agent/agent-core-io.ts';
 import { createConversationsStore } from './services/store/conversations-store.ts';
 import { createSettingsStore } from './services/store/settings-store.ts';
 import { createSkillsService } from './services/skills/skills-service.ts';
@@ -79,7 +80,18 @@ const createWindow = (): BrowserWindow => {
 // inside the app bundle. app.isPackaged is the only thing that knows which.
 const builtinSkillsSource = (): string => (app.isPackaged ? join(process.resourcesPath, 'builtin-skills') : join(__dirname, '../../resources/builtin-skills'));
 
-const BUILTIN_SKILLS = ['ask-marcel-office'];
+// The always-on Microsoft 365 core, appended to the agent's system prompt every turn.
+// Same dev/packaged split as the skills; the read (and its try/catch) lives in
+// agent-core-io. Read once at launch.
+const agentCoreSource = (): string => (app.isPackaged ? join(process.resourcesPath, 'agent-core', 'core.md') : join(__dirname, '../../resources/agent-core/core.md'));
+
+// The two on-demand M365 skills the app now ships, carved by trigger (read vs draft).
+const BUILTIN_SKILLS = ['answer-from-m365', 'draft-outlook-email'];
+
+// The single skill the app used to ship. Its folder is deleted from userData on launch,
+// so an install that predates the rename does not keep loading the old monolith. Its
+// knowledge now lives in the core (routing/doctrine) and the two skills above.
+const RETIRED_BUILTIN_SKILLS = ['ask-marcel-office'];
 
 // Resolve the office CLI's cli.js through Node's own resolution, so it works in dev
 // (repo node_modules) and packaged alike. It is launched as `execPath cliPath ...` with
@@ -138,7 +150,7 @@ const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; sk
   const now = (): string => new Date().toISOString();
   const settings = createSettingsStore({ userData });
   const conversations = createConversationsStore({ userData, now });
-  const skills = createSkillsService({ userData, builtinSource: builtinSkillsSource(), builtinNames: BUILTIN_SKILLS });
+  const skills = createSkillsService({ userData, builtinSource: builtinSkillsSource(), builtinNames: BUILTIN_SKILLS, retiredBuiltinNames: RETIRED_BUILTIN_SKILLS });
   // Providers are read per request, not captured: a key changed in settings must take
   // effect on the next turn without restarting the gateway.
   const gateway = createGateway({
@@ -147,7 +159,7 @@ const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; sk
       return current.ok ? current.value.providers.find((p) => p.id === providerId) : undefined;
     },
   });
-  const agent = createAgentRuntime({ settings, conversations, gateway, userData, now, emit, inheritedEnv: process.env });
+  const agent = createAgentRuntime({ settings, conversations, gateway, userData, now, emit, inheritedEnv: process.env, corePrompt: readAgentCore(agentCoreSource()) });
 
   const location = officeCliLocation();
   const office = createOfficeService(createOfficeRun(location, process.env));

@@ -24,7 +24,7 @@ beforeEach(() => {
   userData = mkdtempSync(join(tmpdir(), 'studio-skills-'));
   builtinSource = mkdtempSync(join(tmpdir(), 'studio-builtin-'));
   writeSkillFolder(builtinSource, 'ask-marcel-office', 'name: ask-marcel-office\ndescription: Read the user Microsoft 365.');
-  service = createSkillsService({ userData, builtinSource, builtinNames: ['ask-marcel-office'] });
+  service = createSkillsService({ userData, builtinSource, builtinNames: ['ask-marcel-office'], retiredBuiltinNames: [] });
 });
 
 afterEach(() => {
@@ -69,6 +69,41 @@ describe('what the agent can do out of the box', () => {
 
     const listed = await service.list();
     expect(listed.ok && listed.value).toHaveLength(1);
+  });
+
+  test('a renamed pack retires its old folder on launch, so a stale skill stops loading', async () => {
+    // The app once shipped `ask-marcel-office`; it now ships two differently named
+    // built-ins. Seed the old world, then relaunch as the new one.
+    await service.seedBuiltins();
+    writeSkillFolder(builtinSource, 'answer-from-m365', 'name: answer-from-m365\ndescription: Answer from M365.');
+    const renamed = createSkillsService({ userData, builtinSource, builtinNames: ['answer-from-m365'], retiredBuiltinNames: ['ask-marcel-office'] });
+
+    await renamed.seedBuiltins();
+
+    const listed = await renamed.list();
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) return;
+    expect(listed.value.map((s) => s.name)).toEqual(['answer-from-m365']);
+    expect(existsSync(join(userData, 'claude-config', 'skills', 'ask-marcel-office'))).toBe(false);
+  });
+
+  test('retirement only touches the named folders, never a skill the user added', async () => {
+    const source = writeSkillFolder(tmpdir(), `mine-${String(Date.now())}`, 'name: my-skill\ndescription: Mine.');
+    await service.add(source);
+    const withRetire = createSkillsService({ userData, builtinSource, builtinNames: [], retiredBuiltinNames: ['ask-marcel-office'] });
+
+    await withRetire.seedBuiltins();
+
+    expect(existsSync(join(userData, 'claude-config', 'skills', 'my-skill'))).toBe(true);
+    rmSync(source, { recursive: true, force: true });
+  });
+
+  test('retiring a folder that was never installed is a no-op, not an error', async () => {
+    const withRetire = createSkillsService({ userData, builtinSource, builtinNames: [], retiredBuiltinNames: ['ask-marcel-office'] });
+
+    const seeded = await withRetire.seedBuiltins();
+
+    expect(seeded.ok).toBe(true);
   });
 
   test('a built-in cannot be removed, since it would reappear on the next launch anyway', async () => {

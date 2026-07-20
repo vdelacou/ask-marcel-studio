@@ -59,6 +59,8 @@ const BUN_TESTABLE_MAIN: ReadonlyArray<string> = [
   'src/main/services/skills/skills-service.ts',
   'src/main/services/office/office-service.ts',
   'src/main/services/python/python-service.ts',
+  // Pure agent-config value (import type only), so the bun runner covers it.
+  'src/main/services/agent/m365-reader.ts',
 ];
 
 const COVERAGE_RULES: ReadonlyArray<Tier> = [
