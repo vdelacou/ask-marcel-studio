@@ -14,14 +14,17 @@ import { SkillsPanel } from '../components/organisms/skills-panel/index.tsx';
 import type { SkillRow } from '../components/organisms/skills-panel/index.tsx';
 import { OfficePanel } from '../components/organisms/office-panel/index.tsx';
 import type { OfficeView } from '../components/organisms/office-panel/index.tsx';
+import { PythonPanel } from '../components/organisms/python-panel/index.tsx';
+import type { PythonView } from '../components/organisms/python-panel/index.tsx';
 import { SettingsLayout } from '../components/organisms/settings-layout/index.tsx';
 import { SettingsNav } from '../components/organisms/settings-nav/index.tsx';
 import type { SettingsNavGroup } from '../components/organisms/settings-nav/index.tsx';
 import type { ProviderDraft } from '../components/molecules/provider-form/index.tsx';
 import { draftsToSettings, emptyDraft, settingsToDrafts } from '../lib/provider-draft.ts';
+import type { PythonStatus } from '../../../shared/python-status.ts';
 
 // The left-menu structure. Providers and Skills configure the agent; Microsoft 365 is a
-// connected app. Each id matches a section rendered on the right.
+// connected app; Python is a bundled runtime. Each id matches a section rendered on the right.
 const NAV_GROUPS: readonly SettingsNavGroup[] = [
   {
     heading: 'Agent',
@@ -31,7 +34,15 @@ const NAV_GROUPS: readonly SettingsNavGroup[] = [
     ],
   },
   { heading: 'Connections', items: [{ id: 'office', label: 'Microsoft 365', icon: 'office' }] },
+  { heading: 'Runtimes', items: [{ id: 'python', label: 'Python', icon: 'python' }] },
 ];
+
+const toPythonView = (status: PythonStatus): PythonView => {
+  if (status.state === 'ready') return { kind: 'ready' };
+  if (status.state === 'provisioning') return { kind: 'provisioning' };
+  if (status.state === 'failed') return { kind: 'failed', message: status.message };
+  return { kind: 'not-provisioned' };
+};
 
 export const SettingsPage: FC = () => {
   const [section, setSection] = useState('providers');
@@ -44,6 +55,15 @@ export const SettingsPage: FC = () => {
   const [officeView, setOfficeView] = useState<OfficeView>({ kind: 'loading' });
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [officeError, setOfficeError] = useState<string | undefined>(undefined);
+  const [pythonView, setPythonView] = useState<PythonView>({ kind: 'loading' });
+
+  const loadPython = useCallback((): void => {
+    void (async (): Promise<void> => {
+      setPythonView(toPythonView(await studio.python.status()));
+    })();
+  }, []);
+
+  useEffect(loadPython, [loadPython]);
 
   const loadOffice = useCallback((): void => {
     void (async (): Promise<void> => {
@@ -166,6 +186,7 @@ export const SettingsPage: FC = () => {
       )}
       {section === 'skills' && <SkillsPanel skills={skills} error={skillsError} isAdding={isAdding} onAdd={onAddSkill} onRemove={onRemoveSkill} />}
       {section === 'office' && <OfficePanel view={officeView} isLoggingIn={isLoggingIn} error={officeError} onLogin={onLogin} />}
+      {section === 'python' && <PythonPanel view={pythonView} />}
     </SettingsLayout>
   );
 };

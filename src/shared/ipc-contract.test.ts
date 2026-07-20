@@ -24,6 +24,7 @@ describe('the channels main and the renderer agree on', () => {
       skillsRemove: 'skills:remove',
       officeStatus: 'office:status',
       officeLogin: 'office:login',
+      pythonStatus: 'python:status',
     });
   });
 

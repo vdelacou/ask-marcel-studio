@@ -14,6 +14,7 @@ import { CHANNEL } from '../../shared/ipc-contract.ts';
 import type { AgentRuntime } from '../services/agent/agent-runtime.ts';
 import type { SkillsService } from '../services/skills/skills-service.ts';
 import type { OfficeService } from '../services/office/office-service.ts';
+import type { PythonService } from '../services/python/python-service.ts';
 import type { ConversationsStore } from '../services/store/conversations-store.ts';
 import type { SettingsStore } from '../services/store/settings-store.ts';
 import { err } from '../../shared/result.ts';
@@ -24,6 +25,7 @@ export type IpcDeps = {
   readonly agent: AgentRuntime;
   readonly skills: SkillsService;
   readonly office: OfficeService;
+  readonly python: PythonService;
 };
 
 const asString = (value: unknown): string => (typeof value === 'string' ? value : '');
@@ -51,6 +53,9 @@ export const registerIpc = (deps: IpcDeps): void => {
   // is a single-flight action with no parameters.
   ipcMain.handle(CHANNEL.officeStatus, () => deps.office.status());
   ipcMain.handle(CHANNEL.officeLogin, () => deps.office.login());
+
+  // No argument and no Result: the status is a total type read from the venv marker.
+  ipcMain.handle(CHANNEL.pythonStatus, () => deps.python.status());
 
   ipcMain.handle(CHANNEL.skillsList, () => deps.skills.list());
   ipcMain.handle(CHANNEL.skillsRemove, (_event, name: unknown) => deps.skills.remove(asString(name)));

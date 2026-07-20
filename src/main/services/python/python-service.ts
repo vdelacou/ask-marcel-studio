@@ -82,7 +82,12 @@ export const createPythonService = (io: PythonIo, config: PythonProvisionConfig)
     return flight;
   };
 
-  const status = async (): Promise<PythonStatus> => statusFromMarker(await io.readMarker(), config.build);
+  const status = async (): Promise<PythonStatus> => {
+    // A build in flight is reported as such, so the UI can say "setting up" rather than
+    // "not installed" during the first-launch window.
+    if (inFlight !== undefined) return { state: 'provisioning' };
+    return statusFromMarker(await io.readMarker(), config.build);
+  };
 
   return { status, provision };
 };

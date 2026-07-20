@@ -27,6 +27,7 @@ import { createPythonIo } from './services/python/python-io.ts';
 import { platformOf, pythonVenvDir, runtimePythonPath, venvPythonPath } from '../shared/python-paths.ts';
 import type { OfficeCliLocation } from './services/office/office-io.ts';
 import type { ToolCliLocation } from './services/shims/tool-shims-io.ts';
+import type { PythonService } from './services/python/python-service.ts';
 import type { AgentRuntime } from './services/agent/agent-runtime.ts';
 import type { SkillsService } from './services/skills/skills-service.ts';
 import type { Gateway } from './services/gateway/gateway-server.ts';
@@ -111,8 +112,9 @@ const hostPythonTriple = (): string => {
 };
 
 // Packaged, the runtime and wheels ship as extraResources; in dev they are the fetched
-// vendor/ folders (bun run fetch:python && bun run fetch:wheels).
-const provisionPython = (userData: string): void => {
+// vendor/ folders (bun run fetch:python && bun run fetch:wheels). Returns the service so
+// IPC can report status; provisioning is kicked off here and runs in the background.
+const startPython = (userData: string): PythonService => {
   const runtimeDir = app.isPackaged ? join(process.resourcesPath, 'python-runtime') : join(__dirname, '../../vendor/python', hostPythonTriple());
   const wheelsDir = app.isPackaged ? join(process.resourcesPath, 'python-wheels') : join(__dirname, '../../vendor/wheels');
   const platform = platformOf(process.platform);
@@ -128,6 +130,7 @@ const provisionPython = (userData: string): void => {
   // Not awaited: the venv builds in the background and is a no-op once the marker matches.
   // A python3 call before it finishes simply fails, like the office CLI before sign-in.
   void python.provision();
+  return python;
 };
 
 const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; skills: SkillsService; gateway: Gateway } => {
@@ -155,9 +158,9 @@ const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; sk
   // Same reasoning for node/npm/npx: rewritten every launch, lands well before a turn.
   void writeToolShims(userData, toolCliLocation());
   // Build the per-user Python venv in the background so python3 resolves offline.
-  provisionPython(userData);
+  const python = startPython(userData);
 
-  registerIpc({ settings, conversations, agent, skills, office });
+  registerIpc({ settings, conversations, agent, skills, office, python });
   return { agent, skills, gateway };
 };
 

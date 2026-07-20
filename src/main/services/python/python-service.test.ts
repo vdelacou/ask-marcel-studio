@@ -123,4 +123,17 @@ describe('provisioning the embedded python environment', () => {
     expect(await service.status()).toEqual({ state: 'ready', version: BUILD });
     expect(state.calls).toEqual([]);
   });
+
+  test('status reports provisioning while a build is in flight', async () => {
+    const io: PythonIo = {
+      run: () => new Promise<PythonRunOutcome>(() => undefined), // hangs: the build never finishes
+      readMarker: () => Promise.resolve(undefined),
+      writeMarker: () => Promise.resolve(),
+      removeVenv: () => Promise.resolve(),
+    };
+    const service = createPythonService(io, CONFIG);
+
+    void service.provision();
+    expect(await service.status()).toEqual({ state: 'provisioning' });
+  });
 });

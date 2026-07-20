@@ -11,6 +11,7 @@
  */
 import type { Conversation, ConversationMeta, Settings } from './types.ts';
 import type { OfficeStatus } from './office-status.ts';
+import type { PythonStatus } from './python-status.ts';
 import type { Result } from './result.ts';
 
 export const CHANNEL = {
@@ -28,6 +29,7 @@ export const CHANNEL = {
   skillsRemove: 'skills:remove',
   officeStatus: 'office:status',
   officeLogin: 'office:login',
+  pythonStatus: 'python:status',
 } as const;
 
 // The one main-to-renderer stream. Everything the UI learns during a turn arrives here.
@@ -168,5 +170,10 @@ export type StudioApi = {
     readonly status: () => Promise<Result<OfficeStatus, OfficeError>>;
     // Opens the interactive browser sign-in. Single-flight in main.
     readonly login: () => Promise<Result<null, OfficeError>>;
+  };
+  readonly python: {
+    // No Result envelope on purpose: PythonStatus is a total type that already models
+    // every outcome including 'failed', so the read cannot error, only report a state.
+    readonly status: () => Promise<PythonStatus>;
   };
 };
