@@ -12,6 +12,8 @@ import { ProvidersPanel } from '../components/organisms/providers-panel/index.ts
 import type { PanelNotice } from '../components/organisms/providers-panel/index.tsx';
 import { SkillsPanel } from '../components/organisms/skills-panel/index.tsx';
 import type { SkillRow } from '../components/organisms/skills-panel/index.tsx';
+import { OfficePanel } from '../components/organisms/office-panel/index.tsx';
+import type { OfficeView } from '../components/organisms/office-panel/index.tsx';
 import type { ProviderDraft } from '../components/molecules/provider-form/index.tsx';
 import { draftsToSettings, emptyDraft, settingsToDrafts } from '../lib/provider-draft.ts';
 
@@ -23,6 +25,38 @@ export const SettingsPage: FC = () => {
   const [skills, setSkills] = useState<readonly SkillRow[]>([]);
   const [skillsError, setSkillsError] = useState<string | undefined>(undefined);
   const [isAdding, setIsAdding] = useState(false);
+  const [officeView, setOfficeView] = useState<OfficeView>({ kind: 'loading' });
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [officeError, setOfficeError] = useState<string | undefined>(undefined);
+
+  const loadOffice = useCallback((): void => {
+    void (async (): Promise<void> => {
+      const status = await studio.office.status();
+      if (!status.ok) {
+        // A failure to launch the CLI is worth showing; treat the user as signed out.
+        setOfficeError(status.error.message);
+        setOfficeView({ kind: 'signed-out' });
+        return;
+      }
+      setOfficeView(status.value.signedIn ? { kind: 'signed-in', scopeCount: status.value.scopes.length } : { kind: 'signed-out' });
+    })();
+  }, []);
+
+  useEffect(loadOffice, [loadOffice]);
+
+  const onLogin = useCallback((): void => {
+    setOfficeError(undefined);
+    setIsLoggingIn(true);
+    void (async (): Promise<void> => {
+      const done = await studio.office.login();
+      setIsLoggingIn(false);
+      if (!done.ok) {
+        setOfficeError(done.error.message);
+        return;
+      }
+      loadOffice();
+    })();
+  }, [loadOffice]);
 
   const loadSkills = useCallback((): void => {
     void (async (): Promise<void> => {
@@ -117,6 +151,7 @@ export const SettingsPage: FC = () => {
     <>
       <ProvidersPanel drafts={drafts} notice={notice} isSaving={isSaving} onChangeDraft={onChangeDraft} onRemoveDraft={onRemoveDraft} onAddDraft={onAddDraft} onSave={onSave} />
       <SkillsPanel skills={skills} error={skillsError} isAdding={isAdding} onAdd={onAddSkill} onRemove={onRemoveSkill} />
+      <OfficePanel view={officeView} isLoggingIn={isLoggingIn} error={officeError} onLogin={onLogin} />
     </>
   );
 };
