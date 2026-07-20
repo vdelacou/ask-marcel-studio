@@ -10,9 +10,10 @@ Electron + React, MIT licensed. Built to the atelier engineering standard.
 > conversation: replies rendered as markdown with syntax-highlighted code, visible tool calls it
 > actually executes, a persisted transcript that survives a restart, and a Stop button. A sidebar
 > lists your conversations, and lets you start, switch, rename, and delete them; each turn's token
-> usage shows in the header. Settings also manages skills; a skill you add applies from your next
-> message. The office CLI integration (M4) and packaging (M6) are not built yet. See `docs/PLAN.md`
-> for the milestone plan and `.claude/PLAN.md` for the current run.
+> usage shows in the header. Settings also manages skills and your Microsoft 365 sign-in: a skill you
+> add applies from your next message, and once you sign in, the agent reads your mail, calendar, files
+> and tasks through the read-only office CLI on its PATH. Only packaging (M6) is not built yet. See
+> `docs/PLAN.md` for the milestone plan and `.claude/PLAN.md` for the current run.
 
 ## Requirements
 
