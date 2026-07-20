@@ -1,20 +1,21 @@
 /*
- * The app shell. Owns the view toggle and provider bootstrap, drives the conversation
- * list through the use-conversations hook, and hands plain props to the design system.
+ * The app shell. Owns the settings toggle and provider bootstrap, drives the
+ * conversation list through the use-conversations hook, and hands plain props to the
+ * design system.
  *
  * Carries no class string (rule 22) and calls no hook inside a design-system
  * component (rule 21): every hook lives here or in src/renderer/src/hooks.
  *
- * Bootstrap resolves the provider and the default model only; listing, opening and
- * creating conversations belongs to the hook, which owns that state for the sidebar.
+ * The sidebar is the whole navigation (New, recents, Settings); the main area is always
+ * the chat, and Settings opens as a modal overlay on top of it.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FC } from 'react';
 import { AppFrame } from './components/organisms/app-frame/index.tsx';
-import type { AppView } from './components/organisms/app-frame/index.tsx';
 import { NoProviderNotice } from './components/organisms/no-provider-notice/index.tsx';
 import { EmptyConversations } from './components/organisms/empty-conversations/index.tsx';
 import { Sidebar } from './components/organisms/sidebar/index.tsx';
+import { SettingsOverlay } from './components/organisms/settings-overlay/index.tsx';
 import { Toast } from './components/molecules/toast/index.tsx';
 import { ChatPage } from './page/chat-page.tsx';
 import { SettingsPage } from './page/settings-page.tsx';
@@ -28,10 +29,10 @@ type Boot =
   | { readonly step: 'failed'; readonly message: string };
 
 export const App: FC = () => {
-  const [view, setView] = useState<AppView>('chat');
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [boot, setBoot] = useState<Boot>({ step: 'loading' });
   // Same read guard the hook documents: StrictMode double-invokes the effect and
-  // switching back to chat calls bootstrap again.
+  // closing settings re-runs bootstrap.
   const bootstrapping = useRef(false);
 
   const bootstrap = useCallback((): void => {
@@ -52,22 +53,29 @@ export const App: FC = () => {
 
   useEffect(bootstrap, [bootstrap]);
 
-  const onSelectView = useCallback(
-    (next: AppView): void => {
-      setView(next);
-      // Coming back from settings may mean a provider now exists.
-      if (next === 'chat') bootstrap();
-    },
-    [bootstrap]
-  );
-
   const conversations = useConversations(boot.step === 'ready' ? boot.defaultModel : undefined);
   const list = conversations.view;
-  const isChatReady = view === 'chat' && boot.step === 'ready';
+  const { create } = conversations;
 
-  // Built unconditionally, mounted only in chat view: keeping the ternaries out of one
-  // another is what satisfies sonarjs/no-nested-conditional, and the spreads are how an
-  // optional prop stays absent rather than explicitly undefined (exactOptionalPropertyTypes).
+  const openSettings = useCallback((): void => setSettingsOpen(true), []);
+  // Closing may mean a provider was just added, so re-resolve the default model.
+  const closeSettings = useCallback((): void => {
+    setSettingsOpen(false);
+    bootstrap();
+  }, [bootstrap]);
+
+  // Escape closes the overlay. Here, not in the modal, so the modal stays prop-pure.
+  useEffect(() => {
+    if (!settingsOpen) return undefined;
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') closeSettings();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [settingsOpen, closeSettings]);
+
+  const isReady = boot.step === 'ready';
+
   const sidebar = (
     <Sidebar
       conversations={list.conversations.map((c) => ({ id: c.id, title: c.title }))}
@@ -75,8 +83,10 @@ export const App: FC = () => {
       {...(conversations.editingId === undefined ? {} : { editingId: conversations.editingId })}
       draftTitle={conversations.draftTitle}
       {...(conversations.confirmingDeleteId === undefined ? {} : { confirmingDeleteId: conversations.confirmingDeleteId })}
-      onNew={conversations.create}
+      isSettingsActive={settingsOpen}
+      onNew={create}
       onSelect={conversations.select}
+      onOpenSettings={openSettings}
       onStartRename={conversations.startRename}
       onDraftChange={conversations.changeDraft}
       onCommitRename={conversations.commitRename}
@@ -87,17 +97,19 @@ export const App: FC = () => {
     />
   );
 
-  const onOpenSettings = useCallback((): void => setView('settings'), []);
-
   return (
     <>
-      <AppFrame title="Ask Marcel Studio" view={view} onSelectView={onSelectView} {...(isChatReady ? { sidebar } : {})}>
-        {view === 'settings' && <SettingsPage />}
-        {view === 'chat' && boot.step === 'no-provider' && <NoProviderNotice onOpenSettings={onOpenSettings} />}
-        {view === 'chat' && boot.step === 'failed' && <NoProviderNotice onOpenSettings={onOpenSettings} />}
-        {isChatReady && list.activeId !== undefined && <ChatPage key={list.activeId} conversationId={list.activeId} />}
-        {isChatReady && list.activeId === undefined && <EmptyConversations onNew={conversations.create} />}
+      <AppFrame sidebar={sidebar}>
+        {boot.step === 'no-provider' && <NoProviderNotice onOpenSettings={openSettings} />}
+        {boot.step === 'failed' && <NoProviderNotice onOpenSettings={openSettings} />}
+        {isReady && list.activeId !== undefined && <ChatPage key={list.activeId} conversationId={list.activeId} />}
+        {isReady && list.activeId === undefined && <EmptyConversations onNew={create} />}
       </AppFrame>
+      {settingsOpen && (
+        <SettingsOverlay onClose={closeSettings}>
+          <SettingsPage />
+        </SettingsOverlay>
+      )}
       {conversations.error !== undefined && <Toast message={conversations.error} onDismiss={conversations.dismissError} />}
     </>
   );
