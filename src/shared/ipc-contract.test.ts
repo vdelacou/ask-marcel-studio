@@ -22,6 +22,8 @@ describe('the channels main and the renderer agree on', () => {
       skillsList: 'skills:list',
       skillsAdd: 'skills:add',
       skillsRemove: 'skills:remove',
+      officeStatus: 'office:status',
+      officeLogin: 'office:login',
     });
   });
 

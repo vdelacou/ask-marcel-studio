@@ -10,6 +10,7 @@
  * land in M2 with the agent runtime that emits them.
  */
 import type { Conversation, ConversationMeta, Settings } from './types.ts';
+import type { OfficeStatus } from './office-status.ts';
 import type { Result } from './result.ts';
 
 export const CHANNEL = {
@@ -25,6 +26,8 @@ export const CHANNEL = {
   skillsList: 'skills:list',
   skillsAdd: 'skills:add',
   skillsRemove: 'skills:remove',
+  officeStatus: 'office:status',
+  officeLogin: 'office:login',
 } as const;
 
 // The one main-to-renderer stream. Everything the UI learns during a turn arrives here.
@@ -118,6 +121,18 @@ export type RenameConversationInput = {
   readonly title: string;
 };
 
+// Why each kind exists (see office-service):
+//   spawn-failed  the office CLI could not be launched at all
+//   busy          a login is already in progress (single-flight)
+//   timed-out     login exceeded its ten-minute deadline
+//   login-failed  login ran and exited non-zero (cancelled, network, etc.)
+// A signed-out user is NOT an error: status resolves ok with { signedIn: false }.
+export type OfficeError =
+  | { readonly kind: 'spawn-failed'; readonly message: string }
+  | { readonly kind: 'busy'; readonly message: string }
+  | { readonly kind: 'timed-out'; readonly message: string }
+  | { readonly kind: 'login-failed'; readonly message: string };
+
 // The renderer-facing api surfaced by the preload bridge. The preload wires each
 // member to its CHANNEL; this type is what keeps the two sides honest.
 export type StudioApi = {
@@ -147,5 +162,11 @@ export type StudioApi = {
     // reaching the filesystem.
     readonly add: () => Promise<Result<Skill, SkillsError>>;
     readonly remove: (name: string) => Promise<Result<null, SkillsError>>;
+  };
+  readonly office: {
+    // A cheap local token decode: signed-out resolves ok with { signedIn: false }.
+    readonly status: () => Promise<Result<OfficeStatus, OfficeError>>;
+    // Opens the interactive browser sign-in. Single-flight in main.
+    readonly login: () => Promise<Result<null, OfficeError>>;
   };
 };

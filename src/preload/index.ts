@@ -44,6 +44,10 @@ const api: StudioApi = {
     add: () => ipcRenderer.invoke(CHANNEL.skillsAdd),
     remove: (name: string) => ipcRenderer.invoke(CHANNEL.skillsRemove, name),
   },
+  office: {
+    status: () => ipcRenderer.invoke(CHANNEL.officeStatus),
+    login: () => ipcRenderer.invoke(CHANNEL.officeLogin),
+  },
 };
 
 contextBridge.exposeInMainWorld('studio', api);
