@@ -86,9 +86,15 @@ carries a `name` and a `description`; the whole folder is copied into
 A skill you add applies from your **next message** — each turn spawns a fresh agent process, so
 there is nothing to reload and no need to restart.
 
-`ask-marcel-office` ships with the app: it teaches the agent to read your Microsoft 365 through
-the read-only CLI, and to send you to Settings rather than trying to sign in itself. It is
-re-seeded on every launch, so it cannot be removed and an update always ships the current version.
+Microsoft 365 knowledge ships with the app as a built-in pack. A compact **core** loads into
+every turn (what the read-only `ask-marcel-office` CLI is, how to route a question, and to send
+you to Settings rather than trying to sign in itself), and two on-demand skills carry the deep
+procedure: **answer-from-m365** (search, read mail, read documents, people) and
+**draft-outlook-email** (prepare an unsent reply, forward, or new draft). A third piece, the
+**m365-reader** subagent, reads one oversized artifact (a long deck, a many-sheet workbook, a
+zip of scans) in full and hands back a summary, so the main conversation stays clear. The two
+skills are re-seeded every launch (so they cannot be removed and an update ships the current
+version); the earlier single `ask-marcel-office` skill is retired automatically on upgrade.
 
 `node`, `npm`, and `npx` are on the agent's PATH too, with no Node install on the machine: the
 app's own Electron binary runs as Node (`ELECTRON_RUN_AS_NODE`), and the bundled `npm` keeps its

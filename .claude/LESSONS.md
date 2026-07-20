@@ -200,3 +200,18 @@ Applies to: any "which variant is this?" question in this repo.
 
 The machine's global git identity is a company email (`vincent.delacourt@adama-development.com`) and this repo is MIT-licensed and may go public, so an inherited identity would be exactly the accidental leak rule 26 exists to prevent. Set `atelier <atelier@users.noreply.github.com>` via `git config --local` at repo birth, which is the only moment the choice is free. Gate 3 (`gitleaks protect --staged`) scans the diff and is blind to the author field, so nothing else would have caught it.
 Applies to: every commit in this repo.
+
+## [gotcha] 2026-07-20 | settingSources: ['user'] does NOT load a CLAUDE.md; use systemPrompt append for always-on content
+
+SDK 0.3.185 `sdk.d.ts:1820` states "Must include `'project'` to load CLAUDE.md files." The agent runs `settingSources: ['user']` (which loads the `CLAUDE_CONFIG_DIR/skills` folder, NOT a memory file), so a seeded `claude-config/CLAUDE.md` would silently never load. The M9 always-on Microsoft 365 core therefore ships via `systemPrompt: { type: 'preset', preset: 'claude_code', append: <core text> }` (`sdk.d.ts:1881`), read from `resources/agent-core/core.md` by the composition root and passed as the `corePrompt` dep. Adding `'project'` to settingSources was rejected: it would also pull any `.claude/settings.json` and `.claude/CLAUDE.md` from the per-conversation workspace cwd, which is not wanted.
+Rule for next time: to inject standing instructions into every turn, use the preset `append`, not a CLAUDE.md.
+
+## [gotcha] 2026-07-20 | skill-md.ts reads description as ONE physical line; no folded YAML
+
+The hand-rolled `parseSkillMd` (`src/shared/skill-md.ts`) takes everything after the first colon on the `description:` line as the value; it does not understand YAML folded (`>`) or literal (`|`) block scalars or multi-line continuations. A `description: >` frontmatter parsed to the 1-char value `>`, so the panel showed nothing (the SDK's real YAML parser still loaded the full text, so the skill worked, but the app UI did not). Built-in SKILL.md descriptions must be a single physical line, plain scalar, with NO `: ` colon-space (which would break the SDK's strict YAML parser) and no leading quote/indicator. Mid-string quotes are fine in both parsers.
+Applies to: every SKILL.md this app ships or validates via `add`.
+
+## [decision] 2026-07-20 | M365 knowledge ships as an always-on core + two trigger-split skills + a programmatic reader subagent
+
+The single `ask-marcel-office` built-in skill was replaced (M9, grilled decision record in the git history of `.claude/PLAN.md`) by: (1) a compact always-on core appended to every turn (CLI nature, auth doctrine, routing table, ground rules, Sources footer); (2) two on-demand skills split by TRIGGER not source — `answer-from-m365` (read) and `draft-outlook-email` (write) — because the read sections co-fire on real questions while draft has disjoint triggers and safety rules; (3) `m365-reader`, a programmatic subagent (`agents` option in agent-runtime, versioned in-repo) that reads one oversized artifact and returns a summary. `seedBuiltins` grew a `retiredBuiltinNames` list that rm's the old folder on launch, so a renamed pack does not strand the stale skill. Studio owns these forks (stamped "Verified against ask-marcel-office v2.2.0"); no doc compiler with the plugin until drift bites twice.
+Applies to: any change to the built-in M365 pack or the agent's standing knowledge.
