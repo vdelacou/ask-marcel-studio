@@ -8,11 +8,13 @@
  *
  * Pure: no react, no electron, so `bun test` runs it.
  */
+import { assignProviderIds } from '../../../shared/provider-id.ts';
 import type { ProviderDraft } from '../components/molecules/provider-form/index.tsx';
 import type { Provider, Settings } from '../../../shared/types.ts';
 
-// A key for React's list reconciliation, not a domain id. The provider's own id is
-// user-editable and starts blank, so it cannot identify a row while being typed.
+// A key for React's list reconciliation, not a domain id. A provider's real id is
+// generated from its label at save time (provider-id.ts), never typed, so a draft has
+// nothing to identify a row by while it is being edited.
 const newRowId = (): string => crypto.randomUUID();
 
 export const emptyDraft = (): ProviderDraft => ({
@@ -62,6 +64,8 @@ const toProvider = (draft: ProviderDraft): Provider => {
 };
 
 export const draftsToSettings = (drafts: readonly ProviderDraft[], defaultModel?: string): Settings => ({
-  providers: drafts.map(toProvider),
+  // assignProviderIds fills the id of any new provider (blank) from its label and keeps
+  // every existing id untouched, so a saved provider's id never shifts under it.
+  providers: assignProviderIds(drafts.map(toProvider)),
   ...(defaultModel === undefined ? {} : { defaultModel }),
 });

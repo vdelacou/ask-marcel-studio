@@ -42,10 +42,6 @@ export const ProviderForm: FC<ProviderFormProps> = ({ draft, onChange, onRemove 
       </Field>
     </div>
 
-    <Field label="Provider id" htmlFor={`${draft.rowId}-id`} hint="Used to address models as providerId::modelId. Cannot contain '::'.">
-      <TextInput id={`${draft.rowId}-id`} value={draft.id} placeholder="anthropic-work" onChange={(e) => onChange({ id: e.target.value })} />
-    </Field>
-
     <Field
       label={draft.kind === 'openai' ? 'Base URL (required)' : 'Base URL (optional)'}
       htmlFor={`${draft.rowId}-baseUrl`}
