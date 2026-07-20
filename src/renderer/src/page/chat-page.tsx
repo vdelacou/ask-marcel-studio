@@ -10,11 +10,9 @@ import type { FC } from 'react';
 import { ChatThread } from '../components/organisms/chat-thread/index.tsx';
 import type { ThreadMessage } from '../components/organisms/chat-thread/index.tsx';
 import { Composer } from '../components/organisms/composer/index.tsx';
-import { ConversationHeader } from '../components/molecules/conversation-header/index.tsx';
 import type { ChatPart } from '../components/molecules/chat-message/index.tsx';
 import { appendUserMessage, applyUIEvent, emptyChat } from '../lib/ui-event-fold.ts';
 import type { ChatView } from '../lib/ui-event-fold.ts';
-import { formatUsage } from '../lib/format-usage.ts';
 import { renderMarkdown } from '../render/markdown.tsx';
 import type { Message } from '../../../shared/types.ts';
 
@@ -85,7 +83,6 @@ export const ChatPage: FC<ChatPageProps> = ({ conversationId }) => {
 
   return (
     <>
-      <ConversationHeader title={view.title === '' ? 'New conversation' : view.title} usage={formatUsage(view.lastUsage)} />
       <ChatThread
         messages={view.messages.map(toThreadMessage)}
         isStreaming={view.isStreaming}
@@ -96,7 +93,7 @@ export const ChatPage: FC<ChatPageProps> = ({ conversationId }) => {
         value={draft}
         isStreaming={view.isStreaming}
         canSend={draft.trim().length > 0 && !view.isStreaming}
-        placeholder="Send a message. Enter to send, shift+enter for a new line."
+        placeholder="Send a message…"
         onChange={setDraft}
         onSend={onSend}
         onCancel={onCancel}

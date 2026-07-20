@@ -1,5 +1,4 @@
 import type { FC, KeyboardEvent } from 'react';
-import { Button } from '../../atoms/button/index.tsx';
 
 export type ComposerProps = {
   value: string;
@@ -22,30 +21,39 @@ export const Composer: FC<ComposerProps> = ({ value, isStreaming, canSend, place
 
   return (
     <form
-      className="flex shrink-0 items-end gap-x-2 border-t border-border-subtle p-3"
+      className="shrink-0 px-6 py-4"
       onSubmit={(event) => {
         event.preventDefault();
         if (canSend) onSend();
       }}
     >
-      <textarea
-        rows={2}
-        value={value}
-        placeholder={placeholder}
-        aria-label="Message"
-        onChange={(event) => onChange(event.target.value)}
-        onKeyDown={onKeyDown}
-        className="flex-1 resize-none rounded-md border border-border-subtle bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
-      />
-      {isStreaming ? (
-        <Button variant="danger" onClick={onCancel}>
-          Stop
-        </Button>
-      ) : (
-        <Button type="submit" disabled={!canSend}>
-          Send
-        </Button>
-      )}
+      <div className="mx-auto flex w-full max-w-3xl items-end gap-x-2 rounded-2xl border border-border-subtle bg-surface px-3 py-2 shadow-sm transition focus-within:border-ink-muted">
+        <textarea
+          rows={1}
+          value={value}
+          placeholder={placeholder}
+          aria-label="Message"
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={onKeyDown}
+          // field-sizing lets the box start at one line and grow with the text, so the
+          // send icon sits right next to what was typed instead of floating below it.
+          className="max-h-40 flex-1 resize-none overflow-y-auto bg-transparent px-1 py-1 text-sm text-ink placeholder:text-ink-muted [field-sizing:content] focus:outline-none"
+        />
+        {isStreaming ? (
+          <button type="button" onClick={onCancel} aria-label="Stop" className="shrink-0 rounded-lg p-2 text-ink-muted transition hover:text-ink">
+            <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4" aria-hidden="true">
+              <rect x="7.5" y="7.5" width="9" height="9" rx="2.5" />
+            </svg>
+          </button>
+        ) : (
+          <button type="submit" disabled={!canSend} aria-label="Send" className="shrink-0 rounded-lg p-2 text-ink-muted transition hover:text-ink disabled:opacity-40">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+              <polyline points="9 10 4 15 9 20" />
+              <path d="M20 4v7a4 4 0 0 1-4 4H4" />
+            </svg>
+          </button>
+        )}
+      </div>
     </form>
   );
 };

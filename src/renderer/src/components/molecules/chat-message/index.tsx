@@ -13,26 +13,24 @@ export type ChatMessageProps = {
   parts: readonly ChatPart[];
 };
 
-const bubble = 'max-w-[85%] break-words rounded-panel px-3 py-2 text-sm';
-
-// The user's own text is shown verbatim (whitespace preserved); the assistant's is
-// markdown. Split out so the two live side by side without nesting ternaries.
+// The user's own words sit in a soft bubble on the right; the assistant answers as
+// full-width prose with no bubble, the way a document reads, rather than a chat card.
 const TextBubble: FC<{ role: 'user' | 'assistant'; content: ReactNode }> = ({ role, content }) => {
-  if (role === 'user') return <div className={`${bubble} whitespace-pre-wrap bg-accent text-accent-ink`}>{content}</div>;
+  if (role === 'user') return <div className="max-w-[80%] whitespace-pre-wrap break-words rounded-2xl bg-surface-raised px-4 py-2.5 text-sm text-ink">{content}</div>;
   return (
-    <div className={`${bubble} bg-surface-raised text-ink`}>
+    <div className="w-full text-ink">
       <MarkdownView>{content}</MarkdownView>
     </div>
   );
 };
 
 export const ChatMessage: FC<ChatMessageProps> = ({ role, parts }) => (
-  <article className={`flex flex-col gap-y-2 ${role === 'user' ? 'items-end' : 'items-start'}`}>
+  <article className={`flex flex-col gap-y-2 ${role === 'user' ? 'items-end' : 'items-stretch'}`}>
     {parts.map((part, index) =>
       part.kind === 'text' ? (
         <TextBubble key={`text-${String(index)}`} role={role} content={part.content} />
       ) : (
-        <div key={part.id} className="w-full max-w-[85%]">
+        <div key={part.id} className="w-full">
           <ToolCallCard name={part.name} input={part.input} result={part.result} status={part.status} />
         </div>
       )
