@@ -150,9 +150,11 @@ Phase C — content (the bulk of the work; each artifact footer-stamped
 7. [x] Core `resources/agent-core/core.md` (~90 lines): CLI nature + scope; never-login /
        Settings doctrine + elevated-token note; my-quick-context once per session; ground
        rules (newest wins, UTC→tenantTimeZone, parallel, answer-not-log, cite, the NEW
-       `--output-path` body-only + `>` redirect rule); discovery ladder corrected to
-       `--help` + `docs <cmd>` (help-json dropped: unattested in live v2.2.0 meta
-       listing + source SKILL.md); routing table → skill; delegation to m365-reader;
+       `--output-path` body-only + `>` redirect rule); discovery ladder = `help-json
+       --terse [--category]` + `docs <cmd>` (help-json RESTORED after a live run: the CLI
+       itself hints it; it is a CLI meta-command absent from the MCP list-commands
+       manifest, which is why the pre-land check wrongly flagged it); routing table →
+       skill; delegation to m365-reader;
        explicit "cannot send/schedule/change" fallback; Sources footer + web=1.
 8. [x] answer-from-m365 SKILL.md (~150 lines, single-line description). Covers all listed
        items; exact-phrase quoting kept (recipe's "never quote" is superseded). DoD MET:

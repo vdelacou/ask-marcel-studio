@@ -44,9 +44,11 @@ calendar, planner plan, notebook). Do not call it again in the same answer.
   command". Default text output is fine; add `--output json` only to parse fields. JSON
   is wrapped as `{ ok, data, nextLink, sizeHint }` — list and search results live under
   `data.value`, not at the top level.
-- Discover commands you are unsure of with `ask-marcel-office --help` (all commands) and
-  `ask-marcel-office docs <cmd>` (one command's options, examples, and response shape).
-  Never guess a command name or flag.
+- Discover commands, never guess a name or flag: `ask-marcel-office help-json --terse`
+  lists every command (~31 KB); `help-json --terse --category <cat>` narrows to one (~6 KB;
+  categories: lifecycle, drive, excel, sharepoint, tasks, mail, notes, user, calendar,
+  chats, teams, meta); `ask-marcel-office docs <cmd>` gives one command's options and
+  examples. A wrong name fails with a "Did you mean…?" hint — follow it.
 
 ## Route the question
 

@@ -75,7 +75,8 @@ not the user's, thread `--tenant-id` through every download/convert for that fil
 
 Read by type:
 - **PDF / CSV / text:** `download-drive-item-content --drive-id … --item-id … --output-path
-  file.<ext>`, then Read it.
+  file.<ext>`, then Read it. A PDF over ~10 pages needs Read's `pages` parameter (e.g.
+  `pages: "1-15"`), at most 20 pages per call — read a longer one in chunks.
 - **Word / Excel / OpenDocument:** `download-drive-item-as-markdown --drive-id … --item-id …
   --include-metadata true` (surfaces comments, tracked changes, hidden text). Leave images as
   `[image: …]` placeholders — never `--inline-images true`. A scrambled Word/ODF conversion
@@ -89,6 +90,15 @@ Read by type:
 
 An oversized document (long deck, many-sheet workbook, zip of scans) is exactly what the
 `m365-reader` subagent is for: hand it the ids and the question, keep the summary.
+
+## People — the commands (do not guess names)
+
+- **You**: `my-quick-context` or `get-current-user`. **Your manager**: `get-my-manager`.
+  **Someone else's manager**: `get-user-manager --user-id '<id>'`. **Your reports**:
+  `list-my-direct-reports`. **Someone else's reports**: `list-user-direct-reports --user-id
+  '<id>'`. **Colleagues you work with**: `list-relevant-people`. **Anyone by name**:
+  `get-user` (two-step, below). There is no `get-manager` — recurse manager/reports
+  commands to walk an org tree.
 
 ## People — pitfalls that change answers
 
@@ -118,6 +128,9 @@ An oversized document (long deck, many-sheet workbook, zip of scans) is exactly 
   client-side on `resource.@odata.type`. For mail, `hitId` is the `messageId`.
 - Teams chat and OneNote are limited: OneNote search is title-substring only, Teams chat
   content is not searchable, To Do / Planner need their direct commands (not federated search).
+- Scratch files: write to absolute paths (`/tmp/…`); the shell does NOT keep its working
+  directory between commands, so a `cd` then a relative path fails. Prefer the default text
+  output for simple reads; use `--output json` + a parser only to extract fields.
 
 ## Answer
 
