@@ -8,8 +8,8 @@ export type ButtonProps = {
 } & ButtonHTMLAttributes<HTMLButtonElement>;
 
 const variantStyles: Record<ButtonVariant, string> = {
-  primary: 'bg-accent text-accent-ink hover:opacity-90',
-  secondary: 'bg-surface-raised text-ink border border-border-subtle hover:bg-surface',
+  primary: 'bg-ink text-surface hover:opacity-90',
+  secondary: 'bg-surface text-ink border border-border-subtle hover:bg-surface-raised',
   danger: 'bg-transparent text-danger border border-border-subtle hover:bg-danger-wash',
 };
 
