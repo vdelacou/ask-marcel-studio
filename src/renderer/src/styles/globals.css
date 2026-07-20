@@ -9,15 +9,16 @@
 @import 'tailwindcss' source('../');
 
 @theme {
-  --color-surface: oklch(0.99 0.002 265);
-  --color-surface-raised: oklch(0.97 0.004 265);
-  --color-border-subtle: oklch(0.9 0.006 265);
-  --color-ink: oklch(0.25 0.015 265);
-  --color-ink-muted: oklch(0.55 0.015 265);
-  --color-accent: oklch(0.58 0.15 255);
-  --color-accent-ink: oklch(0.99 0.002 265);
-  --color-danger: oklch(0.55 0.19 25);
-  --color-danger-wash: oklch(0.95 0.03 25);
+  /* Warm, paper-like neutrals with a clay accent, in the spirit of Claude's palette. */
+  --color-surface: oklch(0.99 0.004 85);
+  --color-surface-raised: oklch(0.965 0.006 85);
+  --color-border-subtle: oklch(0.9 0.008 85);
+  --color-ink: oklch(0.27 0.012 75);
+  --color-ink-muted: oklch(0.53 0.014 75);
+  --color-accent: oklch(0.62 0.14 42);
+  --color-accent-ink: oklch(0.99 0.004 85);
+  --color-danger: oklch(0.55 0.19 27);
+  --color-danger-wash: oklch(0.95 0.03 30);
   --color-success: oklch(0.55 0.13 150);
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -25,22 +26,13 @@
 }
 
 /*
- * Light/dark via prefers-color-scheme only — no theme system in v1 (a stated
- * non-goal). Overriding the token values re-themes every component at once.
+ * Light only, by choice. The app pins its warm light theme regardless of the OS
+ * setting, and color-scheme keeps native controls, scrollbars and code blocks light
+ * too. A dark palette lived here before; git has it if a theme toggle is ever wanted
+ * (still a v1 non-goal).
  */
-@media (prefers-color-scheme: dark) {
-  @theme {
-    --color-surface: oklch(0.17 0.012 265);
-    --color-surface-raised: oklch(0.22 0.014 265);
-    --color-border-subtle: oklch(0.31 0.015 265);
-    --color-ink: oklch(0.95 0.004 265);
-    --color-ink-muted: oklch(0.68 0.012 265);
-    --color-accent: oklch(0.72 0.13 245);
-    --color-accent-ink: oklch(0.17 0.012 265);
-    --color-danger: oklch(0.7 0.16 25);
-    --color-danger-wash: oklch(0.28 0.05 25);
-    --color-success: oklch(0.7 0.13 150);
-  }
+:root {
+  color-scheme: light;
 }
 
 html,
@@ -49,16 +41,3 @@ body,
   height: 100%;
 }
 
-/*
- * Shiki dual-theme swap. The highlighter (render/markdown) emits both themes inline: the
- * light theme as the element's own color, the dark one behind `--shiki-dark` variables.
- * Following prefers-color-scheme (the app's only theme signal) means promoting those
- * dark variables here, on shiki's generated `.shiki` class, which no component authors.
- */
-@media (prefers-color-scheme: dark) {
-  .shiki,
-  .shiki span {
-    color: var(--shiki-dark) !important;
-    background-color: var(--shiki-dark-bg) !important;
-  }
-}
