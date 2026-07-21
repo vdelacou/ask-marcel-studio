@@ -5,9 +5,10 @@
  * drag payload, or an email attachment, and it goes on to be joined onto a path. So the
  * name is reduced to a bare filename here, before anything touches the filesystem.
  *
- * Pure: no electron and no IO, so `bun test` covers the security-relevant part.
+ * Pure, and deliberately free of node:path: the renderer imports attachmentSuffix from
+ * here, and node:path does not exist in a browser bundle. Splitting on the separators
+ * by hand is all this needs anyway.
  */
-import { basename } from 'node:path';
 
 // Big enough for a deck or a workbook, small enough that a mis-drop of a disk image is
 // refused rather than copied.
@@ -15,11 +16,16 @@ export const MAX_IMPORT_BYTES = 25 * 1024 * 1024;
 
 const MAX_NAME_LENGTH = 120;
 
-// A name with no path, no separators, no control characters and no leading dot. The
-// windows separator is handled explicitly because basename() on a posix host does not
-// treat a backslash as one, and a drag from a Windows app can carry either.
+// Both separators, because a drag from a Windows app carries backslashes and a posix
+// basename() would not treat those as separators at all.
+const lastSegmentOf = (raw: string): string => {
+  const normalised = raw.replace(/\\/g, '/');
+  return normalised.slice(normalised.lastIndexOf('/') + 1);
+};
+
+// A name with no path, no separators, no control characters and no leading dot.
 export const safeImportName = (raw: string): string => {
-  const lastSegment = basename(raw.replace(/\\/g, '/'));
+  const lastSegment = lastSegmentOf(raw);
   // A newline or a NUL in a filename is either a mistake or an attempt at one.
   // eslint-disable-next-line no-control-regex -- stripping control characters is the point
   const cleaned = lastSegment.replace(/[\u0000-\u001f\u007f]/g, '').trim();
