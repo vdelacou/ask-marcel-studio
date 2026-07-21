@@ -1,9 +1,11 @@
 /*
- * The chat page shell. Owns every hook, subscribes to the event stream once, and
- * hands plain props to the design system.
+ * The chat page shell. Owns the composer draft and hands plain props to the design
+ * system.
  *
- * Carries no class string (rule 22). The transcript logic lives in
- * lib/ui-event-fold.ts, where it is tested; this file only wires.
+ * It does NOT own the transcript. That lives in use-chat-views, above this screen, so
+ * that switching conversations cannot throw away a turn that is still running. This
+ * file only maps the domain messages onto the design system's view model and wires the
+ * composer. Carries no class string (rule 22).
  */
 import { useCallback, useEffect, useState } from 'react';
 import type { FC } from 'react';
@@ -11,13 +13,16 @@ import { ChatThread } from '../components/organisms/chat-thread/index.tsx';
 import type { ThreadMessage } from '../components/organisms/chat-thread/index.tsx';
 import { Composer } from '../components/organisms/composer/index.tsx';
 import type { ChatPart } from '../components/molecules/chat-message/index.tsx';
-import { appendUserMessage, applyUIEvent, emptyChat } from '../lib/ui-event-fold.ts';
 import type { ChatView } from '../lib/ui-event-fold.ts';
 import { renderMarkdown } from '../render/markdown.tsx';
 import type { Message } from '../../../shared/types.ts';
 
 export type ChatPageProps = {
   conversationId: string;
+  view: ChatView;
+  onHydrate: () => void;
+  onSend: (text: string) => void;
+  onCancel: () => void;
 };
 
 // Maps the domain message onto the design system's view model. The components never
@@ -41,45 +46,17 @@ const toThreadMessage = (message: Message): ThreadMessage => ({
   ),
 });
 
-export const ChatPage: FC<ChatPageProps> = ({ conversationId }) => {
-  const [view, setView] = useState<ChatView>(() => emptyChat(conversationId));
+export const ChatPage: FC<ChatPageProps> = ({ view, onHydrate, onSend, onCancel }) => {
   const [draft, setDraft] = useState('');
 
-  useEffect(() => {
-    setView(emptyChat(conversationId));
-    void (async (): Promise<void> => {
-      const loaded = await studio.conversations.get(conversationId);
-      if (!loaded.ok) {
-        setView((v) => ({ ...v, error: loaded.error.message }));
-        return;
-      }
-      setView((v) => ({ ...v, title: loaded.value.title, messages: loaded.value.messages }));
-    })();
-  }, [conversationId]);
+  useEffect(onHydrate, [onHydrate]);
 
-  useEffect(() => {
-    // One listener for the lifetime of the page. The fold drops events belonging to
-    // other conversations, so a background turn cannot write in here.
-    const unsubscribe = studio.chat.onEvent((event) => setView((v) => applyUIEvent(v, event)));
-    return unsubscribe;
-  }, []);
-
-  const onSend = useCallback((): void => {
+  const send = useCallback((): void => {
     const text = draft.trim();
     if (text.length === 0) return;
     setDraft('');
-    // Echoed immediately so the message appears on Enter, not when the turn starts.
-    setView((v) => appendUserMessage(v, crypto.randomUUID(), text, new Date().toISOString()));
-    void (async (): Promise<void> => {
-      const sent = await studio.chat.send({ conversationId, text });
-      if (!sent.ok) setView((v) => ({ ...v, isStreaming: false, error: sent.error.message }));
-    })();
-  }, [draft, conversationId]);
-
-  const onCancel = useCallback((): void => {
-    void studio.chat.cancel(conversationId);
-    setView((v) => ({ ...v, isStreaming: false }));
-  }, [conversationId]);
+    onSend(text);
+  }, [draft, onSend]);
 
   return (
     <>
@@ -95,7 +72,7 @@ export const ChatPage: FC<ChatPageProps> = ({ conversationId }) => {
         canSend={draft.trim().length > 0 && !view.isStreaming}
         placeholder="Send a message…"
         onChange={setDraft}
-        onSend={onSend}
+        onSend={send}
         onCancel={onCancel}
       />
     </>

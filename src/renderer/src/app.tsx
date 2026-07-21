@@ -20,6 +20,7 @@ import { Toast } from './components/molecules/toast/index.tsx';
 import { ChatPage } from './page/chat-page.tsx';
 import { SettingsPage } from './page/settings-page.tsx';
 import { useConversations } from './hooks/use-conversations.ts';
+import { useChatViews } from './hooks/use-chat-views.ts';
 import { formatModelRef } from '../../shared/model-ref.ts';
 
 type Boot =
@@ -53,9 +54,29 @@ export const App: FC = () => {
 
   useEffect(bootstrap, [bootstrap]);
 
-  const conversations = useConversations(boot.step === 'ready' ? boot.defaultModel : undefined);
+  // Transcripts live here, above the keyed chat page, so switching conversations no
+  // longer discards a turn that is still running.
+  // Destructured rather than held as one object: viewFor changes whenever any
+  // transcript does, and binding the callbacks to it would re-run the chat page's
+  // effects on every token that arrives.
+  const { viewFor, hydrate, send, cancel, evict } = useChatViews();
+  const conversations = useConversations(boot.step === 'ready' ? boot.defaultModel : undefined, evict);
   const list = conversations.view;
   const { create } = conversations;
+  const activeId = list.activeId;
+
+  const hydrateActive = useCallback((): void => {
+    if (activeId !== undefined) hydrate(activeId);
+  }, [activeId, hydrate]);
+  const sendToActive = useCallback(
+    (text: string): void => {
+      if (activeId !== undefined) send(activeId, text);
+    },
+    [activeId, send]
+  );
+  const cancelActive = useCallback((): void => {
+    if (activeId !== undefined) cancel(activeId);
+  }, [activeId, cancel]);
 
   const openSettings = useCallback((): void => setSettingsOpen(true), []);
   // Closing may mean a provider was just added, so re-resolve the default model.
@@ -78,7 +99,11 @@ export const App: FC = () => {
 
   const sidebar = (
     <Sidebar
-      conversations={list.conversations.map((c) => ({ id: c.id, title: c.title }))}
+      conversations={list.conversations.map((c) => ({
+        id: c.id,
+        title: c.title,
+        ...(conversations.activity[c.id] === undefined ? {} : { activity: conversations.activity[c.id] }),
+      }))}
       {...(list.activeId === undefined ? {} : { activeId: list.activeId })}
       {...(conversations.editingId === undefined ? {} : { editingId: conversations.editingId })}
       draftTitle={conversations.draftTitle}
@@ -102,8 +127,12 @@ export const App: FC = () => {
       <AppFrame sidebar={sidebar}>
         {boot.step === 'no-provider' && <NoProviderNotice onOpenSettings={openSettings} />}
         {boot.step === 'failed' && <NoProviderNotice onOpenSettings={openSettings} />}
-        {isReady && list.activeId !== undefined && <ChatPage key={list.activeId} conversationId={list.activeId} />}
-        {isReady && list.activeId === undefined && <EmptyConversations onNew={create} />}
+        {isReady && activeId !== undefined && (
+          // Keyed so the composer draft resets between conversations. The transcript no
+          // longer lives in this component, so remounting costs nothing.
+          <ChatPage key={activeId} conversationId={activeId} view={viewFor(activeId)} onHydrate={hydrateActive} onSend={sendToActive} onCancel={cancelActive} />
+        )}
+        {isReady && activeId === undefined && <EmptyConversations onNew={create} />}
       </AppFrame>
       {settingsOpen && (
         <SettingsOverlay onClose={closeSettings}>
