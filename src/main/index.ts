@@ -13,7 +13,7 @@ import { stat } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { electronApp, is, optimizer } from '@electron-toolkit/utils';
 import { BrowserWindow, app, shell } from 'electron';
-import { CHAT_EVENT } from '../shared/ipc-contract.ts';
+import { CHAT_EVENT, MEMORY_EVENT } from '../shared/ipc-contract.ts';
 import { registerIpc } from './ipc/register.ts';
 import { createAgentRuntime } from './services/agent/agent-runtime.ts';
 import { readAgentCore, readBundledText } from './services/agent/agent-core-io.ts';
@@ -23,6 +23,9 @@ import { createSkillsService } from './services/skills/skills-service.ts';
 import { createAgentsStore } from './services/store/agents-store.ts';
 import { createAgentFilesStore } from './services/store/agent-files-store.ts';
 import { createBackgroundRunner } from './services/background/background-runner.ts';
+import { createMemoryService } from './services/memory/memory-service.ts';
+import { createMemoryExtractor } from './services/memory/memory-extractor.ts';
+import { createIdleWatcher } from './services/memory/idle-watcher.ts';
 import { createBackgroundJobs } from './services/background/background-jobs.ts';
 import { createRunAgentText } from './services/background/background-agent-io.ts';
 import { createVoiceProfileJob } from './services/background/voice-profile-job.ts';
@@ -46,7 +49,10 @@ import type { AgentRuntime } from './services/agent/agent-runtime.ts';
 import type { SkillsService } from './services/skills/skills-service.ts';
 import type { Gateway } from './services/gateway/gateway-server.ts';
 import type { BackgroundRunner } from './services/background/background-runner.ts';
-import type { UIEvent } from '../shared/ipc-contract.ts';
+import type { MemoryEvent, UIEvent } from '../shared/ipc-contract.ts';
+import type { IdleWatcher } from './services/memory/idle-watcher.ts';
+import type { MemoryService } from './services/memory/memory-service.ts';
+import type { ConversationsStore } from './services/store/conversations-store.ts';
 
 const createWindow = (): BrowserWindow => {
   const window = new BrowserWindow({
@@ -136,6 +142,13 @@ const toolCliLocation = (): ToolCliLocation => {
   return { execPath: process.execPath, npmCliPath: join(npmDir, 'bin', 'npm-cli.js'), npxCliPath: join(npmDir, 'bin', 'npx-cli.js') };
 };
 
+// How long a conversation has to be quiet before the app reads it for words worth
+// remembering. Long enough that a pause mid-thought does not trigger it.
+const IDLE_MS = 300_000;
+
+// How far back the app looks at launch for conversations it never got to read.
+const CATCH_UP_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+
 // The embedded Python runtime (M8 Phase B). The build string is the runtime pin from
 // scripts/fetch-python.ts; a change forces the venv to be rebuilt.
 //
@@ -184,7 +197,10 @@ const hasContent = async (path: string): Promise<boolean> => {
   }
 };
 
-const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; skills: SkillsService; gateway: Gateway; background: BackgroundRunner } => {
+const buildRuntime = (
+  emit: (event: UIEvent) => void,
+  emitMemory: (event: MemoryEvent) => void
+): { agent: AgentRuntime; skills: SkillsService; gateway: Gateway; background: BackgroundRunner; idle: IdleWatcher; memory: MemoryService; conversations: ConversationsStore } => {
   const userData = app.getPath('userData');
   const now = (): string => new Date().toISOString();
   const settings = createSettingsStore({ userData });
@@ -201,8 +217,10 @@ const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; sk
   const officeCatalog = createOfficeCatalog(officeCatalogPath());
   const agentsStore = createAgentsStore({ userData, builtins: BUILTIN_AGENTS });
   const agentFiles = createAgentFilesStore({ userData });
+  const memory = createMemoryService({ userData, now, newId: () => crypto.randomUUID(), emit: emitMemory });
   const agent = createAgentRuntime({
     settings,
+    glossary: () => memory.glossaryBlock(),
     conversations,
     gateway,
     officeCommandCategories: officeCatalog.commandCategories(),
@@ -257,6 +275,13 @@ const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; sk
       hasSignature: () => hasContent(signatureFilePath(userData)),
       wroteSomething: () => hasContent(signatureFilePath(userData)),
     }),
+    memoryExtractor: createMemoryExtractor({
+      conversations,
+      memory,
+      runAgentText: createRunAgentText(),
+      prompt: readBundledText(backgroundPromptSource('memory-extract-prompt.md')),
+      session: () => jobs.session(),
+    }),
     voice: createVoiceProfileJob({
       runAgentText: createRunAgentText(),
       prompt: readBundledText(backgroundPromptSource('voice-profile-prompt.md')),
@@ -278,6 +303,7 @@ const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; sk
     officeCatalog,
     agentsStore,
     agentFiles,
+    memory,
     // Rebuilding a document is the same job the app runs on its own, asked for
     // explicitly. It resolves with the new contents so the panel shows them at once.
     regenerateAgentFile: async (doc) => {
@@ -288,7 +314,16 @@ const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; sk
       return agentFiles.get(checked.value);
     },
   });
-  return { agent, skills, gateway, background };
+  // Reading a conversation costs the user tokens, so it happens once, a few minutes
+  // after the last thing was said, rather than after every turn.
+  const idle = createIdleWatcher({
+    idleMs: IDLE_MS,
+    onIdle: (conversationId) => void background.enqueue({ kind: 'memory-extract', conversationId }),
+    setTimer: (fire, ms) => setTimeout(fire, ms),
+    clearTimer: (handle) => clearTimeout(handle as NodeJS.Timeout),
+  });
+
+  return { agent, skills, gateway, background, idle, memory, conversations };
 };
 
 void app.whenReady().then(() => {
@@ -303,9 +338,20 @@ void app.whenReady().then(() => {
     skills,
     gateway,
     background: runtimeBackground,
-  } = buildRuntime((event) => {
-    if (!window.isDestroyed()) window.webContents.send(CHAT_EVENT, event);
-  });
+    idle,
+    memory,
+    conversations,
+  } = buildRuntime(
+    (event) => {
+      // The idle watcher sees the same stream the renderer does: a turn ending is
+      // exactly when a conversation might have gone quiet.
+      idle.onUiEvent(event);
+      if (!window.isDestroyed()) window.webContents.send(CHAT_EVENT, event);
+    },
+    (event) => {
+      if (!window.isDestroyed()) window.webContents.send(MEMORY_EVENT, event);
+    }
+  );
 
   // Re-seeded every launch so an app update ships an updated skill, and a folder the
   // user deleted by hand comes back. Not awaited: a skill lands before the first
@@ -317,10 +363,24 @@ void app.whenReady().then(() => {
   void runtimeBackground.enqueue({ kind: 'signature-prefill' });
   void runtimeBackground.enqueue({ kind: 'voice-profile' });
 
+  // Conversations that went quiet while the app was closed. Recent ones only: reading
+  // a year of history at launch would spend money nobody asked to spend.
+  void (async (): Promise<void> => {
+    const listed = await conversations.list();
+    if (!listed.ok) return;
+    const cutoff = new Date(Date.now() - CATCH_UP_WINDOW_MS).toISOString();
+    for (const meta of listed.value.filter((candidate) => candidate.updatedAt >= cutoff)) {
+      const conversation = await conversations.get(meta.id);
+      if (!conversation.ok) continue;
+      if (await memory.extractionDue(meta.id, conversation.value.messages.length)) void runtimeBackground.enqueue({ kind: 'memory-extract', conversationId: meta.id });
+    }
+  })();
+
   // A turn left running would keep an orphaned agent subprocess alive after quit, and
   // the gateway would keep a socket listening.
   app.on('before-quit', () => {
     runtime.cancelAll();
+    idle.stop();
     runtimeBackground.stop();
     void gateway.stop();
   });

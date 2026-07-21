@@ -9,12 +9,13 @@
  * renderer cannot drift apart without a typecheck failure.
  */
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
-import { CHANNEL, CHAT_EVENT } from '../shared/ipc-contract.ts';
+import { CHANNEL, CHAT_EVENT, MEMORY_EVENT } from '../shared/ipc-contract.ts';
 import type {
   ChatSendInput,
   CreateConversationInput,
   ImportDataInput,
   ImportPathsInput,
+  MemoryEvent,
   RenameConversationInput,
   SetConversationModelInput,
   StudioApi,
@@ -72,6 +73,22 @@ const api: StudioApi = {
     save: (agent) => ipcRenderer.invoke(CHANNEL.agentsSave, agent),
     remove: (name: string) => ipcRenderer.invoke(CHANNEL.agentsRemove, name),
     restore: (name: string) => ipcRenderer.invoke(CHANNEL.agentsRestore, name),
+  },
+  memory: {
+    pending: () => ipcRenderer.invoke(CHANNEL.memoryPending),
+    resolve: (input) => ipcRenderer.invoke(CHANNEL.memoryResolve, input),
+    read: (name) => ipcRenderer.invoke(CHANNEL.memoryRead, name),
+    write: (input) => ipcRenderer.invoke(CHANNEL.memoryWrite, input),
+    onEvent: (listener) => {
+      // Wrapped for the same reason the chat stream is: the raw handler receives an
+      // IpcRendererEvent first, and handing that across the bridge would leak a
+      // main-process handle.
+      const wrapped = (_event: unknown, payload: MemoryEvent): void => listener(payload);
+      ipcRenderer.on(MEMORY_EVENT, wrapped);
+      return () => {
+        ipcRenderer.removeListener(MEMORY_EVENT, wrapped);
+      };
+    },
   },
   agentFiles: {
     get: (doc) => ipcRenderer.invoke(CHANNEL.agentFileGet, doc),

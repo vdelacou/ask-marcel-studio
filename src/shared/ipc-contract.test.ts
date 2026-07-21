@@ -5,7 +5,7 @@
  * failure instead of a mystery.
  */
 import { describe, expect, test } from 'bun:test';
-import { CHANNEL, CHAT_EVENT } from './ipc-contract.ts';
+import { CHANNEL, CHAT_EVENT, MEMORY_EVENT } from './ipc-contract.ts';
 
 describe('the channels main and the renderer agree on', () => {
   test('every channel keeps its exact name on the wire', () => {
@@ -39,6 +39,10 @@ describe('the channels main and the renderer agree on', () => {
       officeStatus: 'office:status',
       officeLogin: 'office:login',
       officeCommands: 'office:commands',
+      memoryPending: 'memory:pending',
+      memoryResolve: 'memory:resolve',
+      memoryRead: 'memory:read',
+      memoryWrite: 'memory:write',
     });
   });
 
@@ -54,7 +58,18 @@ describe('the channels main and the renderer agree on', () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  test('the event stream does not collide with an invoke channel', () => {
+  test('neither event stream collides with an invoke channel', () => {
     expect(Object.values(CHANNEL)).not.toContain(CHAT_EVENT);
+    expect(Object.values(CHANNEL)).not.toContain(MEMORY_EVENT);
+  });
+
+  test('the second main-to-renderer stream keeps its name', () => {
+    // Renaming this silently stops the app ever asking the user about a word it
+    // noticed: main would send on one channel and the renderer listen on another.
+    expect(MEMORY_EVENT).toBe('memory:event');
+  });
+
+  test('the two main-to-renderer streams are not the same stream', () => {
+    expect(MEMORY_EVENT).not.toBe(CHAT_EVENT);
   });
 });

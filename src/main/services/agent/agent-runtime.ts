@@ -52,6 +52,9 @@ export type AgentRuntimeDeps = {
   // The helpers this turn may delegate to: the built-ins with any change the user made,
   // plus their own. Read per send so an edit in settings applies from the next message.
   readonly listAgents: () => Promise<Readonly<Record<string, SdkAgentDefinition>>>;
+  // The user's own vocabulary, read per send. Small local files, and a glossary edited
+  // in settings should apply from the next message like everything else.
+  readonly glossary: () => Promise<string>;
 };
 
 export type AgentRuntime = {
@@ -101,6 +104,7 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
       // var alone is not enough. Direct to Anthropic it must be the bare id, which is
       // all the real API has heard of.
       const model = gateway === undefined ? modelId : formatModelRef({ providerId: provider.id, modelId });
+      const glossary = await deps.glossary();
       const turn = query({
         prompt,
         options: {
@@ -112,7 +116,7 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
           // every turn regardless of setting sources or cwd. The helpers are passed
           // programmatically for the same reason: settingSources: ['user'] loads no
           // agent files, so there is nowhere on disk for them to come from.
-          systemPrompt: { type: 'preset', preset: 'claude_code', append: deps.corePrompt },
+          systemPrompt: { type: 'preset', preset: 'claude_code', append: glossary.length === 0 ? deps.corePrompt : `${deps.corePrompt}\n\n${glossary}` },
           agents,
           settingSources: ['user'],
           // No approval prompts anywhere in this app: a PreToolUse hook denial

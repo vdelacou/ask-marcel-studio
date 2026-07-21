@@ -20,6 +20,7 @@ import type { ConversationsStore } from '../services/store/conversations-store.t
 import type { SettingsStore } from '../services/store/settings-store.ts';
 import type { AgentsStore } from '../services/store/agents-store.ts';
 import type { AgentFilesStore } from '../services/store/agent-files-store.ts';
+import type { MemoryService } from '../services/memory/memory-service.ts';
 import type { AgentFileError } from '../../shared/agent-files.ts';
 import type { Result } from '../../shared/result.ts';
 import { err } from '../../shared/result.ts';
@@ -33,6 +34,7 @@ export type IpcDeps = {
   readonly officeCatalog: OfficeCatalog;
   readonly agentsStore: AgentsStore;
   readonly agentFiles: AgentFilesStore;
+  readonly memory: MemoryService;
   // Filled by the background runner once it exists; until then it says so honestly and
   // the panel disables the button.
   readonly regenerateAgentFile: (doc: unknown) => Promise<Result<string, AgentFileError>>;
@@ -120,6 +122,14 @@ export const registerIpc = (deps: IpcDeps): void => {
   ipcMain.handle(CHANNEL.agentsSave, (_event, agent: unknown) => deps.agentsStore.save(agent));
   ipcMain.handle(CHANNEL.agentsRemove, (_event, name: unknown) => deps.agentsStore.remove(name));
   ipcMain.handle(CHANNEL.agentsRestore, (_event, name: unknown) => deps.agentsStore.restore(name));
+
+  ipcMain.handle(CHANNEL.memoryPending, () => deps.memory.pending());
+  ipcMain.handle(CHANNEL.memoryResolve, (_event, input: unknown) => deps.memory.resolve(input));
+  ipcMain.handle(CHANNEL.memoryRead, (_event, name: unknown) => deps.memory.read(name));
+  ipcMain.handle(CHANNEL.memoryWrite, (_event, input: unknown) => {
+    const draft = input as { name?: unknown; contents?: unknown } | undefined;
+    return deps.memory.write(draft?.name, draft?.contents);
+  });
 
   ipcMain.handle(CHANNEL.agentFileGet, (_event, doc: unknown) => deps.agentFiles.get(doc));
   ipcMain.handle(CHANNEL.agentFileSave, (_event, input: unknown) => {

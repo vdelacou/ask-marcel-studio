@@ -11,6 +11,8 @@
  */
 import type { Conversation, ConversationMeta, Settings } from './types.ts';
 import type { AgentFileDoc, AgentFileError } from './agent-files.ts';
+import type { MemoryFileName } from './memory-file-name.ts';
+import type { MemoryCandidate } from './memory-queue-doc.ts';
 import type { AgentView, SubAgent } from './agents-doc.ts';
 import type { OfficeCategory } from './office-catalog.ts';
 import type { OfficeStatus } from './office-status.ts';
@@ -46,10 +48,24 @@ export const CHANNEL = {
   officeStatus: 'office:status',
   officeLogin: 'office:login',
   officeCommands: 'office:commands',
+  memoryPending: 'memory:pending',
+  memoryResolve: 'memory:resolve',
+  memoryRead: 'memory:read',
+  memoryWrite: 'memory:write',
 } as const;
 
 // The one main-to-renderer stream. Everything the UI learns during a turn arrives here.
 export const CHAT_EVENT = 'chat:event';
+
+// A second, much quieter stream: the app has noticed something it would like to ask
+// about. Separate from the chat stream because it has nothing to do with a turn.
+export const MEMORY_EVENT = 'memory:event';
+
+export type MemoryEvent = { readonly type: 'pending-changed'; readonly count: number };
+
+//   accept  remember this term with this meaning
+//   reject  never mind
+export type MemoryResolveInput = { readonly id: string; readonly action: 'accept'; readonly detail: string } | { readonly id: string; readonly action: 'reject' };
 
 export type TurnUsage = {
   readonly inputTokens: number;
@@ -266,6 +282,14 @@ export type StudioApi = {
     readonly save: (agent: SubAgent) => Promise<Result<AgentView, StoreError>>;
     readonly remove: (name: string) => Promise<Result<null, StoreError>>;
     readonly restore: (name: string) => Promise<Result<AgentView, StoreError>>;
+  };
+  readonly memory: {
+    readonly pending: () => Promise<Result<readonly MemoryCandidate[], StoreError>>;
+    // Resolves with what is still waiting, so the dialog can move to the next question.
+    readonly resolve: (input: MemoryResolveInput) => Promise<Result<readonly MemoryCandidate[], StoreError>>;
+    readonly read: (name: MemoryFileName) => Promise<Result<string, StoreError>>;
+    readonly write: (input: { readonly name: MemoryFileName; readonly contents: string }) => Promise<Result<null, StoreError>>;
+    readonly onEvent: (listener: (event: MemoryEvent) => void) => () => void;
   };
   readonly agentFiles: {
     readonly get: (doc: AgentFileDoc) => Promise<Result<string, AgentFileError>>;
