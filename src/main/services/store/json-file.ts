@@ -73,6 +73,11 @@ export const writeJsonFileAtomic = async (path: string, contents: string): Promi
   }
 };
 
+// The same writer, named for what it is when the contents are not JSON. Atomicity has
+// nothing to do with the format; a signature or a skill deserves the same crash safety
+// a settings file gets.
+export const writeTextFileAtomic = writeJsonFileAtomic;
+
 export const removeFile = async (path: string): Promise<Result<null, JsonFileError>> => {
   try {
     await unlink(path);

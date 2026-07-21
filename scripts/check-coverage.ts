@@ -56,6 +56,10 @@ type SkipRule = {
 const BUN_TESTABLE_MAIN: ReadonlyArray<string> = [
   'src/main/services/store/json-file.ts',
   'src/main/services/store/conversations-store.ts',
+  'src/main/services/store/agent-files-store.ts',
+  'src/main/services/store/agents-store.ts',
+  // Pure value derived from the built-in agent definitions (import type only).
+  'src/main/services/agent/builtin-agents.ts',
   'src/main/services/skills/skills-service.ts',
   'src/main/services/office/office-service.ts',
   'src/main/services/python/python-service.ts',
