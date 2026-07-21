@@ -16,10 +16,22 @@ import type { Result } from './result.ts';
 import { err, ok } from './result.ts';
 
 // What a helper is allowed to touch. Deliberately short: these are the tools the
-// bundled reader uses, plus the two web ones, and every entry is something a
+// bundled reader uses, plus the web one, and every entry is something a
 // non-technical user can be told the meaning of.
-export const AGENT_TOOL_OPTIONS = ['Bash', 'Read', 'Grep', 'Glob', 'Write', 'Edit', 'WebSearch', 'WebFetch'] as const;
+export const AGENT_TOOL_OPTIONS = ['Bash', 'Read', 'Grep', 'Glob', 'Write', 'Edit', 'WebFetch'] as const;
 export type AgentToolName = (typeof AGENT_TOOL_OPTIONS)[number];
+
+// Tools the app used to offer and no longer does. One list, two jobs: the agent is
+// started with these in `disallowedTools`, and a helper saved while they were still
+// on offer loads with them dropped instead of being refused. Dropping the name from
+// the list above without recording it here would make an older helpers file
+// unreadable, taking every helper in it down with the retired one.
+//
+// WebSearch is Anthropic's own server-side tool. Pointed at any other provider it
+// comes back empty rather than failing, and the agent then answers from memory as
+// if it had searched. A tool that says "no results" when it means "I cannot" is
+// worse than no tool.
+export const WITHDRAWN_TOOLS = ['WebSearch'] as const;
 
 export type SubAgent = {
   // Becomes the key the SDK routes on, so it has to be a plain identifier.
@@ -59,6 +71,7 @@ export const validateSubAgent = (raw: unknown): Result<SubAgent, AgentsDocError>
 
   const chosen: AgentToolName[] = [];
   for (const tool of tools) {
+    if (WITHDRAWN_TOOLS.some((withdrawn) => withdrawn === tool)) continue;
     const known = AGENT_TOOL_OPTIONS.find((option) => option === tool);
     if (known === undefined) return invalid(`${name} asks for a tool that does not exist: ${String(tool)}`);
     if (!chosen.includes(known)) chosen.push(known);

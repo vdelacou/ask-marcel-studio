@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { EMPTY_AGENTS_DOC, mergeAgents, parseAgentsDoc, serialiseAgentsDoc, toSdkAgents, validateAgentsDoc, validateSubAgent } from './agents-doc.ts';
+import { AGENT_TOOL_OPTIONS, EMPTY_AGENTS_DOC, mergeAgents, parseAgentsDoc, serialiseAgentsDoc, toSdkAgents, validateAgentsDoc, validateSubAgent } from './agents-doc.ts';
 import type { SubAgent } from './agents-doc.ts';
 import { unwrap } from './result.ts';
 
@@ -40,6 +40,14 @@ describe('checking a helper before it is stored', () => {
 
   test('a tool that does not exist is refused rather than silently dropped', () => {
     expect(validateSubAgent({ ...agent(), tools: ['Bash', 'LaunchMissiles'] }).ok).toBe(false);
+  });
+
+  test('web search can no longer be given to a helper', () => {
+    expect(AGENT_TOOL_OPTIONS).not.toContain('WebSearch');
+  });
+
+  test('a helper saved before web search was withdrawn still loads, without that tool', () => {
+    expect(unwrap(validateSubAgent({ ...agent(), tools: ['Bash', 'WebSearch'] })).tools).toEqual(['Bash']);
   });
 
   test('the same tool listed twice is stored once', () => {

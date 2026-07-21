@@ -73,6 +73,8 @@ export const toolLabel = (name: string, input: unknown): string => {
       return truncate(quoted(field(input, 'pattern'), 'Searching for', 'Searching your files'));
     case 'Glob':
       return 'Looking for files';
+    // Withdrawn (see WITHDRAWN_TOOLS): no new turn can produce one. Kept so the
+    // conversations that already contain a search still read as sentences.
     case 'WebSearch':
       return truncate(quoted(field(input, 'query'), 'Searching the web for', 'Searching the web'));
     case 'WebFetch': {

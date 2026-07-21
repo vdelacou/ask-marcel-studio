@@ -17,6 +17,7 @@ import { formatModelRef, parseModelRef } from '../../../shared/model-ref.ts';
 import { appendTurn } from '../../../shared/conversation-doc.ts';
 import { rewriteSlashSkill } from '../../../shared/slash-skill.ts';
 import { formatError } from '../../../shared/utilities/format-error.ts';
+import { WITHDRAWN_TOOLS } from '../../../shared/agents-doc.ts';
 import type { SdkAgentDefinition } from '../../../shared/agents-doc.ts';
 import type { ChatError, ChatSendInput, UIEvent } from '../../../shared/ipc-contract.ts';
 import type { Conversation, Provider, Settings } from '../../../shared/types.ts';
@@ -118,6 +119,11 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
           // agent files, so there is nowhere on disk for them to come from.
           systemPrompt: { type: 'preset', preset: 'claude_code', append: glossary.length === 0 ? deps.corePrompt : `${deps.corePrompt}\n\n${glossary}` },
           agents,
+          // The main agent otherwise gets the whole Claude Code toolset, helper
+          // checkboxes notwithstanding. `disallowedTools` takes the withdrawn ones out
+          // of the model's context altogether, so it never offers a search it cannot
+          // actually run.
+          disallowedTools: [...WITHDRAWN_TOOLS],
           settingSources: ['user'],
           // No approval prompts anywhere in this app: a PreToolUse hook denial
           // short-circuits regardless of the permission mode, which is what lets the
