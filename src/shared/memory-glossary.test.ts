@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { buildGlossaryBlock } from './memory-glossary.ts';
+import { buildGlossaryBlock, isNoteTooLong, NOTE_LIMIT, roomLeftInNote } from './memory-glossary.ts';
 
 const files = (over: Partial<Parameters<typeof buildGlossaryBlock>[0]> = {}): Parameters<typeof buildGlossaryBlock>[0] => ({ jargon: '', team: '', people: '', ...over });
 
@@ -101,5 +101,33 @@ describe('what the block does with whitespace and cut lines', () => {
     const whole = buildGlossaryBlock(files({ jargon }));
 
     expect(buildGlossaryBlock(files({ jargon }), whole.length - 5)).toContain('- **AAA**: one\n- **BBB**: two');
+  });
+});
+
+describe('the cap on a note, and why it is where it is', () => {
+  test('three notes filled to the limit are still passed whole', () => {
+    // The invariant the whole design rests on: what the panel lets you save is what the
+    // agent reads. If this ever fails, either the note limit grew or the block shrank,
+    // and one of them has to move back.
+    const full = 'x'.repeat(NOTE_LIMIT);
+
+    const block = buildGlossaryBlock({ jargon: full, team: full, people: full });
+
+    expect(block).not.toContain('Cut short');
+    expect(block).toContain(full);
+  });
+
+  test('a note at exactly the limit is allowed, one character more is not', () => {
+    expect(isNoteTooLong('x'.repeat(NOTE_LIMIT))).toBe(false);
+    expect(isNoteTooLong('x'.repeat(NOTE_LIMIT + 1))).toBe(true);
+  });
+
+  test('an empty note has the whole limit left, and a full one has none', () => {
+    expect(roomLeftInNote('')).toBe(NOTE_LIMIT);
+    expect(roomLeftInNote('x'.repeat(NOTE_LIMIT))).toBe(0);
+  });
+
+  test('past the limit the room left goes negative, so the panel can say by how much', () => {
+    expect(roomLeftInNote('x'.repeat(NOTE_LIMIT + 12))).toBe(-12);
   });
 });

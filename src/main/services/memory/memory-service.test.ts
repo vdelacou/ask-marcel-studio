@@ -6,6 +6,7 @@ import { createMemoryService } from './memory-service.ts';
 import type { MemoryService } from './memory-service.ts';
 import type { MemoryEvent } from '../../../shared/ipc-contract.ts';
 import type { RawCandidate } from '../../../shared/memory-extract.ts';
+import { NOTE_LIMIT } from '../../../shared/memory-glossary.ts';
 
 let userData = '';
 let service: MemoryService;
@@ -146,6 +147,38 @@ describe('the notes themselves', () => {
   test('a name that could reach a path is refused', async () => {
     expect((await service.read('../../etc/passwd')).ok).toBe(false);
     expect((await service.write('../escape', 'x')).ok).toBe(false);
+  });
+
+  test('a note longer than the agent will read is refused, not trimmed', async () => {
+    const tooLong = 'x'.repeat(NOTE_LIMIT + 1);
+
+    const written = await service.write('jargon', tooLong);
+
+    expect(written.ok).toBe(false);
+    if (written.ok) return;
+    expect(written.error.kind).toBe('invalid');
+    // And nothing landed: a half-saved note would be the very thing this prevents.
+    expect(await service.read('jargon')).toEqual({ ok: true, value: '' });
+  });
+
+  test('a note at exactly the limit still saves', async () => {
+    expect((await service.write('jargon', 'x'.repeat(NOTE_LIMIT))).ok).toBe(true);
+  });
+
+  test('accepting a word into a note that is already full is refused, and the question stays', async () => {
+    await service.write('jargon', `# Words we use\n\n- **PAD**: ${'x'.repeat(NOTE_LIMIT - 60)}`);
+    await service.addCandidates([found({ term: 'SEAO', detail: 'Southeast Asia and Oceania' })], 'c1');
+    const waiting = await service.pending();
+    const id = waiting.ok ? waiting.value[0]?.id : undefined;
+
+    const resolved = await service.resolve({ id, action: 'accept', detail: 'Southeast Asia and Oceania' });
+
+    expect(resolved.ok).toBe(false);
+    if (resolved.ok) return;
+    expect(resolved.error.message).toContain('full');
+    // Still queued, so it can be accepted once there is room for it.
+    const stillWaiting = await service.pending();
+    expect(stillWaiting.ok && stillWaiting.value).toHaveLength(1);
   });
 
   test('a note that is not text is refused', async () => {
