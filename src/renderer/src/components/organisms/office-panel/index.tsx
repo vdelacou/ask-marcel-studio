@@ -1,5 +1,17 @@
 import type { FC } from 'react';
 import { Button } from '../../atoms/button/index.tsx';
+import { CategoryToggleRow } from '../../molecules/category-toggle-row/index.tsx';
+
+// One area of Microsoft 365, ready to be switched on or off. Built by the page shell
+// (lib/office-categories) from the CLI's own catalog.
+export type OfficeCategoryRow = {
+  readonly name: string;
+  readonly label: string;
+  readonly commandCount: number;
+  readonly isEnabled: boolean;
+  readonly isLocked: boolean;
+  readonly commands: readonly { readonly name: string; readonly summary: string }[];
+};
 
 // One granted permission, already said in words by the page shell (lib/office-scopes).
 export type OfficeScopeRow = { readonly scope: string; readonly label: string };
@@ -13,7 +25,11 @@ export type OfficePanelProps = {
   isLoggingIn: boolean;
   error?: string;
   isScopesOpen: boolean;
+  categories: readonly OfficeCategoryRow[];
+  expandedCategory?: string;
   onToggleScopes: () => void;
+  onToggleCategory: (name: string) => void;
+  onExpandCategory: (name: string) => void;
   onLogin: () => void;
 };
 
@@ -28,7 +44,18 @@ const buttonLabel = (view: OfficeView, isLoggingIn: boolean): string => {
   return view.kind === 'signed-in' ? 'Reconnect' : 'Sign in';
 };
 
-export const OfficePanel: FC<OfficePanelProps> = ({ view, isLoggingIn, error, isScopesOpen, onToggleScopes, onLogin }) => (
+export const OfficePanel: FC<OfficePanelProps> = ({
+  view,
+  isLoggingIn,
+  error,
+  isScopesOpen,
+  categories,
+  expandedCategory,
+  onToggleScopes,
+  onToggleCategory,
+  onExpandCategory,
+  onLogin,
+}) => (
   <section className="flex flex-col gap-y-4">
     <header className="flex items-baseline justify-between gap-x-4">
       <div className="flex flex-col gap-y-1">
@@ -69,6 +96,28 @@ export const OfficePanel: FC<OfficePanelProps> = ({ view, isLoggingIn, error, is
       <p role="alert" className="rounded-md border border-danger bg-danger-wash px-3 py-2 text-xs text-danger">
         {error}
       </p>
+    )}
+
+    {categories.length > 0 && (
+      <div className="flex flex-col gap-y-2 border-t border-border-subtle pt-4">
+        <div className="flex flex-col gap-y-1">
+          <h3 className="text-sm font-semibold text-ink">What Marcel may use</h3>
+          <p className="text-sm text-ink-muted">Switch off anything you would rather it left alone. Open a row to see exactly what it covers.</p>
+        </div>
+        {categories.map((category) => (
+          <CategoryToggleRow
+            key={category.name}
+            label={category.label}
+            commandCount={category.commandCount}
+            isEnabled={category.isEnabled}
+            isLocked={category.isLocked}
+            isExpanded={category.name === expandedCategory}
+            commands={category.commands}
+            onToggle={() => onToggleCategory(category.name)}
+            onToggleExpand={() => onExpandCategory(category.name)}
+          />
+        ))}
+      </div>
     )}
   </section>
 );

@@ -16,12 +16,14 @@ import { NoProviderNotice } from './components/organisms/no-provider-notice/inde
 import { EmptyConversations } from './components/organisms/empty-conversations/index.tsx';
 import { Sidebar } from './components/organisms/sidebar/index.tsx';
 import { SettingsOverlay } from './components/organisms/settings-overlay/index.tsx';
+import { OfficeStatusPopover } from './components/organisms/office-status-popover/index.tsx';
 import { Toast } from './components/molecules/toast/index.tsx';
 import { ChatHeader } from './components/organisms/chat-header/index.tsx';
 import { ChatPage } from './page/chat-page.tsx';
 import { SettingsPage } from './page/settings-page.tsx';
 import { useConversations } from './hooks/use-conversations.ts';
 import { useChatViews } from './hooks/use-chat-views.ts';
+import { useOfficeHealth } from './hooks/use-office-health.ts';
 import { modelOptions } from './lib/model-options.ts';
 import type { ModelOption } from './lib/model-options.ts';
 import { formatModelRef } from '../../shared/model-ref.ts';
@@ -81,12 +83,27 @@ export const App: FC = () => {
     if (activeId !== undefined) cancel(activeId);
   }, [activeId, cancel]);
 
-  const openSettings = useCallback((): void => setSettingsOpen(true), []);
-  // Closing may mean a provider was just added, so re-resolve the default model.
+  const office = useOfficeHealth();
+  const [officeOpen, setOfficeOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<string | undefined>(undefined);
+
+  const openSettings = useCallback((): void => {
+    setSettingsSection(undefined);
+    setSettingsOpen(true);
+  }, []);
+  const { reload: reloadOffice } = office;
+  // Closing may mean a provider was just added, so re-resolve the default model, and a
+  // sign-in may have happened in there too.
   const closeSettings = useCallback((): void => {
     setSettingsOpen(false);
     bootstrap();
-  }, [bootstrap]);
+    reloadOffice();
+  }, [bootstrap, reloadOffice]);
+  const openOfficeSettings = useCallback((): void => {
+    setOfficeOpen(false);
+    setSettingsSection('office');
+    setSettingsOpen(true);
+  }, []);
 
   // Escape closes the overlay. Here, not in the modal, so the modal stays prop-pure.
   useEffect(() => {
@@ -122,6 +139,23 @@ export const App: FC = () => {
       draftTitle={conversations.draftTitle}
       {...(conversations.confirmingDeleteId === undefined ? {} : { confirmingDeleteId: conversations.confirmingDeleteId })}
       isSettingsActive={settingsOpen}
+      officeHealth={office.view.health}
+      officeLabel={office.view.message}
+      {...(officeOpen
+        ? {
+            officePopover: (
+              <OfficeStatusPopover
+                health={office.view.health}
+                message={office.view.message}
+                isRefreshing={office.isRefreshing}
+                {...(office.error === undefined ? {} : { error: office.error })}
+                onRefresh={office.refresh}
+                onOpenSettings={openOfficeSettings}
+              />
+            ),
+          }
+        : {})}
+      onToggleOfficeStatus={() => setOfficeOpen((open) => !open)}
       onNew={create}
       onSelect={conversations.select}
       onOpenSettings={openSettings}
@@ -150,7 +184,7 @@ export const App: FC = () => {
       </AppFrame>
       {settingsOpen && (
         <SettingsOverlay onClose={closeSettings}>
-          <SettingsPage />
+          <SettingsPage {...(settingsSection === undefined ? {} : { initialSection: settingsSection })} onOfficeChanged={reloadOffice} />
         </SettingsOverlay>
       )}
       {conversations.error !== undefined && <Toast message={conversations.error} onDismiss={conversations.dismissError} />}

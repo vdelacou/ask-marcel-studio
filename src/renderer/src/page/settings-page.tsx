@@ -21,6 +21,10 @@ import type { ProviderDraft } from '../components/molecules/provider-form/index.
 import { draftsToSettings, emptyDraft, settingsToDrafts } from '../lib/provider-draft.ts';
 import { modelOptionsFromDrafts } from '../lib/model-options.ts';
 import { scopeRows, scopesSummary } from '../lib/office-scopes.ts';
+import { categoryRows } from '../lib/office-categories.ts';
+import { toggleCategory } from '../../../shared/office-policy.ts';
+import type { OfficeCategory } from '../../../shared/office-catalog.ts';
+import type { OfficePolicy } from '../../../shared/types.ts';
 
 // The left-menu structure. Models and Skills configure the agent; Microsoft 365 is a
 // connected app. Each id matches a section rendered on the right.
@@ -35,8 +39,17 @@ const NAV_GROUPS: readonly SettingsNavGroup[] = [
   { heading: 'Connections', items: [{ id: 'office', label: 'Microsoft 365', icon: 'office' }] },
 ];
 
-export const SettingsPage: FC = () => {
-  const [section, setSection] = useState('models');
+export type SettingsPageProps = {
+  // Which section to open on, when the user arrived from somewhere specific (the
+  // Microsoft 365 dot, say) rather than from the Settings button.
+  initialSection?: string;
+  // Called after anything that could change the sign-in, so the dot in the sidebar
+  // updates without waiting for its next poll.
+  onOfficeChanged?: () => void;
+};
+
+export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeChanged }) => {
+  const [section, setSection] = useState(initialSection ?? 'models');
   const [drafts, setDrafts] = useState<readonly ProviderDraft[]>([]);
   const [expandedRowId, setExpandedRowId] = useState<string | undefined>(undefined);
   const [defaultModel, setDefaultModel] = useState<string | undefined>(undefined);
@@ -48,6 +61,9 @@ export const SettingsPage: FC = () => {
   const [isScopesOpen, setIsScopesOpen] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [officeError, setOfficeError] = useState<string | undefined>(undefined);
+  const [officeCatalog, setOfficeCatalog] = useState<readonly OfficeCategory[]>([]);
+  const [officePolicy, setOfficePolicy] = useState<OfficePolicy | undefined>(undefined);
+  const [expandedCategory, setExpandedCategory] = useState<string | undefined>(undefined);
 
   const loadOffice = useCallback((): void => {
     void (async (): Promise<void> => {
@@ -64,6 +80,12 @@ export const SettingsPage: FC = () => {
 
   useEffect(loadOffice, [loadOffice]);
 
+  useEffect(() => {
+    void (async (): Promise<void> => {
+      setOfficeCatalog(await studio.office.commands());
+    })();
+  }, []);
+
   const onLogin = useCallback((): void => {
     setOfficeError(undefined);
     setIsLoggingIn(true);
@@ -75,8 +97,9 @@ export const SettingsPage: FC = () => {
         return;
       }
       loadOffice();
+      onOfficeChanged?.();
     })();
-  }, [loadOffice]);
+  }, [loadOffice, onOfficeChanged]);
 
   const loadSkills = useCallback((): void => {
     void (async (): Promise<void> => {
@@ -131,6 +154,7 @@ export const SettingsPage: FC = () => {
       }
       setDrafts(settingsToDrafts(loaded.value));
       setDefaultModel(loaded.value.defaultModel);
+      setOfficePolicy(loaded.value.officePolicy);
     })();
   }, []);
 
@@ -158,9 +182,9 @@ export const SettingsPage: FC = () => {
 
   // A provider's Save button persists the whole set. Re-seed from what main echoed back
   // (trimmed, ids assigned) so the form shows exactly what was stored.
-  const persist = useCallback((nextDrafts: readonly ProviderDraft[], nextDefaultModel: string | undefined): void => {
+  const persist = useCallback((nextDrafts: readonly ProviderDraft[], nextDefaultModel: string | undefined, nextPolicy: OfficePolicy | undefined): void => {
     void (async (): Promise<void> => {
-      const saved = await studio.settings.save(draftsToSettings(nextDrafts, nextDefaultModel));
+      const saved = await studio.settings.save(draftsToSettings(nextDrafts, nextDefaultModel, nextPolicy));
       if (!saved.ok) {
         setNotice({ tone: 'error', message: saved.error.message });
         return;
@@ -171,8 +195,8 @@ export const SettingsPage: FC = () => {
   }, []);
 
   const onSave = useCallback((): void => {
-    persist(drafts, defaultModel);
-  }, [persist, drafts, defaultModel]);
+    persist(drafts, defaultModel, officePolicy);
+  }, [persist, drafts, defaultModel, officePolicy]);
 
   // The empty option means "no explicit choice", which is stored as an absent field,
   // not as an empty reference.
@@ -180,9 +204,23 @@ export const SettingsPage: FC = () => {
     (reference: string): void => {
       const next = reference.length === 0 ? undefined : reference;
       setDefaultModel(next);
-      persist(drafts, next);
+      persist(drafts, next, officePolicy);
     },
-    [persist, drafts]
+    [persist, drafts, officePolicy]
+  );
+
+  // Optimistic: the switch moves at once and the save follows. A save that fails
+  // reports through the same notice as everything else, and the next settings read
+  // puts the switch back where it belongs.
+  const onToggleCategory = useCallback(
+    (name: string): void => {
+      const rows = categoryRows(officeCatalog, officePolicy);
+      const isEnabled = rows.find((row) => row.name === name)?.isEnabled ?? true;
+      const next = toggleCategory(officePolicy, name, !isEnabled);
+      setOfficePolicy(next);
+      persist(drafts, defaultModel, next);
+    },
+    [persist, drafts, defaultModel, officeCatalog, officePolicy]
   );
 
   return (
@@ -209,7 +247,11 @@ export const SettingsPage: FC = () => {
           isLoggingIn={isLoggingIn}
           error={officeError}
           isScopesOpen={isScopesOpen}
+          categories={categoryRows(officeCatalog, officePolicy)}
+          {...(expandedCategory === undefined ? {} : { expandedCategory })}
           onToggleScopes={() => setIsScopesOpen((open) => !open)}
+          onToggleCategory={onToggleCategory}
+          onExpandCategory={(name) => setExpandedCategory((current) => (current === name ? undefined : name))}
           onLogin={onLogin}
         />
       )}
