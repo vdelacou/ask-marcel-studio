@@ -22,7 +22,9 @@ const LABELS: Readonly<Record<string, string>> = {
   teams: 'Teams',
   tasks: 'Tasks and Planner',
   notes: 'OneNote',
-  meta: 'Sign-in checks',
+  // Not one app: search across everything, who the user is, paging through a long
+  // answer, reading a file already on the machine, and the sign-in self-check.
+  meta: 'Search and basics',
 };
 
 export const categoryLabel = (name: string): string => LABELS[name] ?? name;
@@ -44,8 +46,8 @@ export type CategoryRow = {
   readonly label: string;
   readonly commandCount: number;
   readonly isEnabled: boolean;
-  // Switching the sign-in checks off would leave the agent unable to say why anything
-  // failed, so that row shows its commands but has no switch.
+  // Everything else leans on this group: the ids other commands need, paging, and the
+  // check that says why a call failed. So that row shows its commands but has no switch.
   readonly isLocked: boolean;
   readonly commands: readonly { readonly name: string; readonly summary: string }[];
 };

@@ -46,11 +46,13 @@ export const CategoryToggleRow: FC<CategoryToggleRowProps> = ({ label, commandCo
       {isLocked ? <span className="shrink-0 text-xs text-ink-muted">Always on</span> : <Toggle checked={isEnabled} label={`Allow ${label}`} onChange={onToggle} />}
     </div>
     {isExpanded && (
-      <ul className="flex flex-col gap-y-1 border-t border-border-subtle px-3 py-2">
+      <ul className="flex flex-col gap-y-2 border-t border-border-subtle px-3 py-2">
         {commands.map((command) => (
           <li key={command.name} className="flex flex-wrap items-baseline gap-x-2">
             <span className="font-mono text-[11px] text-ink">{command.name}</span>
-            <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">{command.summary}</span>
+            {/* Wraps rather than truncates: a description cut off mid-word is the one
+                thing this list exists to avoid. */}
+            <span className="min-w-0 flex-1 text-xs leading-snug text-ink-muted">{command.summary}</span>
           </li>
         ))}
       </ul>

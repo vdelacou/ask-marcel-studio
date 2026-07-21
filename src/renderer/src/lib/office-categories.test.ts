@@ -43,7 +43,7 @@ describe('shortening a command summary to the part a person reads', () => {
 
 describe('building the rows for the settings toggles', () => {
   test('every category is a row, in the catalog order', () => {
-    expect(categoryRows(catalog, undefined).map((r) => r.label)).toEqual(['Email', 'Calendar', 'Sign-in checks']);
+    expect(categoryRows(catalog, undefined).map((r) => r.label)).toEqual(['Email', 'Calendar', 'Search and basics']);
   });
 
   test('with nothing switched off everything is on', () => {
