@@ -14,6 +14,8 @@ import { CHANNEL } from '../../shared/ipc-contract.ts';
 import { modelRefIsConfigured } from '../../shared/model-ref.ts';
 import type { AgentRuntime } from '../services/agent/agent-runtime.ts';
 import type { SkillsService } from '../services/skills/skills-service.ts';
+import { parseModelTestTarget } from '../../shared/model-test.ts';
+import type { ModelTestService } from '../services/models/model-test-service.ts';
 import type { OfficeService } from '../services/office/office-service.ts';
 import type { OfficeCatalog } from '../services/office/office-catalog-io.ts';
 import type { ConversationsStore } from '../services/store/conversations-store.ts';
@@ -30,6 +32,7 @@ export type IpcDeps = {
   readonly conversations: ConversationsStore;
   readonly agent: AgentRuntime;
   readonly skills: SkillsService;
+  readonly modelTest: ModelTestService;
   readonly office: OfficeService;
   readonly officeCatalog: OfficeCatalog;
   readonly agentsStore: AgentsStore;
@@ -93,6 +96,10 @@ export const registerIpc = (deps: IpcDeps): void => {
 
   // Status and login take no argument: the CLI reads the one cached token, and login
   // is a single-flight action with no parameters.
+  // The target is a renderer object, so it is parsed before it is used. It carries the
+  // key as typed, not as saved: the useful moment to test one is before committing it.
+  ipcMain.handle(CHANNEL.modelsTest, (_event, input: unknown) => deps.modelTest.test(parseModelTestTarget(input)));
+
   ipcMain.handle(CHANNEL.officeStatus, () => deps.office.status());
   // Only a literal true forces a full re-capture; anything else crossing IPC is an
   // ordinary sign-in.

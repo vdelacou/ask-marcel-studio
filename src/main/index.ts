@@ -31,6 +31,7 @@ import { createRunAgentText } from './services/background/background-agent-io.ts
 import { createVoiceProfileJob } from './services/background/voice-profile-job.ts';
 import { createSignatureService } from './services/office/signature-service.ts';
 import { parseAgentFileDoc } from '../shared/agent-files.ts';
+import { createModelTestService } from './services/models/model-test-service.ts';
 import { backgroundWorkspaceDir, signatureFilePath, voiceProfileFilePath } from '../shared/paths.ts';
 import { BUILTIN_AGENTS } from './services/agent/builtin-agents.ts';
 import { EMPTY_AGENTS_DOC, mergeAgents, toSdkAgents } from '../shared/agents-doc.ts';
@@ -296,6 +297,8 @@ const buildRuntime = (
 
   registerIpc({
     settings,
+    // The real fetch, with the deadline the service puts on every call.
+    modelTest: createModelTestService({ fetch: (url, init) => fetch(url, init) }),
     conversations,
     agent,
     skills,

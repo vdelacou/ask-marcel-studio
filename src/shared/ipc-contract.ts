@@ -14,6 +14,7 @@ import type { AgentFileDoc, AgentFileError } from './agent-files.ts';
 import type { MemoryFileName } from './memory-file-name.ts';
 import type { MemoryCandidate } from './memory-queue-doc.ts';
 import type { AgentView, SubAgent } from './agents-doc.ts';
+import type { ModelTestTarget, ModelTestVerdict } from './model-test.ts';
 import type { OfficeCategory } from './office-catalog.ts';
 import type { OfficeStatus } from './office-status.ts';
 import type { Result } from './result.ts';
@@ -45,6 +46,7 @@ export const CHANNEL = {
   agentFileGet: 'agent-file:get',
   agentFileSave: 'agent-file:save',
   agentFileRegenerate: 'agent-file:regenerate',
+  modelsTest: 'models:test',
   officeStatus: 'office:status',
   officeLogin: 'office:login',
   officeCommands: 'office:commands',
@@ -297,6 +299,12 @@ export type StudioApi = {
     // Resolves with the new contents once the background job that writes it finishes.
     // Long, like login: the renderer shows a spinner rather than polling.
     readonly regenerate: (doc: AgentFileDoc) => Promise<Result<string, AgentFileError>>;
+  };
+  readonly models: {
+    // Asks the provider whether this key and this model name actually work, with one
+    // one-token request. No Result: not reaching the provider is one of the answers,
+    // and a malformed request from this app would be a bug, not a state to render.
+    readonly test: (target: ModelTestTarget) => Promise<ModelTestVerdict>;
   };
   readonly office: {
     // A cheap local token decode: signed-out resolves ok with { signedIn: false }.

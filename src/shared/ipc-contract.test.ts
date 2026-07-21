@@ -36,6 +36,7 @@ describe('the channels main and the renderer agree on', () => {
       agentFileGet: 'agent-file:get',
       agentFileSave: 'agent-file:save',
       agentFileRegenerate: 'agent-file:regenerate',
+      modelsTest: 'models:test',
       officeStatus: 'office:status',
       officeLogin: 'office:login',
       officeCommands: 'office:commands',

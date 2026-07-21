@@ -95,6 +95,9 @@ const api: StudioApi = {
     save: (input) => ipcRenderer.invoke(CHANNEL.agentFileSave, input),
     regenerate: (doc) => ipcRenderer.invoke(CHANNEL.agentFileRegenerate, doc),
   },
+  models: {
+    test: (target) => ipcRenderer.invoke(CHANNEL.modelsTest, target),
+  },
   office: {
     status: () => ipcRenderer.invoke(CHANNEL.officeStatus),
     login: (options) => ipcRenderer.invoke(CHANNEL.officeLogin, options),
