@@ -9,21 +9,29 @@
  * The single top-level catch lives here (rule 17): everything below returns Result.
  */
 import { dirname, join } from 'node:path';
+import { stat } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { electronApp, is, optimizer } from '@electron-toolkit/utils';
 import { BrowserWindow, app, shell } from 'electron';
 import { CHAT_EVENT } from '../shared/ipc-contract.ts';
 import { registerIpc } from './ipc/register.ts';
 import { createAgentRuntime } from './services/agent/agent-runtime.ts';
-import { readAgentCore } from './services/agent/agent-core-io.ts';
+import { readAgentCore, readBundledText } from './services/agent/agent-core-io.ts';
 import { createConversationsStore } from './services/store/conversations-store.ts';
 import { createSettingsStore } from './services/store/settings-store.ts';
 import { createSkillsService } from './services/skills/skills-service.ts';
 import { createAgentsStore } from './services/store/agents-store.ts';
 import { createAgentFilesStore } from './services/store/agent-files-store.ts';
+import { createBackgroundRunner } from './services/background/background-runner.ts';
+import { createBackgroundJobs } from './services/background/background-jobs.ts';
+import { createRunAgentText } from './services/background/background-agent-io.ts';
+import { createVoiceProfileJob } from './services/background/voice-profile-job.ts';
+import { createSignatureService } from './services/office/signature-service.ts';
+import { parseAgentFileDoc } from '../shared/agent-files.ts';
+import { backgroundWorkspaceDir, signatureFilePath, voiceProfileFilePath } from '../shared/paths.ts';
 import { BUILTIN_AGENTS } from './services/agent/builtin-agents.ts';
 import { EMPTY_AGENTS_DOC, mergeAgents, toSdkAgents } from '../shared/agents-doc.ts';
-import { err } from '../shared/result.ts';
+import { err, ok } from '../shared/result.ts';
 import { createGateway } from './services/gateway/gateway-server.ts';
 import { createOfficeService } from './services/office/office-service.ts';
 import { createOfficeRun, writeOfficeShim } from './services/office/office-io.ts';
@@ -37,6 +45,7 @@ import type { ToolCliLocation } from './services/shims/tool-shims-io.ts';
 import type { AgentRuntime } from './services/agent/agent-runtime.ts';
 import type { SkillsService } from './services/skills/skills-service.ts';
 import type { Gateway } from './services/gateway/gateway-server.ts';
+import type { BackgroundRunner } from './services/background/background-runner.ts';
 import type { UIEvent } from '../shared/ipc-contract.ts';
 
 const createWindow = (): BrowserWindow => {
@@ -89,6 +98,9 @@ const builtinSkillsSource = (): string => (app.isPackaged ? join(process.resourc
 // Same dev/packaged split as the skills; the read (and its try/catch) lives in
 // agent-core-io. Read once at launch.
 const agentCoreSource = (): string => (app.isPackaged ? join(process.resourcesPath, 'agent-core', 'core.md') : join(__dirname, '../../resources/agent-core/core.md'));
+
+// The prompts for work the app does on its own. Same dev/packaged split.
+const backgroundPromptSource = (name: string): string => (app.isPackaged ? join(process.resourcesPath, 'background', name) : join(__dirname, '../../resources/background', name));
 
 // The two on-demand M365 skills the app now ships, carved by trigger (read vs draft).
 const BUILTIN_SKILLS = ['answer-from-m365', 'draft-outlook-email'];
@@ -162,7 +174,17 @@ const startPython = (userData: string): void => {
   void python.provision();
 };
 
-const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; skills: SkillsService; gateway: Gateway } => {
+// Whether a file exists and has something in it. Used to decide whether a prefill has
+// anything to do; an unreadable file counts as absent, which means it is tried again.
+const hasContent = async (path: string): Promise<boolean> => {
+  try {
+    return (await stat(path)).size > 0;
+  } catch {
+    return false;
+  }
+};
+
+const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; skills: SkillsService; gateway: Gateway; background: BackgroundRunner } => {
   const userData = app.getPath('userData');
   const now = (): string => new Date().toISOString();
   const settings = createSettingsStore({ userData });
@@ -205,7 +227,8 @@ const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; sk
   });
 
   const location = officeCliLocation();
-  const office = createOfficeService(createOfficeRun(location, process.env));
+  const officeRun = createOfficeRun(location, process.env);
+  const office = createOfficeService(officeRun);
   // Rewritten every launch: process.execPath and the cli.js path both move across
   // updates, so a stale shim would exec a binary that is gone. Not awaited, like the
   // skills seed: it lands long before the first turn could call ask-marcel-office.
@@ -214,6 +237,37 @@ const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; sk
   void writeToolShims(userData, toolCliLocation());
   // Build the per-user Python venv in the background so python3 resolves offline.
   startPython(userData);
+
+  // Work the app does for the user without being asked: their signature, and how they
+  // write. One at a time, never while the app is closing.
+  const background = createBackgroundRunner({
+    runJob: (job, signal) => jobs.run(job, signal),
+    onStatus: () => undefined,
+  });
+  const jobs = createBackgroundJobs({
+    settings,
+    gateway,
+    userData,
+    workspaceDir: backgroundWorkspaceDir(userData),
+    inheritedEnv: process.env,
+    officeCommandCategories: officeCatalog.commandCategories(),
+    signature: createSignatureService({
+      run: officeRun,
+      signaturePath: signatureFilePath(userData),
+      hasSignature: () => hasContent(signatureFilePath(userData)),
+      wroteSomething: () => hasContent(signatureFilePath(userData)),
+    }),
+    voice: createVoiceProfileJob({
+      runAgentText: createRunAgentText(),
+      prompt: readBundledText(backgroundPromptSource('voice-profile-prompt.md')),
+      hasProfile: () => hasContent(voiceProfileFilePath(userData)),
+      write: async (markdown) => {
+        const saved = await agentFiles.save('voice-profile', markdown);
+        return saved.ok ? ok(null) : err(saved.error.message);
+      },
+      session: () => jobs.session(),
+    }),
+  });
 
   registerIpc({
     settings,
@@ -224,11 +278,17 @@ const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; sk
     officeCatalog,
     agentsStore,
     agentFiles,
-    // Filled in when the background runner lands; until then the panel's Regenerate
-    // button is disabled by this very answer.
-    regenerateAgentFile: () => Promise.resolve(err({ kind: 'unavailable', message: 'this cannot be rebuilt automatically yet' })),
+    // Rebuilding a document is the same job the app runs on its own, asked for
+    // explicitly. It resolves with the new contents so the panel shows them at once.
+    regenerateAgentFile: async (doc) => {
+      const checked = parseAgentFileDoc(doc);
+      if (!checked.ok) return checked;
+      const done = await background.enqueue(checked.value === 'signature' ? { kind: 'signature-prefill', force: true } : { kind: 'voice-profile', force: true });
+      if (!done.ok) return err({ kind: done.error.kind === 'skipped' ? 'unavailable' : 'write-failed', message: done.error.message });
+      return agentFiles.get(checked.value);
+    },
   });
-  return { agent, skills, gateway };
+  return { agent, skills, gateway, background };
 };
 
 void app.whenReady().then(() => {
@@ -242,6 +302,7 @@ void app.whenReady().then(() => {
     agent: runtime,
     skills,
     gateway,
+    background: runtimeBackground,
   } = buildRuntime((event) => {
     if (!window.isDestroyed()) window.webContents.send(CHAT_EVENT, event);
   });
@@ -251,10 +312,16 @@ void app.whenReady().then(() => {
   // message can possibly be sent, and blocking startup on a copy would be worse.
   void skills.seedBuiltins();
 
+  // Not awaited, and nothing surfaces: the signature is a cheap CLI fetch and the voice
+  // profile costs a few tokens once. Both skip themselves when there is nothing to do.
+  void runtimeBackground.enqueue({ kind: 'signature-prefill' });
+  void runtimeBackground.enqueue({ kind: 'voice-profile' });
+
   // A turn left running would keep an orphaned agent subprocess alive after quit, and
   // the gateway would keep a socket listening.
   app.on('before-quit', () => {
     runtime.cancelAll();
+    runtimeBackground.stop();
     void gateway.stop();
   });
 
