@@ -3,7 +3,7 @@
  * (the folder picker lives in the IPC layer, not here), so the bun runner can run it.
  */
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createSkillsService } from './skills-service.ts';
@@ -248,5 +248,138 @@ describe('listing a skills folder the user has been poking at', () => {
     expect(removed.ok).toBe(false);
     if (removed.ok) return;
     expect(removed.error.kind).toBe('bad-name');
+  });
+});
+
+describe('editing a skill the app shipped', () => {
+  const skillFile = (): string => join(userData, 'claude-config', 'skills', 'ask-marcel-office', 'SKILL.md');
+  const edited = 'name: ask-marcel-office\ndescription: My own wording.';
+  const asSkillMd = (frontmatter: string): string => `---\n${frontmatter}\n---\n\n# Skill\n`;
+
+  test('the whole file can be read back for the editor', async () => {
+    await service.seedBuiltins();
+
+    const read = await service.read('ask-marcel-office');
+
+    expect(read.ok).toBe(true);
+    if (!read.ok) return;
+    expect(read.value).toContain('description: Read the user Microsoft 365.');
+  });
+
+  test('an edit is saved and reported back', async () => {
+    await service.seedBuiltins();
+
+    const saved = await service.write('ask-marcel-office', asSkillMd(edited));
+
+    expect(saved.ok).toBe(true);
+    if (!saved.ok) return;
+    expect(saved.value.description).toBe('My own wording.');
+    expect(saved.value.isModified).toBe(true);
+  });
+
+  test('an edited built-in survives the next launch, which is the whole point', async () => {
+    // It used to be copied over on every start, so editing one was pointless.
+    await service.seedBuiltins();
+    await service.write('ask-marcel-office', asSkillMd(edited));
+
+    await service.seedBuiltins();
+
+    expect(readFileSync(skillFile(), 'utf8')).toContain('My own wording.');
+  });
+
+  test('an untouched built-in still picks up a newer version from an app update', async () => {
+    await service.seedBuiltins();
+    writeSkillFolder(builtinSource, 'ask-marcel-office', 'name: ask-marcel-office\ndescription: A newer description.');
+
+    await service.seedBuiltins();
+
+    expect(readFileSync(skillFile(), 'utf8')).toContain('A newer description.');
+  });
+
+  test('restoring puts the shipped version back', async () => {
+    await service.seedBuiltins();
+    await service.write('ask-marcel-office', asSkillMd(edited));
+
+    const restored = await service.restore('ask-marcel-office');
+
+    expect(restored.ok).toBe(true);
+    if (!restored.ok) return;
+    expect(restored.value.description).toBe('Read the user Microsoft 365.');
+    expect(restored.value.isModified).toBe(false);
+  });
+
+  test('a restored skill follows app updates again', async () => {
+    await service.seedBuiltins();
+    await service.write('ask-marcel-office', asSkillMd(edited));
+    await service.restore('ask-marcel-office');
+    writeSkillFolder(builtinSource, 'ask-marcel-office', 'name: ask-marcel-office\ndescription: A newer description.');
+
+    await service.seedBuiltins();
+
+    expect(readFileSync(skillFile(), 'utf8')).toContain('A newer description.');
+  });
+
+  test('a built-in deleted by hand comes back on the next launch', async () => {
+    await service.seedBuiltins();
+    rmSync(join(userData, 'claude-config', 'skills', 'ask-marcel-office'), { recursive: true, force: true });
+
+    await service.seedBuiltins();
+
+    expect(readFileSync(skillFile(), 'utf8')).toContain('Read the user Microsoft 365.');
+  });
+
+  test('an edit that would stop it being a skill is refused before it is written', async () => {
+    await service.seedBuiltins();
+
+    const saved = await service.write('ask-marcel-office', '# Just a heading, no frontmatter');
+
+    expect(saved.ok).toBe(false);
+    if (saved.ok) return;
+    expect(saved.error.kind).toBe('invalid');
+    expect(readFileSync(skillFile(), 'utf8')).toContain('Read the user Microsoft 365.');
+  });
+
+  test('a skill that is not there cannot be read or written', async () => {
+    expect((await service.read('nothing-here')).ok).toBe(false);
+    expect((await service.write('nothing-here', asSkillMd(edited))).ok).toBe(false);
+  });
+
+  test('a name that could reach a path is refused', async () => {
+    expect((await service.read('../escape')).ok).toBe(false);
+    expect((await service.restore('../escape')).ok).toBe(false);
+  });
+
+  test('a skill the user added has no original to restore', async () => {
+    const source = writeSkillFolder(tmpdir(), `mine-${String(Date.now())}`, 'name: my-skill\ndescription: Mine.');
+    await service.add(source);
+    rmSync(source, { recursive: true, force: true });
+
+    const restored = await service.restore('my-skill');
+
+    expect(restored.ok).toBe(false);
+    if (restored.ok) return;
+    expect(restored.error.kind).toBe('not-found');
+  });
+
+  test('a skill the user added is never reported as modified', async () => {
+    const source = writeSkillFolder(tmpdir(), `mine2-${String(Date.now())}`, 'name: my-other\ndescription: Mine.');
+    await service.add(source);
+    rmSync(source, { recursive: true, force: true });
+
+    const listed = await service.list();
+
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) return;
+    expect(listed.value.find((s) => s.folder === 'my-other')?.isModified).toBe(false);
+  });
+
+  test('the bookkeeping file is never listed as a skill', async () => {
+    await service.seedBuiltins();
+
+    const listed = await service.list();
+
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) return;
+    expect(listed.value.map((s) => s.folder)).toEqual(['ask-marcel-office']);
   });
 });
