@@ -17,6 +17,7 @@
 import { join } from 'node:path';
 import type { ConversationId } from './conversation-id.ts';
 import type { SkillFolderName } from './skill-name.ts';
+import type { MemoryFileName } from './memory-file-name.ts';
 
 // node:path is path manipulation, not IO, so it is allowed anywhere (rule 20).
 
@@ -55,6 +56,18 @@ export const voiceProfileFilePath = (userData: string): string => join(claudeCon
 export const skillsDir = (userData: string): string => join(claudeConfigDir(userData), 'skills');
 
 export const skillDir = (userData: string, folder: SkillFolderName): string => join(skillsDir(userData), folder);
+
+// The notes the app keeps for the user, read by the agent as
+// $CLAUDE_CONFIG_DIR/memory/<name>.md and editable in settings.
+export const memoryDir = (userData: string): string => join(claudeConfigDir(userData), 'memory');
+
+export const memoryFilePath = (userData: string, name: MemoryFileName): string => join(memoryDir(userData), `${name}.md`);
+
+// The app's own bookkeeping about those notes: what it wants to ask, and how far it has
+// read. Not under claude-config: the agent has no business reading either.
+export const memoryQueuePath = (userData: string): string => join(userData, 'memory', 'queue.json');
+
+export const memoryStatePath = (userData: string): string => join(userData, 'memory', 'state.json');
 
 // Where a background job runs. Deliberately NOT under workspaces/: those belong to
 // conversations and are deleted with them.

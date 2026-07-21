@@ -4,7 +4,13 @@ import {
   claudeConfigDir,
   conversationFilePath,
   conversationsDir,
+  agentsFilePath,
   backgroundWorkspaceDir,
+  importsDir,
+  memoryDir,
+  memoryFilePath,
+  memoryQueuePath,
+  memoryStatePath,
   npmCacheDir,
   signatureFilePath,
   voiceProfileFilePath,
@@ -112,5 +118,27 @@ describe('where work the app does on its own happens', () => {
     // one must not have its scratch swept away underneath it.
     expect(backgroundWorkspaceDir('/data')).toBe('/data/background-workspace');
     expect(backgroundWorkspaceDir('/data').startsWith(workspacesDir('/data'))).toBe(false);
+  });
+});
+
+describe('where the notes the app keeps live', () => {
+  test('the notes sit in the folder the agent already reads', () => {
+    expect(memoryDir(USER_DATA)).toBe(`${claudeConfigDir(USER_DATA)}/memory`);
+    expect(memoryFilePath(USER_DATA, 'jargon')).toBe(`${claudeConfigDir(USER_DATA)}/memory/jargon.md`);
+  });
+
+  test('the app’s own bookkeeping about them does not', () => {
+    // What the app wants to ask, and how far it has read, are none of the agent's
+    // business.
+    expect(memoryQueuePath(USER_DATA).startsWith(claudeConfigDir(USER_DATA))).toBe(false);
+    expect(memoryStatePath(USER_DATA)).toBe(`${USER_DATA}/memory/state.json`);
+  });
+
+  test('the helpers file sits beside the settings', () => {
+    expect(agentsFilePath(USER_DATA)).toBe(`${USER_DATA}/agents.json`);
+  });
+
+  test('an imported file lands inside the conversation’s own workspace', () => {
+    expect(importsDir(USER_DATA, ID).startsWith(workspaceDir(USER_DATA, ID))).toBe(true);
   });
 });
