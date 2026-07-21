@@ -3,7 +3,7 @@ import type { FC } from 'react';
 // Props-only (rule 21). A grouped left menu for the settings sections. The page shell
 // supplies the groups, labels and which icon each row wears; this component owns the
 // icon shapes and the active-row styling.
-export type SettingsNavIcon = 'models' | 'skills' | 'office';
+export type SettingsNavIcon = 'models' | 'skills' | 'agents' | 'signature' | 'voice' | 'office';
 export type SettingsNavItem = { id: string; label: string; icon: SettingsNavIcon };
 export type SettingsNavGroup = { heading: string; items: readonly SettingsNavItem[] };
 
@@ -31,7 +31,25 @@ const GridIcon: FC = () => (
   </svg>
 );
 
-const icons: Record<SettingsNavIcon, FC> = { models: SparklesIcon, skills: BoltIcon, office: GridIcon };
+const PeopleIcon: FC = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 shrink-0" aria-hidden="true">
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+  </svg>
+);
+
+const PenIcon: FC = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 shrink-0" aria-hidden="true">
+    <path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z" />
+  </svg>
+);
+
+const SpeechIcon: FC = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 shrink-0" aria-hidden="true">
+    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+  </svg>
+);
+
+const icons: Record<SettingsNavIcon, FC> = { models: SparklesIcon, skills: BoltIcon, agents: PeopleIcon, signature: PenIcon, voice: SpeechIcon, office: GridIcon };
 
 export const SettingsNav: FC<SettingsNavProps> = ({ groups, activeId, onSelect }) => (
   <nav className="flex flex-col gap-y-6">

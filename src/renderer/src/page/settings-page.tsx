@@ -11,7 +11,13 @@ import type { FC } from 'react';
 import { ProvidersPanel } from '../components/organisms/providers-panel/index.tsx';
 import type { PanelNotice } from '../components/organisms/providers-panel/index.tsx';
 import { SkillsPanel } from '../components/organisms/skills-panel/index.tsx';
-import type { SkillRow } from '../components/organisms/skills-panel/index.tsx';
+import { SkillEditor } from '../components/organisms/skill-editor/index.tsx';
+import { AgentsPanel } from '../components/organisms/agents-panel/index.tsx';
+import { AgentEditor } from '../components/organisms/agent-editor/index.tsx';
+import { SignaturePanel } from '../components/organisms/signature-panel/index.tsx';
+import { VoicePanel } from '../components/organisms/voice-panel/index.tsx';
+import { DocumentEditor } from '../components/organisms/document-editor/index.tsx';
+import type { EditorMode } from '../components/organisms/document-editor/index.tsx';
 import { OfficePanel } from '../components/organisms/office-panel/index.tsx';
 import type { OfficeView } from '../components/organisms/office-panel/index.tsx';
 import { SettingsLayout } from '../components/organisms/settings-layout/index.tsx';
@@ -25,6 +31,13 @@ import { categoryRows } from '../lib/office-categories.ts';
 import { toggleCategory } from '../../../shared/office-policy.ts';
 import type { OfficeCategory } from '../../../shared/office-catalog.ts';
 import type { OfficePolicy } from '../../../shared/types.ts';
+import { AGENT_TOOL_OPTIONS } from '../../../shared/agents-doc.ts';
+import { useSkills } from '../hooks/use-skills.ts';
+import { useAgents } from '../hooks/use-agents.ts';
+import { useAgentFile } from '../hooks/use-agent-file.ts';
+import { MarkdownEditor } from '../render/markdown-editor.tsx';
+import { renderMarkdown } from '../render/markdown.tsx';
+import { MarkdownView } from '../components/atoms/markdown-view/index.tsx';
 
 // The left-menu structure. Models and Skills configure the agent; Microsoft 365 is a
 // connected app. Each id matches a section rendered on the right.
@@ -34,6 +47,14 @@ const NAV_GROUPS: readonly SettingsNavGroup[] = [
     items: [
       { id: 'models', label: 'Models', icon: 'models' },
       { id: 'skills', label: 'Skills', icon: 'skills' },
+      { id: 'agents', label: 'Helpers', icon: 'agents' },
+    ],
+  },
+  {
+    heading: 'About you',
+    items: [
+      { id: 'signature', label: 'Email signature', icon: 'signature' },
+      { id: 'voice', label: 'Writing voice', icon: 'voice' },
     ],
   },
   { heading: 'Connections', items: [{ id: 'office', label: 'Microsoft 365', icon: 'office' }] },
@@ -48,15 +69,25 @@ export type SettingsPageProps = {
   onOfficeChanged?: () => void;
 };
 
+// The tool checkboxes for a helper: every tool the app offers, ticked when this one
+// asks for it.
+const agentToolChoices = (chosen: readonly string[]): readonly { id: string; label: string; checked: boolean }[] =>
+  AGENT_TOOL_OPTIONS.map((tool) => ({ id: tool, label: tool, checked: chosen.includes(tool) }));
+
 export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeChanged }) => {
   const [section, setSection] = useState(initialSection ?? 'models');
   const [drafts, setDrafts] = useState<readonly ProviderDraft[]>([]);
   const [expandedRowId, setExpandedRowId] = useState<string | undefined>(undefined);
   const [defaultModel, setDefaultModel] = useState<string | undefined>(undefined);
   const [notice, setNotice] = useState<PanelNotice | undefined>(undefined);
-  const [skills, setSkills] = useState<readonly SkillRow[]>([]);
-  const [skillsError, setSkillsError] = useState<string | undefined>(undefined);
-  const [isAdding, setIsAdding] = useState(false);
+  const skills = useSkills();
+  const agents = useAgents();
+  const signature = useAgentFile('signature');
+  const voice = useAgentFile('voice-profile');
+  const [skillMode, setSkillMode] = useState<EditorMode>('view');
+  const [voiceMode, setVoiceMode] = useState<EditorMode>('view');
+  const [promptMode, setPromptMode] = useState<EditorMode>('markdown');
+  const [isEditingSignature, setIsEditingSignature] = useState(false);
   const [officeView, setOfficeView] = useState<OfficeView>({ kind: 'loading' });
   const [isScopesOpen, setIsScopesOpen] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -100,50 +131,6 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
       onOfficeChanged?.();
     })();
   }, [loadOffice, onOfficeChanged]);
-
-  const loadSkills = useCallback((): void => {
-    void (async (): Promise<void> => {
-      const listed = await studio.skills.list();
-      if (!listed.ok) {
-        setSkillsError(listed.error.message);
-        return;
-      }
-      setSkills(listed.value);
-    })();
-  }, []);
-
-  useEffect(loadSkills, [loadSkills]);
-
-  const onAddSkill = useCallback((): void => {
-    setSkillsError(undefined);
-    setIsAdding(true);
-    void (async (): Promise<void> => {
-      const added = await studio.skills.add();
-      setIsAdding(false);
-      // Closing the picker is not a failure, so it says nothing.
-      if (!added.ok && added.error.kind === 'cancelled') return;
-      if (!added.ok) {
-        setSkillsError(added.error.message);
-        return;
-      }
-      loadSkills();
-    })();
-  }, [loadSkills]);
-
-  const onRemoveSkill = useCallback(
-    (folder: string): void => {
-      setSkillsError(undefined);
-      void (async (): Promise<void> => {
-        const removed = await studio.skills.remove(folder);
-        if (!removed.ok) {
-          setSkillsError(removed.error.message);
-          return;
-        }
-        loadSkills();
-      })();
-    },
-    [loadSkills]
-  );
 
   useEffect(() => {
     void (async (): Promise<void> => {
@@ -223,6 +210,75 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
     [persist, drafts, defaultModel, officeCatalog, officePolicy]
   );
 
+  // Optional props are spread from a value rather than from a conditional inside the
+  // JSX: exactOptionalPropertyTypes means an explicit undefined is not the same as an
+  // absent prop, and a ternary inside a ternary reads like neither.
+  const skillNotice = skills.notice === undefined ? {} : { notice: skills.notice };
+  const agentError = agents.error === undefined ? {} : { error: agents.error };
+
+  // Built as values rather than nested inside the JSX: a section that is a list until
+  // you open one of its rows is two screens, and reading that as a ternary inside a
+  // conditional is worse than naming it.
+  const skillsSection =
+    skills.editing === undefined ? (
+      <SkillsPanel skills={skills.skills} error={skills.error} isAdding={skills.isAdding} onAdd={skills.add} onEdit={skills.edit} onRemove={skills.remove} />
+    ) : (
+      <SkillEditor
+        name={skills.editing.skill.name}
+        isBuiltIn={skills.editing.skill.isBuiltIn}
+        isModified={skills.editing.skill.isModified}
+        onBack={skills.closeEditor}
+        onRestore={skills.restore}
+      >
+        <DocumentEditor
+          mode={skillMode}
+          viewNode={<MarkdownView>{renderMarkdown(skills.editing.draft)}</MarkdownView>}
+          richNode={<MarkdownEditor key={`${skills.editing.skill.folder}-${skills.editing.stored}`} defaultValue={skills.editing.draft} onChange={skills.setDraft} />}
+          markdownValue={skills.editing.draft}
+          isSaving={skills.isSaving}
+          isDirty={skills.editing.draft !== skills.editing.stored}
+          {...skillNotice}
+          onSelectMode={setSkillMode}
+          onChangeMarkdown={skills.setDraft}
+          onSave={skills.save}
+          onCancel={skills.closeEditor}
+        />
+      </SkillEditor>
+    );
+
+  const agentsSection =
+    agents.editing === undefined ? (
+      <AgentsPanel agents={agents.agents} error={agents.error} onAdd={agents.startNew} onEdit={agents.edit} />
+    ) : (
+      <AgentEditor
+        name={agents.editing.name}
+        description={agents.editing.description}
+        tools={agentToolChoices(agents.editing.tools)}
+        isBuiltIn={agents.editing.isBuiltIn}
+        isNew={agents.editing.isNew}
+        isModified={agents.editing.isModified}
+        {...agentError}
+        onChangeName={agents.changeName}
+        onChangeDescription={agents.changeDescription}
+        onToggleTool={agents.toggleTool}
+        onBack={agents.closeEditor}
+        onRemove={agents.remove}
+        onRestore={agents.restore}
+      >
+        <DocumentEditor
+          mode={promptMode}
+          viewNode={<MarkdownView>{renderMarkdown(agents.editing.prompt)}</MarkdownView>}
+          markdownValue={agents.editing.prompt}
+          isSaving={agents.isSaving}
+          isDirty
+          onSelectMode={setPromptMode}
+          onChangeMarkdown={agents.changePrompt}
+          onSave={agents.save}
+          onCancel={agents.closeEditor}
+        />
+      </AgentEditor>
+    );
+
   return (
     <SettingsLayout nav={<SettingsNav groups={NAV_GROUPS} activeId={section} onSelect={setSection} />}>
       {section === 'models' && (
@@ -240,7 +296,51 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
           onSave={onSave}
         />
       )}
-      {section === 'skills' && <SkillsPanel skills={skills} error={skillsError} isAdding={isAdding} onAdd={onAddSkill} onRemove={onRemoveSkill} />}
+      {section === 'skills' && skillsSection}
+
+      {section === 'agents' && agentsSection}
+
+      {section === 'signature' && (
+        <SignaturePanel
+          html={signature.draft}
+          isEditing={isEditingSignature}
+          isSaving={signature.isSaving}
+          isRegenerating={signature.isRegenerating}
+          canRegenerate={signature.canRegenerate}
+          {...(signature.notice === undefined ? {} : { notice: signature.notice })}
+          onChangeHtml={signature.setDraft}
+          onStartEdit={() => setIsEditingSignature(true)}
+          onSave={() => {
+            signature.save();
+            setIsEditingSignature(false);
+          }}
+          onCancel={() => {
+            signature.cancel();
+            setIsEditingSignature(false);
+          }}
+          onRegenerate={signature.regenerate}
+        />
+      )}
+
+      {section === 'voice' && (
+        <VoicePanel isRegenerating={voice.isRegenerating} canRegenerate={voice.canRegenerate} onRegenerate={voice.regenerate}>
+          <DocumentEditor
+            mode={voiceMode}
+            viewNode={<MarkdownView>{renderMarkdown(voice.draft)}</MarkdownView>}
+            richNode={<MarkdownEditor key={voice.stored} defaultValue={voice.draft} onChange={voice.setDraft} />}
+            markdownValue={voice.draft}
+            emptyHint="Nothing yet. Marcel writes one from your sent mail the first time it can, or you can write your own."
+            isSaving={voice.isSaving}
+            isDirty={voice.isDirty}
+            {...(voice.notice === undefined ? {} : { notice: voice.notice })}
+            onSelectMode={setVoiceMode}
+            onChangeMarkdown={voice.setDraft}
+            onSave={voice.save}
+            onCancel={voice.cancel}
+          />
+        </VoicePanel>
+      )}
+
       {section === 'office' && (
         <OfficePanel
           view={officeView}

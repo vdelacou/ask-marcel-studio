@@ -2,17 +2,18 @@ import type { FC } from 'react';
 import { Button } from '../../atoms/button/index.tsx';
 import { SkillCard } from '../../molecules/skill-card/index.tsx';
 
-export type SkillRow = { folder: string; name: string; description: string; isBuiltIn: boolean };
+export type SkillRow = { folder: string; name: string; description: string; isBuiltIn: boolean; isModified: boolean };
 
 export type SkillsPanelProps = {
   skills: readonly SkillRow[];
   error?: string;
   isAdding: boolean;
   onAdd: () => void;
+  onEdit: (folder: string) => void;
   onRemove: (folder: string) => void;
 };
 
-export const SkillsPanel: FC<SkillsPanelProps> = ({ skills, error, isAdding, onAdd, onRemove }) => (
+export const SkillsPanel: FC<SkillsPanelProps> = ({ skills, error, isAdding, onAdd, onEdit, onRemove }) => (
   <section className="flex flex-col gap-y-4">
     <header className="flex items-baseline justify-between">
       <div className="flex flex-col gap-y-1">
@@ -25,7 +26,15 @@ export const SkillsPanel: FC<SkillsPanelProps> = ({ skills, error, isAdding, onA
     </header>
 
     {skills.map((skill) => (
-      <SkillCard key={skill.folder} name={skill.name} description={skill.description} isBuiltIn={skill.isBuiltIn} onRemove={() => onRemove(skill.folder)} />
+      <SkillCard
+        key={skill.folder}
+        name={skill.name}
+        description={skill.description}
+        isBuiltIn={skill.isBuiltIn}
+        isModified={skill.isModified}
+        onEdit={() => onEdit(skill.folder)}
+        onRemove={() => onRemove(skill.folder)}
+      />
     ))}
 
     {error !== undefined && (
