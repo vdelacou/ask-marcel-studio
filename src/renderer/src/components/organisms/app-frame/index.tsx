@@ -15,7 +15,9 @@ export const AppFrame: FC<AppFrameProps> = ({ sidebar, children }) => (
     <div className="h-9 shrink-0 [-webkit-app-region:drag]" />
     <div className="flex min-h-0 flex-1">
       {sidebar}
-      <main className="flex min-h-0 flex-1 flex-col">{children}</main>
+      {/* min-w-0: without it a wide code block or table inside the thread grows the flex
+          item and pushes the sidebar off screen instead of scrolling inside its column. */}
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</main>
     </div>
   </div>
 );

@@ -18,7 +18,7 @@ export type ChatMessageProps = {
 const TextBubble: FC<{ role: 'user' | 'assistant'; content: ReactNode }> = ({ role, content }) => {
   if (role === 'user') return <div className="max-w-[80%] whitespace-pre-wrap break-words rounded-2xl bg-surface-raised px-4 py-2.5 text-sm text-ink">{content}</div>;
   return (
-    <div className="w-full text-ink">
+    <div className="w-full min-w-0 text-ink">
       <MarkdownView>{content}</MarkdownView>
     </div>
   );
@@ -30,7 +30,7 @@ export const ChatMessage: FC<ChatMessageProps> = ({ role, parts }) => (
       part.kind === 'text' ? (
         <TextBubble key={`text-${String(index)}`} role={role} content={part.content} />
       ) : (
-        <div key={part.id} className="w-full">
+        <div key={part.id} className="w-full min-w-0">
           <ToolCallCard name={part.name} input={part.input} result={part.result} status={part.status} />
         </div>
       )

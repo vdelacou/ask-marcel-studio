@@ -13,8 +13,10 @@ export type ChatThreadProps = {
 };
 
 export const ChatThread: FC<ChatThreadProps> = ({ messages, isStreaming, error, emptyHint }) => (
-  <section className="flex-1 overflow-y-auto">
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-y-6 px-6 py-8">
+  // The horizontal padding sits on the scroll container, not inside the column, so the
+  // reading column and the composer below it land on exactly the same two edges.
+  <section className="flex-1 overflow-y-auto px-6">
+    <div className="mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-y-6 py-8">
       {messages.length === 0 && !isStreaming && <p className="m-auto max-w-sm py-16 text-center text-sm text-ink-muted">{emptyHint}</p>}
       {messages.map((message) => (
         <ChatMessage key={message.id} role={message.role} parts={message.parts} />
