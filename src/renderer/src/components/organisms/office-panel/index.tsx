@@ -27,9 +27,11 @@ export type OfficePanelProps = {
   isScopesOpen: boolean;
   categories: readonly OfficeCategoryRow[];
   expandedCategory?: string;
+  expandedCommand?: string;
   onToggleScopes: () => void;
   onToggleCategory: (name: string) => void;
   onExpandCategory: (name: string) => void;
+  onExpandCommand: (name: string) => void;
   onLogin: () => void;
 };
 
@@ -51,9 +53,11 @@ export const OfficePanel: FC<OfficePanelProps> = ({
   isScopesOpen,
   categories,
   expandedCategory,
+  expandedCommand,
   onToggleScopes,
   onToggleCategory,
   onExpandCategory,
+  onExpandCommand,
   onLogin,
 }) => (
   <section className="flex flex-col gap-y-4">
@@ -112,9 +116,11 @@ export const OfficePanel: FC<OfficePanelProps> = ({
             isEnabled={category.isEnabled}
             isLocked={category.isLocked}
             isExpanded={category.name === expandedCategory}
+            {...(expandedCommand === undefined ? {} : { expandedCommand })}
             commands={category.commands}
             onToggle={() => onToggleCategory(category.name)}
             onToggleExpand={() => onExpandCategory(category.name)}
+            onExpandCommand={onExpandCommand}
           />
         ))}
       </div>
