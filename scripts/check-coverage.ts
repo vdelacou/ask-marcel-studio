@@ -66,6 +66,7 @@ const BUN_TESTABLE_MAIN: ReadonlyArray<string> = [
   'src/main/services/agent/builtin-agents.ts',
   'src/main/services/skills/skills-service.ts',
   'src/main/services/office/office-service.ts',
+  'src/main/services/models/model-test-service.ts',
   'src/main/services/office/signature-service.ts',
   'src/main/services/python/python-service.ts',
   // Pure agent-config value (import type only), so the bun runner covers it.
