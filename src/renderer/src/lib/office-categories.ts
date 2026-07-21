@@ -29,16 +29,26 @@ const LABELS: Readonly<Record<string, string>> = {
 
 export const categoryLabel = (name: string): string => LABELS[name] ?? name;
 
-const SUMMARY_LIMIT = 140;
+// Two or three lines in the panel. Larger than it was, because the descriptions wrap
+// now instead of being cut to a single line.
+const SUMMARY_LIMIT = 180;
+
+// Never mid-word: "convert-local-file-to-markdown i…" reads as a fault in the app.
+const clip = (sentence: string): string => {
+  if (sentence.length <= SUMMARY_LIMIT) return sentence;
+  const cut = sentence.slice(0, SUMMARY_LIMIT - 1);
+  const lastSpace = cut.lastIndexOf(' ');
+  return `${(lastSpace === -1 ? cut : cut.slice(0, lastSpace)).trimEnd()}…`;
+};
 
 // The CLI's summaries are written for a model and run to paragraphs. The first
 // sentence is the part a person reads.
 export const summaryFirstSentence = (summary: string): string => {
-  const oneLine = summary.replace(/\s+/g, ' ').trim();
+  // Backticks are markdown, and nothing renders them here: the CLI writes `next-page`
+  // for a model that reads markdown, and a person just sees the punctuation.
+  const oneLine = summary.replace(/\s+/g, ' ').replaceAll('`', '').trim();
   const stop = oneLine.search(/\.(?:\s|$)/);
-  const sentence = stop === -1 ? oneLine : oneLine.slice(0, stop + 1);
-  if (sentence.length <= SUMMARY_LIMIT) return sentence;
-  return `${sentence.slice(0, SUMMARY_LIMIT - 1).trimEnd()}…`;
+  return clip(stop === -1 ? oneLine : oneLine.slice(0, stop + 1));
 };
 
 export type CategoryRow = {

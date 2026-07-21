@@ -32,12 +32,23 @@ describe('shortening a command summary to the part a person reads', () => {
     expect(summaryFirstSentence('List\n  messages')).toBe('List messages');
   });
 
+  test('the markdown backticks the CLI writes for the model are dropped', () => {
+    expect(summaryFirstSentence('The local sibling of `extract-drive-item-images`.')).toBe('The local sibling of extract-drive-item-images.');
+  });
+
   test('an empty summary stays empty', () => {
     expect(summaryFirstSentence('')).toBe('');
   });
 
-  test('a first sentence longer than the row can show is cut', () => {
-    expect(summaryFirstSentence(`${'a'.repeat(200)}.`)).toHaveLength(140);
+  test('a first sentence longer than the panel can show is cut', () => {
+    expect(summaryFirstSentence(`${'a'.repeat(300)}.`)).toHaveLength(180);
+  });
+
+  test('the cut lands between words, never inside one', () => {
+    const cut = summaryFirstSentence(`${'situation '.repeat(30)}end.`);
+
+    expect(cut.endsWith('situation…')).toBe(true);
+    expect(cut.length).toBeLessThanOrEqual(180);
   });
 });
 
