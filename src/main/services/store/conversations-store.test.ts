@@ -5,7 +5,7 @@
  * The clock is injected, so "updated at" is asserted rather than slept on.
  */
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createConversationsStore } from './conversations-store.ts';
@@ -335,5 +335,112 @@ describe('changing which model answers a conversation', () => {
     expect(changed.ok).toBe(false);
     if (changed.ok) return;
     expect(changed.error.kind).toBe('malformed-id');
+  });
+});
+
+describe('attaching files to a conversation', () => {
+  const sourceDir = (): string => join(userData, 'dropped');
+
+  const drop = (name: string, contents: string): string => {
+    mkdirSync(sourceDir(), { recursive: true });
+    const path = join(sourceDir(), name);
+    writeFileSync(path, contents);
+    return path;
+  };
+
+  test('a picked file is copied into the conversation and named relative to the workspace', async () => {
+    const created = await store.create({ model: 'm' });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const source = drop('budget.xlsx', 'numbers');
+
+    const imported = await store.importPaths({ id: created.value.id, paths: [source] });
+
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) return;
+    expect(imported.value).toEqual([{ name: 'budget.xlsx', relativePath: 'imports/budget.xlsx', size: 7 }]);
+    expect(readFileSync(join(userData, 'workspaces', created.value.id, 'imports', 'budget.xlsx'), 'utf8')).toBe('numbers');
+  });
+
+  test('a name that could climb out of the workspace is reduced to a filename first', async () => {
+    const created = await store.create({ model: 'm' });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const source = drop('escape.txt', 'x');
+
+    const imported = await store.importBytes({ id: created.value.id, name: '../../escape.txt', bytes: new TextEncoder().encode('x') });
+
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) return;
+    expect(imported.value.relativePath).toBe('imports/escape.txt');
+    expect(readFileSync(join(userData, 'workspaces', created.value.id, 'imports', 'escape.txt'), 'utf8')).toBe('x');
+    expect(source).toContain('escape.txt');
+  });
+
+  test('dropping the same name twice keeps both files', async () => {
+    const created = await store.create({ model: 'm' });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const source = drop('notes.txt', 'first');
+
+    await store.importPaths({ id: created.value.id, paths: [source] });
+    const second = await store.importPaths({ id: created.value.id, paths: [source] });
+
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.value[0]?.name).toBe('notes (2).txt');
+  });
+
+  test('two files attached in one go are named against each other, not just against the folder', async () => {
+    const created = await store.create({ model: 'm' });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const source = drop('same.txt', 'x');
+
+    const imported = await store.importPaths({ id: created.value.id, paths: [source, source] });
+
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) return;
+    expect(imported.value.map((f) => f.name)).toEqual(['same.txt', 'same (2).txt']);
+  });
+
+  test('a file too big to attach is refused rather than copied', async () => {
+    const created = await store.create({ model: 'm' });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const imported = await store.importBytes({ id: created.value.id, name: 'huge.bin', bytes: new Uint8Array(26 * 1024 * 1024) });
+
+    expect(imported.ok).toBe(false);
+    if (imported.ok) return;
+    expect(imported.error.kind).toBe('too-large');
+  });
+
+  test('a file that is not there reports that rather than half attaching the batch', async () => {
+    const created = await store.create({ model: 'm' });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const imported = await store.importPaths({ id: created.value.id, paths: [join(sourceDir(), 'missing.txt')] });
+
+    expect(imported.ok).toBe(false);
+    if (imported.ok) return;
+    expect(imported.error.kind).toBe('unreadable');
+  });
+
+  test('an id that could reach a path is refused before anything is written', async () => {
+    const imported = await store.importPaths({ id: '../escape', paths: [] });
+
+    expect(imported.ok).toBe(false);
+    if (imported.ok) return;
+    expect(imported.error.kind).toBe('malformed-id');
+  });
+
+  test('attaching nothing is a valid empty batch', async () => {
+    const created = await store.create({ model: 'm' });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    expect(await store.importPaths({ id: created.value.id, paths: [] })).toEqual({ ok: true, value: [] });
   });
 });

@@ -8,9 +8,18 @@
  * The api shape is declared by StudioApi in the shared ipc-contract, so main and
  * renderer cannot drift apart without a typecheck failure.
  */
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { CHANNEL, CHAT_EVENT } from '../shared/ipc-contract.ts';
-import type { ChatSendInput, CreateConversationInput, RenameConversationInput, SetConversationModelInput, StudioApi, UIEvent } from '../shared/ipc-contract.ts';
+import type {
+  ChatSendInput,
+  CreateConversationInput,
+  ImportDataInput,
+  ImportPathsInput,
+  RenameConversationInput,
+  SetConversationModelInput,
+  StudioApi,
+  UIEvent,
+} from '../shared/ipc-contract.ts';
 import type { Settings } from '../shared/types.ts';
 
 const api: StudioApi = {
@@ -25,6 +34,16 @@ const api: StudioApi = {
     rename: (input: RenameConversationInput) => ipcRenderer.invoke(CHANNEL.conversationsRename, input),
     setModel: (input: SetConversationModelInput) => ipcRenderer.invoke(CHANNEL.conversationsSetModel, input),
     remove: (id: string) => ipcRenderer.invoke(CHANNEL.conversationsDelete, id),
+    importPick: (id: string) => ipcRenderer.invoke(CHANNEL.conversationsImportPick, id),
+    importPaths: (input: ImportPathsInput) => ipcRenderer.invoke(CHANNEL.conversationsImportPaths, input),
+    importData: (input: ImportDataInput) => ipcRenderer.invoke(CHANNEL.conversationsImportData, input),
+  },
+  files: {
+    // Electron 32 removed File.path; webUtils is the supported replacement and it only
+    // works on this side of the bridge. A file with no path on disk (an attachment
+    // dragged out of a mail client) resolves to '', and the renderer sends its bytes
+    // instead.
+    pathForFile: (file: File) => webUtils.getPathForFile(file),
   },
   chat: {
     send: (input: ChatSendInput) => ipcRenderer.invoke(CHANNEL.chatSend, input),

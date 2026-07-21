@@ -10,14 +10,24 @@
  * checkpoint that stops '../../etc/passwd' from reaching a join(). The branded type
  * is what makes that non-optional — paths.ts will not accept a bare string.
  */
-import { mkdir, readdir, rm } from 'node:fs/promises';
+import { basename, join } from 'node:path';
+import { copyFile, mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { conversationId, newConversationId } from '../../../shared/conversation-id.ts';
 import { byMostRecentlyUpdated, newConversation, parseConversation, serialiseConversation, toMeta } from '../../../shared/conversation-doc.ts';
-import { conversationFilePath, conversationsDir, workspaceDir } from '../../../shared/paths.ts';
+import { conversationFilePath, conversationsDir, importsDir, workspaceDir } from '../../../shared/paths.ts';
 import { readJsonFile, removeFile, writeJsonFileAtomic } from './json-file.ts';
 import { parseModelRef } from '../../../shared/model-ref.ts';
+import { MAX_IMPORT_BYTES, resolveCollision, safeImportName } from '../../../shared/import-plan.ts';
 import { formatError } from '../../../shared/utilities/format-error.ts';
-import type { CreateConversationInput, RenameConversationInput, SetConversationModelInput, StoreError } from '../../../shared/ipc-contract.ts';
+import type {
+  CreateConversationInput,
+  ImportError,
+  ImportPathsInput,
+  ImportedFile,
+  RenameConversationInput,
+  SetConversationModelInput,
+  StoreError,
+} from '../../../shared/ipc-contract.ts';
 import type { Conversation, ConversationMeta } from '../../../shared/types.ts';
 import type { Result } from '../../../shared/result.ts';
 import { err, ok } from '../../../shared/result.ts';
@@ -38,6 +48,13 @@ export type ConversationsStore = {
   readonly setModel: (input: SetConversationModelInput) => Promise<Result<ConversationMeta, StoreError>>;
   readonly remove: (id: string) => Promise<Result<null, StoreError>>;
   readonly workspaceFor: (id: string) => Promise<Result<string, StoreError>>;
+  // Copies files the user picked or dropped into the conversation's workspace, under
+  // imports/. They go when the conversation goes, and the agent opens them by a short
+  // relative path.
+  readonly importPaths: (input: ImportPathsInput) => Promise<Result<readonly ImportedFile[], ImportError>>;
+  // The same, for a file that exists only as bytes (an attachment dragged out of a
+  // mail client has no path on disk).
+  readonly importBytes: (input: { readonly id: string; readonly name: string; readonly bytes: Uint8Array }) => Promise<Result<ImportedFile, ImportError>>;
   // Writes a whole conversation back. The agent runtime calls this once per turn end
   // (risk R11: one write per turn, one in-flight turn per conversation).
   readonly save: (conversation: Conversation) => Promise<Result<Conversation, StoreError>>;
@@ -142,5 +159,65 @@ export const createConversationsStore = (deps: ConversationsStoreDeps): Conversa
     }
   };
 
-  return { list, create, get: readOne, rename, setModel, remove, workspaceFor, save: writeOne };
+  // Everything imported lands here, named safely and never overwriting what is already
+  // there. Returns the folder plus what it already holds, so a batch can be named
+  // against a list that grows as it goes.
+  const openImports = async (rawId: string): Promise<Result<{ readonly dir: string; readonly existing: string[] }, ImportError>> => {
+    const checked = conversationId(rawId);
+    if (!checked.ok) return err({ kind: 'malformed-id', message: checked.error.message });
+
+    const dir = importsDir(deps.userData, checked.value);
+    try {
+      await mkdir(dir, { recursive: true });
+      return ok({ dir, existing: await readdir(dir) });
+    } catch (e) {
+      return err({ kind: 'write-failed', message: `could not prepare the attachments folder: ${formatError(e)}` });
+    }
+  };
+
+  const importPaths = async (input: ImportPathsInput): Promise<Result<readonly ImportedFile[], ImportError>> => {
+    const opened = await openImports(input.id);
+    if (!opened.ok) return opened;
+
+    const { dir, existing } = opened.value;
+    const imported: ImportedFile[] = [];
+    for (const source of input.paths) {
+      let size: number;
+      try {
+        size = (await stat(source)).size;
+      } catch (e) {
+        return err({ kind: 'unreadable', message: `could not read ${basename(source)}: ${formatError(e)}` });
+      }
+      // Checked before the copy, so an oversized file is refused rather than half
+      // written and then rejected.
+      if (size > MAX_IMPORT_BYTES) return err({ kind: 'too-large', message: `${basename(source)} is too big to attach (the limit is 25 MB)` });
+
+      const name = resolveCollision(existing, safeImportName(source));
+      try {
+        await copyFile(source, join(dir, name));
+      } catch (e) {
+        return err({ kind: 'write-failed', message: `could not attach ${name}: ${formatError(e)}` });
+      }
+      existing.push(name);
+      imported.push({ name, relativePath: `imports/${name}`, size });
+    }
+    return ok(imported);
+  };
+
+  const importBytes = async (input: { readonly id: string; readonly name: string; readonly bytes: Uint8Array }): Promise<Result<ImportedFile, ImportError>> => {
+    if (input.bytes.byteLength > MAX_IMPORT_BYTES) return err({ kind: 'too-large', message: `${input.name} is too big to attach (the limit is 25 MB)` });
+
+    const opened = await openImports(input.id);
+    if (!opened.ok) return opened;
+
+    const name = resolveCollision(opened.value.existing, safeImportName(input.name));
+    try {
+      await writeFile(join(opened.value.dir, name), input.bytes);
+    } catch (e) {
+      return err({ kind: 'write-failed', message: `could not attach ${name}: ${formatError(e)}` });
+    }
+    return ok({ name, relativePath: `imports/${name}`, size: input.bytes.byteLength });
+  };
+
+  return { list, create, get: readOne, rename, setModel, remove, workspaceFor, importPaths, importBytes, save: writeOne };
 };

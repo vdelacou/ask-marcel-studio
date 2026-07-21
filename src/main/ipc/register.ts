@@ -53,6 +53,25 @@ export const registerIpc = (deps: IpcDeps): void => {
   });
   ipcMain.handle(CHANNEL.conversationsDelete, (_event, id: unknown) => deps.conversations.remove(asString(id)));
 
+  // The picker opens HERE, like the skills one: a path chosen renderer-side would be
+  // an untrusted string reaching the filesystem.
+  ipcMain.handle(CHANNEL.conversationsImportPick, async (_event, id: unknown) => {
+    const picked = await dialog.showOpenDialog({ title: 'Choose files to attach', properties: ['openFile', 'multiSelections'], buttonLabel: 'Attach' });
+    if (picked.canceled || picked.filePaths.length === 0) return err({ kind: 'cancelled', message: 'no file chosen' });
+    return deps.conversations.importPaths({ id: asString(id), paths: picked.filePaths });
+  });
+  ipcMain.handle(CHANNEL.conversationsImportPaths, (_event, input: unknown) => {
+    const draft = input as { id?: unknown; paths?: unknown } | undefined;
+    const paths = Array.isArray(draft?.paths) ? draft.paths.filter((p): p is string => typeof p === 'string') : [];
+    return deps.conversations.importPaths({ id: asString(draft?.id), paths });
+  });
+  ipcMain.handle(CHANNEL.conversationsImportData, (_event, input: unknown) => {
+    const draft = input as { id?: unknown; name?: unknown; bytes?: unknown } | undefined;
+    const bytes = draft?.bytes;
+    if (!(bytes instanceof ArrayBuffer)) return Promise.resolve(err({ kind: 'invalid', message: 'that file could not be read' }));
+    return deps.conversations.importBytes({ id: asString(draft?.id), name: asString(draft?.name), bytes: new Uint8Array(bytes) });
+  });
+
   ipcMain.handle(CHANNEL.chatSend, (_event, input: unknown) => {
     const draft = input as { conversationId?: unknown; text?: unknown } | undefined;
     return deps.agent.send({ conversationId: asString(draft?.conversationId), text: asString(draft?.text) });
