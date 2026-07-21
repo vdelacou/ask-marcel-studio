@@ -1,20 +1,26 @@
 /*
- * The chat page shell. Owns the composer draft and hands plain props to the design
- * system.
+ * The chat page shell. Owns the composer draft, the attachments waiting to be sent and
+ * the "/" skill menu, and hands plain props to the design system.
  *
  * It does NOT own the transcript. That lives in use-chat-views, above this screen, so
- * that switching conversations cannot throw away a turn that is still running. This
- * file only maps the domain messages onto the design system's view model and wires the
- * composer. Carries no class string (rule 22).
+ * that switching conversations cannot throw away a turn that is still running. Carries
+ * no class string (rule 22); every decision it makes is a call into src/renderer/src/lib.
  */
 import { useCallback, useEffect, useState } from 'react';
-import type { FC } from 'react';
+import type { DragEvent, FC } from 'react';
 import { ChatThread } from '../components/organisms/chat-thread/index.tsx';
 import type { ThreadMessage } from '../components/organisms/chat-thread/index.tsx';
 import { Composer } from '../components/organisms/composer/index.tsx';
+import { DropTarget } from '../components/organisms/drop-target/index.tsx';
+import { Toast } from '../components/molecules/toast/index.tsx';
 import type { ChatPart } from '../components/molecules/chat-message/index.tsx';
 import type { ToolStep } from '../components/molecules/tool-call-card/index.tsx';
+import type { SuggestItem } from '../components/molecules/suggest-popover/index.tsx';
+import { useAttachments } from '../hooks/use-attachments.ts';
 import { toolLabel } from '../lib/tool-label.ts';
+import { filterSkills, insertSkill, slashQuery, stepActive } from '../lib/slash-suggest.ts';
+import type { SkillSuggestion } from '../lib/slash-suggest.ts';
+import { attachmentSuffix } from '../../../shared/import-plan.ts';
 import type { ChatView } from '../lib/ui-event-fold.ts';
 import { renderMarkdown } from '../render/markdown.tsx';
 import type { Message } from '../../../shared/types.ts';
@@ -26,6 +32,8 @@ export type ChatPageProps = {
   onSend: (text: string) => void;
   onCancel: () => void;
 };
+
+const MENU_ITEMS = [{ id: 'import-file', label: 'Attach a file…' }];
 
 // Maps the domain message onto the design system's view model. The components never
 // import src/shared (rule 21), so the shell is where the two meet.
@@ -61,20 +69,89 @@ const toThreadMessage =
     }),
   });
 
-export const ChatPage: FC<ChatPageProps> = ({ view, onHydrate, onSend, onCancel }) => {
+export const ChatPage: FC<ChatPageProps> = ({ conversationId, view, onHydrate, onSend, onCancel }) => {
   const [draft, setDraft] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [skills, setSkills] = useState<readonly SkillSuggestion[]>([]);
+  const [activeSuggestion, setActiveSuggestion] = useState(0);
+  const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
+  // A counter, not a boolean: dragging over a child fires dragleave on the parent, and
+  // a boolean would flicker the overlay away under the cursor.
+  const [dragDepth, setDragDepth] = useState(0);
+  const attachments = useAttachments(conversationId);
 
   useEffect(onHydrate, [onHydrate]);
 
+  useEffect(() => {
+    void (async (): Promise<void> => {
+      const listed = await studio.skills.list();
+      // A failure here only means the "/" menu is empty, never that the page fails.
+      if (listed.ok) setSkills(listed.value.map((skill) => ({ name: skill.folder, description: skill.description })));
+    })();
+  }, []);
+
+  const query = slashQuery(draft);
+  const suggestions: readonly SuggestItem[] =
+    query === undefined || suggestionsDismissed ? [] : filterSkills(skills, query).map((skill) => ({ id: skill.name, title: `/${skill.name}`, subtitle: skill.description }));
+
+  const changeDraft = useCallback((next: string): void => {
+    setDraft(next);
+    setSuggestionsDismissed(false);
+    setActiveSuggestion(0);
+  }, []);
+
+  const pickSuggestion = useCallback((name: string): void => {
+    setDraft(insertSkill(name));
+    setSuggestionsDismissed(false);
+    setActiveSuggestion(0);
+  }, []);
+
+  const { items: attached, clear } = attachments;
   const send = useCallback((): void => {
     const text = draft.trim();
     if (text.length === 0) return;
     setDraft('');
-    onSend(text);
-  }, [draft, onSend]);
+    setMenuOpen(false);
+    onSend(`${text}${attachmentSuffix(attached)}`);
+    clear();
+  }, [draft, onSend, attached, clear]);
+
+  const { pick, acceptDrop } = attachments;
+  const pickMenu = useCallback(
+    (id: string): void => {
+      setMenuOpen(false);
+      if (id === 'import-file') pick();
+    },
+    [pick]
+  );
+
+  const onDrop = useCallback(
+    (event: DragEvent<HTMLDivElement>): void => {
+      event.preventDefault();
+      setDragDepth(0);
+      acceptDrop([...event.dataTransfer.files]);
+    },
+    [acceptDrop]
+  );
+
+  // preventDefault on dragover is what tells the browser a drop is allowed here;
+  // without it the file just opens in the window.
+  const allowDrop = useCallback((event: DragEvent<HTMLDivElement>): void => event.preventDefault(), []);
+  const onDragEnter = useCallback((event: DragEvent<HTMLDivElement>): void => {
+    event.preventDefault();
+    setDragDepth((depth) => depth + 1);
+  }, []);
+  const onDragLeave = useCallback((): void => setDragDepth((depth) => Math.max(0, depth - 1)), []);
 
   return (
-    <>
+    <DropTarget
+      isActive={dragDepth > 0}
+      hint="Drop the files here to attach them to this conversation"
+      onDragEnter={onDragEnter}
+      onDragOver={allowDrop}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
       <ChatThread
         messages={view.messages.map(toThreadMessage(view.subagentSteps))}
         isStreaming={view.isStreaming}
@@ -86,11 +163,24 @@ export const ChatPage: FC<ChatPageProps> = ({ view, onHydrate, onSend, onCancel 
         isStreaming={view.isStreaming}
         canSend={draft.trim().length > 0 && !view.isStreaming}
         placeholder="Send a message…"
-        onChange={setDraft}
+        attachments={attachments.items.map((item) => ({ id: item.relativePath, name: item.name }))}
+        menuOpen={menuOpen}
+        menuItems={MENU_ITEMS}
+        suggestions={suggestions}
+        activeSuggestion={activeSuggestion}
+        onChange={changeDraft}
         onSend={send}
         onCancel={onCancel}
+        onRemoveAttachment={attachments.remove}
+        onToggleMenu={() => setMenuOpen((open) => !open)}
+        onPickMenu={pickMenu}
+        onPickSuggestion={pickSuggestion}
+        onMoveSuggestion={(delta) => setActiveSuggestion((current) => stepActive(suggestions.length, current, delta))}
+        onHoverSuggestion={setActiveSuggestion}
+        onDismissSuggestions={() => setSuggestionsDismissed(true)}
       />
-    </>
+      {attachments.error !== undefined && <Toast message={attachments.error} onDismiss={attachments.dismissError} />}
+    </DropTarget>
   );
 };
 
