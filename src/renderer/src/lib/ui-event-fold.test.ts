@@ -148,3 +148,91 @@ describe('keeping the view honest when events go missing', () => {
     expect(view.messages[0]?.parts).toEqual([{ type: 'text', text: 'late' }]);
   });
 });
+
+describe('watching a delegated job progress', () => {
+  const spawned = (view: ChatView): ChatView =>
+    applyUIEvent(view, {
+      type: 'subagent-tool-start',
+      conversationId: 'c1',
+      messageId: 'm1',
+      parentToolUseId: 'task-1',
+      toolUseId: 'step-1',
+      name: 'Read',
+      input: { file_path: '/deck.pptx' },
+    });
+
+  const started = applyUIEvent(emptyChat('c1'), { type: 'turn-start', conversationId: 'c1', messageId: 'm1' });
+
+  test('a subagent step appears under the tool call that spawned it, marked running', () => {
+    const view = spawned(started);
+
+    expect(view.subagentSteps?.['task-1']).toEqual([{ toolUseId: 'step-1', name: 'Read', input: { file_path: '/deck.pptx' }, status: 'running' }]);
+  });
+
+  test('a step that finished is marked done', () => {
+    const view = applyUIEvent(spawned(started), {
+      type: 'subagent-tool-result',
+      conversationId: 'c1',
+      messageId: 'm1',
+      parentToolUseId: 'task-1',
+      toolUseId: 'step-1',
+      isError: false,
+    });
+
+    expect(view.subagentSteps?.['task-1']?.[0]?.status).toBe('done');
+  });
+
+  test('a step that failed is marked as such', () => {
+    const view = applyUIEvent(spawned(started), {
+      type: 'subagent-tool-result',
+      conversationId: 'c1',
+      messageId: 'm1',
+      parentToolUseId: 'task-1',
+      toolUseId: 'step-1',
+      isError: true,
+    });
+
+    expect(view.subagentSteps?.['task-1']?.[0]?.status).toBe('error');
+  });
+
+  test('steps accumulate in the order the subagent took them', () => {
+    let view = spawned(started);
+    view = applyUIEvent(view, { type: 'subagent-tool-start', conversationId: 'c1', messageId: 'm1', parentToolUseId: 'task-1', toolUseId: 'step-2', name: 'Grep', input: {} });
+
+    expect(view.subagentSteps?.['task-1']?.map((s) => s.name)).toEqual(['Read', 'Grep']);
+  });
+
+  test('two delegated jobs keep their own step lists', () => {
+    let view = spawned(started);
+    view = applyUIEvent(view, { type: 'subagent-tool-start', conversationId: 'c1', messageId: 'm1', parentToolUseId: 'task-2', toolUseId: 'step-9', name: 'Glob', input: {} });
+
+    expect(view.subagentSteps?.['task-1']).toHaveLength(1);
+    expect(view.subagentSteps?.['task-2']).toHaveLength(1);
+  });
+
+  test('a result for a step we never saw start is dropped rather than inventing a row', () => {
+    const view = applyUIEvent(started, { type: 'subagent-tool-result', conversationId: 'c1', messageId: 'm1', parentToolUseId: 'ghost', toolUseId: 'step-1', isError: false });
+
+    expect(view.subagentSteps).toBeUndefined();
+  });
+
+  test('the steps survive the end of the turn, so a finished job can still be inspected', () => {
+    const view = applyUIEvent(spawned(started), { type: 'turn-done', conversationId: 'c1', usage: { inputTokens: 1, outputTokens: 1 } });
+
+    expect(view.subagentSteps?.['task-1']).toHaveLength(1);
+  });
+
+  test('a subagent step belonging to another conversation is ignored', () => {
+    const view = applyUIEvent(started, {
+      type: 'subagent-tool-start',
+      conversationId: 'other',
+      messageId: 'm1',
+      parentToolUseId: 'task-1',
+      toolUseId: 'step-1',
+      name: 'Read',
+      input: {},
+    });
+
+    expect(view.subagentSteps).toBeUndefined();
+  });
+});
