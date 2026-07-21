@@ -15,6 +15,7 @@ import { emptyFold, foldSdkMessage } from '../../../shared/sdk-event-fold.ts';
 import { buildSessionEnv } from '../../../shared/session-env.ts';
 import { formatModelRef, parseModelRef } from '../../../shared/model-ref.ts';
 import { appendTurn } from '../../../shared/conversation-doc.ts';
+import { rewriteSlashSkill } from '../../../shared/slash-skill.ts';
 import { formatError } from '../../../shared/utilities/format-error.ts';
 import type { ChatError, ChatSendInput, UIEvent } from '../../../shared/ipc-contract.ts';
 import type { Conversation, Provider, Settings } from '../../../shared/types.ts';
@@ -41,6 +42,9 @@ export type AgentRuntimeDeps = {
   // root) rather than a seeded CLAUDE.md, because settingSources: ['user'] does not load
   // CLAUDE.md files (SDK 0.3.185). Empty string is safe: the agent still works via skills.
   readonly corePrompt: string;
+  // The installed skills' folder names, read per send so a skill added in settings
+  // applies from the next message. Used only to recognise a `/name` invocation.
+  readonly listSkillFolders: () => Promise<readonly string[]>;
 };
 
 export type AgentRuntime = {
@@ -64,7 +68,18 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
   // One in-flight run per conversation. The value is how we stop it.
   const running = new Map<string, AbortController>();
 
-  const runTurn = async (conversation: Conversation, text: string, provider: Provider, modelId: string, workspace: string, controller: AbortController): Promise<void> => {
+  // `text` is what the user typed and what gets persisted; `prompt` is what the model
+  // is asked. They differ only when the message invoked a skill by name: the transcript
+  // must stay the user's own record.
+  const runTurn = async (
+    conversation: Conversation,
+    text: string,
+    prompt: string,
+    provider: Provider,
+    modelId: string,
+    workspace: string,
+    controller: AbortController
+  ): Promise<void> => {
     const messageId = newMessageId();
     let fold = emptyFold(messageId);
     deps.emit({ type: 'turn-start', conversationId: conversation.id, messageId });
@@ -78,7 +93,7 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
       // all the real API has heard of.
       const model = gateway === undefined ? modelId : formatModelRef({ providerId: provider.id, modelId });
       const turn = query({
-        prompt: text,
+        prompt,
         options: {
           abortController: controller,
           model,
@@ -169,11 +184,13 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
     const workspace = await deps.conversations.workspaceFor(input.conversationId);
     if (!workspace.ok) return err(workspace.error);
 
+    const prompt = rewriteSlashSkill({ text: input.text, skillFolders: await deps.listSkillFolders() });
+
     const controller = new AbortController();
     running.set(input.conversationId, controller);
     // Deliberately not awaited: send resolves when the turn is ACCEPTED. Everything
     // it produces reaches the renderer on the event stream.
-    void runTurn(conversation.value, input.text, resolved.value.provider, resolved.value.modelId, workspace.value, controller);
+    void runTurn(conversation.value, input.text, prompt, resolved.value.provider, resolved.value.modelId, workspace.value, controller);
     return ok(null);
   };
 

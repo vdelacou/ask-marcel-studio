@@ -162,7 +162,23 @@ const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; sk
       return current.ok ? current.value.providers.find((p) => p.id === providerId) : undefined;
     },
   });
-  const agent = createAgentRuntime({ settings, conversations, gateway, userData, now, emit, inheritedEnv: process.env, corePrompt: readAgentCore(agentCoreSource()) });
+  const agent = createAgentRuntime({
+    settings,
+    conversations,
+    gateway,
+    userData,
+    now,
+    emit,
+    inheritedEnv: process.env,
+    corePrompt: readAgentCore(agentCoreSource()),
+    // Read per send, not captured: a skill added in settings applies from the next
+    // message. A listing failure is an empty list, which only means `/name` is not
+    // recognised that turn, never that the turn fails.
+    listSkillFolders: async () => {
+      const listed = await skills.list();
+      return listed.ok ? listed.value.map((skill) => skill.folder) : [];
+    },
+  });
 
   const location = officeCliLocation();
   const office = createOfficeService(createOfficeRun(location, process.env));
