@@ -1,4 +1,4 @@
-import type { FC } from 'react';
+import type { FC, ReactNode } from 'react';
 import { ConversationItem } from '../../molecules/conversation-item/index.tsx';
 
 export type SidebarConversation = { id: string; title: string; activity?: 'running' | 'unseen' };
@@ -13,6 +13,12 @@ export type SidebarProps = {
   draftTitle: string;
   confirmingDeleteId?: string;
   isSettingsActive: boolean;
+  // The Microsoft 365 dot beside Settings. The popover is built by the app shell and
+  // rendered here when it is open, so the sidebar stays free of any refresh wiring.
+  officeHealth: 'checking' | 'healthy' | 'attention' | 'signed-out';
+  officeLabel: string;
+  officePopover?: ReactNode;
+  onToggleOfficeStatus: () => void;
   onNew: () => void;
   onSelect: (id: string) => void;
   onOpenSettings: () => void;
@@ -43,6 +49,13 @@ const GearIcon: FC = () => (
 
 const menuItem = 'flex w-full items-center gap-x-2 rounded-md px-2 py-1.5 text-sm transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 
+const healthDot: Record<SidebarProps['officeHealth'], string> = {
+  checking: 'bg-border-subtle',
+  healthy: 'bg-success',
+  attention: 'bg-warning',
+  'signed-out': 'bg-ink-muted',
+};
+
 export const Sidebar: FC<SidebarProps> = ({
   conversations,
   activeId,
@@ -50,6 +63,10 @@ export const Sidebar: FC<SidebarProps> = ({
   draftTitle,
   confirmingDeleteId,
   isSettingsActive,
+  officeHealth,
+  officeLabel,
+  officePopover,
+  onToggleOfficeStatus,
   onNew,
   onSelect,
   onOpenSettings,
@@ -94,16 +111,28 @@ export const Sidebar: FC<SidebarProps> = ({
       </ul>
     </div>
 
-    <div className="border-t border-border-subtle p-2">
-      <button
-        type="button"
-        onClick={onOpenSettings}
-        aria-current={isSettingsActive ? 'page' : undefined}
-        className={`${menuItem} ${isSettingsActive ? 'bg-surface-raised font-medium text-ink' : 'text-ink-muted hover:bg-surface-raised hover:text-ink'}`}
-      >
-        <GearIcon />
-        Settings
-      </button>
+    <div className="relative border-t border-border-subtle p-2">
+      {officePopover}
+      <div className="flex items-center gap-x-1">
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          aria-current={isSettingsActive ? 'page' : undefined}
+          className={`${menuItem} ${isSettingsActive ? 'bg-surface-raised font-medium text-ink' : 'text-ink-muted hover:bg-surface-raised hover:text-ink'}`}
+        >
+          <GearIcon />
+          Settings
+        </button>
+        <button
+          type="button"
+          onClick={onToggleOfficeStatus}
+          aria-label={officeLabel}
+          title={officeLabel}
+          className="shrink-0 rounded-md p-2 transition hover:bg-surface-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          <span aria-hidden="true" className={`block h-2 w-2 rounded-full ${healthDot[officeHealth]}`} />
+        </button>
+      </div>
     </div>
   </aside>
 );
