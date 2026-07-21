@@ -27,7 +27,11 @@ export const SettingsOverlay: FC<SettingsOverlayProps> = ({ onClose, children })
           <path d="M6 6l12 12M18 6 6 18" />
         </svg>
       </button>
-      <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+      {/* flex, not a plain block: the settings layout inside claims flex-1 to fill this
+          space, and flex-1 does nothing to the child of a block box. Without it the
+          layout was as tall as its content, its own scroll container never had a height
+          to scroll within, and everything past the fold was simply clipped. */}
+      <div className="flex min-h-0 flex-1 overflow-hidden">{children}</div>
     </div>
   </div>
 );
