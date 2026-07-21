@@ -215,3 +215,47 @@ Applies to: every SKILL.md this app ships or validates via `add`.
 
 The single `ask-marcel-office` built-in skill was replaced (M9, grilled decision record in the git history of `.claude/PLAN.md`) by: (1) a compact always-on core appended to every turn (CLI nature, auth doctrine, routing table, ground rules, Sources footer); (2) two on-demand skills split by TRIGGER not source — `answer-from-m365` (read) and `draft-outlook-email` (write) — because the read sections co-fire on real questions while draft has disjoint triggers and safety rules; (3) `m365-reader`, a programmatic subagent (`agents` option in agent-runtime, versioned in-repo) that reads one oversized artifact and returns a summary. `seedBuiltins` grew a `retiredBuiltinNames` list that rm's the old folder on launch, so a renamed pack does not strand the stale skill. Studio owns these forks (stamped "Verified against ask-marcel-office v2.2.0"); no doc compiler with the plugin until drift bites twice.
 Applies to: any change to the built-in M365 pack or the agent's standing knowledge.
+
+## [decision] M10: no approval dialog, so the shell guard has to be silent and rare (2026-07-21)
+
+The app is for people who cannot judge "may I run `rm -rf ~/Documents`?", so an approval
+prompt would be worse than useless: it teaches clicking yes. The guard is a PreToolUse hook
+that denies a short list of irreversible shapes and says nothing to the user; the agent reads
+the reason and explains it in its own words.
+
+Two consequences worth remembering. A refusal has to be rare enough never to block ordinary
+work, which is why containment (is this path inside the conversation's folder?) is the rule
+rather than a blocklist of commands. And a hook denial short-circuits regardless of
+`permissionMode`, which is what lets `bypassPermissions` stay (verified in sdk.d.ts 0.3.185,
+line ~3736: "PreToolUse hook denies bypass canUseTool").
+
+Accepted residual risk, stated in the module header rather than papered over: shell
+redirection. `> file` truncates without naming a verb the scanner can recognise.
+
+## [gotcha] built-in skills were re-seeded with `cp force:true` on every launch (2026-07-21)
+
+Which meant editing one was pointless: the next start silently undid it. Fixed by recording a
+sha256 of what the app last wrote (`.seed-meta.json` in the skills dir, a leading dot so
+skill-name.ts can never accept it as a folder). Untouched since the last seed means an update
+may replace it; changed means the user changed it. A folder with no record predates the
+bookkeeping and is adopted once, then protected.
+
+## [gotcha] the transcript lived in a keyed component, so switching conversations lost it (2026-07-21)
+
+`<ChatPage key={activeId}>` unmounted on every switch, and the conversation file is only
+written when a turn ends. Switch away mid-answer and back, and the messages were gone: the
+events kept arriving but the rebuilt view had never seen their turn-start, so ui-event-fold
+dropped them. Fixed by holding one transcript per conversation above the keyed page
+(lib/chat-cache) with a single app-lifetime subscription.
+
+The reconciliation rule matters: idle means the file wins (this is what swaps the optimistic
+user echo for the persisted message), mid-turn means file history plus live messages the file
+does not know about yet, matched by id. A new `turn-saved` event exists because `turn-done`
+fires from the SDK result, BEFORE the save, so re-reading on turn-done races the write.
+
+## [gotcha] Stryker's incremental cache reports stale survivors after a test change (2026-07-21)
+
+Already in this file for scores you tried to improve; it bit repeatedly across M10 when
+splitting commits. `rm -f reports/stryker-incremental.json` before trusting any
+`mutate:staged` result on a file whose tests just changed. The pre-commit hook uses the same
+cache, so a commit can fail the gate on a score the file no longer has.
