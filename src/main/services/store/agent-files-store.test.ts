@@ -19,9 +19,9 @@ afterEach(() => {
 
 describe('storing what the user wrote about themselves', () => {
   test('a signature comes back exactly as it was saved', async () => {
-    await store.save('signature', '<p>Kind regards,<br>Vincent</p>');
+    await store.save('signature', '<p>Kind regards,<br>A. Person</p>');
 
-    expect(await store.get('signature')).toEqual({ ok: true, value: '<p>Kind regards,<br>Vincent</p>' });
+    expect(await store.get('signature')).toEqual({ ok: true, value: '<p>Kind regards,<br>A. Person</p>' });
   });
 
   test('it lands where the agent looks for it, so the drafting skill can just open it', async () => {

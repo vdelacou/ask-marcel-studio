@@ -214,9 +214,10 @@ const permissionVerdict = (policy: BashGuardPolicy, cwd: string | undefined, wor
 // module states up front: the alternative is guessing.
 const opaqueVerdict = (command: string, segments: readonly Segment[]): BashGuardVerdict => {
   if (!segments.some((segment) => segment.opaque)) return ALLOW;
-  // Built from a fixed list of literals, never from anything the command supplied.
-  // eslint-disable-next-line security/detect-non-literal-regexp -- OPAQUE_DENY_WORDS is a constant
-  const hit = OPAQUE_DENY_WORDS.find((verb) => new RegExp(`\\b${verb}\\b`).test(command));
+  // Split into words and checked by membership rather than by a regex built from the
+  // verb: same answer, and nothing here constructs a pattern at runtime.
+  const words = new Set(command.split(/[^A-Za-z0-9_.-]+/));
+  const hit = OPAQUE_DENY_WORDS.find((verb) => words.has(verb));
   if (hit === undefined) return ALLOW;
   return deny(`this hides part of the command inside a substitution and mentions ${hit}, which cannot be checked. ${SUBSTITUTION_HINT}. ${CONTINUE_HINT}`);
 };

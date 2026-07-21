@@ -24,11 +24,17 @@ const lastSegmentOf = (raw: string): string => {
 };
 
 // A name with no path, no separators, no control characters and no leading dot.
+// A newline or a NUL in a filename is either a mistake or an attempt at one. Checked by
+// code point rather than by a regex, because a regex that matches control characters is
+// itself a lint finding, and this reads plainer anyway.
+const isPrintable = (character: string): boolean => {
+  const code = character.codePointAt(0) ?? 0;
+  return code > 31 && code !== 127;
+};
+
 export const safeImportName = (raw: string): string => {
   const lastSegment = lastSegmentOf(raw);
-  // A newline or a NUL in a filename is either a mistake or an attempt at one.
-  // eslint-disable-next-line no-control-regex -- stripping control characters is the point
-  const cleaned = lastSegment.replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  const cleaned = [...lastSegment].filter(isPrintable).join('').trim();
   const withoutLeadingDots = cleaned.replace(/^\.+/, '');
   const trimmed = withoutLeadingDots.slice(0, MAX_NAME_LENGTH).trim();
   // '..', '/', '   ' and '' all end up here. The file is still worth keeping; it just

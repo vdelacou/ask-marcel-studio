@@ -36,13 +36,9 @@ const fileName = (path: string): string =>
     .filter((segment) => segment.length > 0)
     .at(-1) ?? path;
 
-const hostOf = (url: string): string | undefined => {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return undefined;
-  }
-};
+// URL.parse returns null instead of throwing, so this needs no try/catch (the same
+// reason settings-doc uses it).
+const hostOf = (url: string): string | undefined => URL.parse(url)?.hostname;
 
 // `mcp__gmail__send_message` is a wire name, not a sentence. Its last segment, with the
 // separators opened out, is close enough to one.
