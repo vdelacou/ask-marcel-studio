@@ -5,14 +5,21 @@ your Microsoft 365 in reach. A radically simplified Cherry Studio, stripped to t
 
 Electron + React, MIT licensed. Built to the atelier engineering standard.
 
-> **Status: M5 complete, M7 polish landing — chat, skills, any OpenAI-compatible model.** Add a
-> provider in settings (Anthropic, or any OpenAI-compatible endpoint) and you get a working agent
-> conversation: replies rendered as markdown with syntax-highlighted code, visible tool calls it
-> actually executes, a persisted transcript that survives a restart, and a Stop button. A sidebar
-> lists your conversations, and lets you start, switch, rename, and delete them; each turn's token
-> usage shows in the header. Settings also manages skills and your Microsoft 365 sign-in: a skill you
-> add applies from your next message, and once you sign in, the agent reads your mail, calendar, files
-> and tasks through the read-only office CLI on its PATH. Only packaging (M6) is not built yet. See
+> **Status: M10 complete — the app an office employee can actually live in.** Add a provider in
+> settings and you get a working agent conversation: replies as markdown, tool calls labelled in
+> plain words ("Reading your last 5 emails") rather than by tool name, delegated helpers showing
+> their steps, a transcript that survives switching away mid-answer, and a Stop button. The sidebar
+> marks which conversations are thinking and which have a reply you have not read. Attach files with
+> the + button or by dropping them anywhere on the conversation; type `/` to invoke a skill by name;
+> pick a different model per conversation when you have more than one.
+>
+> Settings is where the rest lives: models, skills (editable, including the built-in ones, with the
+> original a click away), the helpers the agent delegates to, your email signature and writing voice,
+> what the app remembers about your own vocabulary, and Microsoft 365, where you can switch off whole
+> areas the agent may not touch. A dot beside Settings says whether your sign-in is actually working.
+>
+> The agent's shell is guarded: it cannot delete outside the conversation's own folder, touch the
+> machine, or sign in to Microsoft 365 on your behalf. Only packaging (M6) is not built yet. See
 > `docs/PLAN.md` for the milestone plan and `.claude/PLAN.md` for the current run.
 
 ## Requirements
@@ -101,15 +108,43 @@ app's own Electron binary runs as Node (`ELECTRON_RUN_AS_NODE`), and the bundled
 global installs and cache inside the app's data folder. The shims are re-seeded every launch.
 
 `python3` and `pip3` are there as well. The app bundles a standalone CPython (Astral's
-python-build-standalone) and, on first launch, builds a private virtualenv under its data folder
-and seeds it offline with `openpyxl` and `pandas` from bundled wheels, so the agent can read a
-spreadsheet or crunch a CSV with nothing installed and no network. The venv is rebuilt when the
-runtime version changes. Fetch the runtime and wheels for local dev with `bun run fetch:python`
-and `bun run fetch:wheels`.
+python-build-standalone) and, on first launch, builds a private virtualenv under its data folder,
+so the agent can crunch a CSV with nothing installed on the machine. Nothing is preinstalled into
+it: naming a fixed set of libraries only implied a limit that does not exist, and the agent
+installs whatever a task needs. The venv is rebuilt when the runtime version changes. Fetch the
+runtime for local dev with `bun run fetch:python`.
 
 Two things the panel does not show: the agent also gets the SDK's own bundled skills (code-review,
 verify, run, and friends) via the `claude_code` preset, and your personal `~/.claude` skills are
 deliberately **not** loaded — the app points the agent at its own config directory.
+
+## What the app does on its own
+
+Three things happen in the background, one at a time, and each skips itself when there is
+nothing to do:
+
+- **Your signature.** Fetched from your mailbox the first time you are signed in. Never
+  overwritten once you have edited it.
+- **Your writing voice.** Written once from your own sent mail, so a draft sounds like you.
+- **What your words mean.** A conversation that has been quiet for five minutes is read for
+  jargon, team members and people you deal with. Nothing is ever remembered without you
+  confirming it: the app asks, one question at a time, when you are not mid-sentence.
+
+All three are files in the agent's config folder, editable in Settings, and read back into every
+turn.
+
+## Guardrails
+
+The agent has a real shell, which is what makes it useful and also what makes "tidy those files
+up" a sentence worth thinking about. A hook checks every command before it runs and refuses the
+few shapes that cannot be undone: deleting outside the conversation's own scratch folder, disk
+and system tools, recursive permission changes, and anything computed inside a substitution that
+mentions one of them. Deleting inside the workspace is the agent's own business.
+
+It also cannot sign you in to Microsoft 365: that browser window belongs to you, in Settings.
+
+There is no approval dialog anywhere. A refusal has to be rare enough never to block ordinary
+work, and the agent explains it to you in its own words and carries on.
 
 ## OpenAI-compatible providers
 
