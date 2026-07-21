@@ -4,6 +4,7 @@ import {
   claudeConfigDir,
   conversationFilePath,
   conversationsDir,
+  backgroundWorkspaceDir,
   npmCacheDir,
   signatureFilePath,
   voiceProfileFilePath,
@@ -102,5 +103,14 @@ describe('where the agent finds what the user wrote about themselves', () => {
 
   test('the voice profile sits beside it', () => {
     expect(voiceProfileFilePath('/data')).toBe(`${claudeConfigDir('/data')}/voice-profile.md`);
+  });
+});
+
+describe('where work the app does on its own happens', () => {
+  test('a background job runs outside every conversation folder', () => {
+    // Workspaces belong to conversations and are deleted with them; a job that outlives
+    // one must not have its scratch swept away underneath it.
+    expect(backgroundWorkspaceDir('/data')).toBe('/data/background-workspace');
+    expect(backgroundWorkspaceDir('/data').startsWith(workspacesDir('/data'))).toBe(false);
   });
 });

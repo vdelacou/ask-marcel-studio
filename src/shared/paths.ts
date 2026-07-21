@@ -56,6 +56,10 @@ export const skillsDir = (userData: string): string => join(claudeConfigDir(user
 
 export const skillDir = (userData: string, folder: SkillFolderName): string => join(skillsDir(userData), folder);
 
+// Where a background job runs. Deliberately NOT under workspaces/: those belong to
+// conversations and are deleted with them.
+export const backgroundWorkspaceDir = (userData: string): string => join(userData, 'background-workspace');
+
 // Prepended to the agent's PATH so `ask-marcel-office` resolves to our shim (M4).
 export const binDir = (userData: string): string => join(userData, 'bin');
 
