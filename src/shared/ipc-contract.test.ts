@@ -16,6 +16,7 @@ describe('the channels main and the renderer agree on', () => {
       conversationsCreate: 'conversations:create',
       conversationsGet: 'conversations:get',
       conversationsRename: 'conversations:rename',
+      conversationsSetModel: 'conversations:setModel',
       conversationsDelete: 'conversations:delete',
       chatSend: 'chat:send',
       chatCancel: 'chat:cancel',

@@ -280,3 +280,60 @@ describe('refusing an id that could escape the conversations folder', () => {
     expect(existsSync(outside)).toBe(false);
   });
 });
+
+describe('changing which model answers a conversation', () => {
+  test('the new model is what the next turn will resolve', async () => {
+    const created = await store.create({ model: 'anthropic::claude-fable-5' });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const changed = await store.setModel({ id: created.value.id, model: 'local::qwen' });
+
+    expect(changed.ok).toBe(true);
+    if (!changed.ok) return;
+    expect(changed.value.model).toBe('local::qwen');
+    const reopened = await store.get(created.value.id);
+    expect(reopened.ok && reopened.value.model).toBe('local::qwen');
+  });
+
+  test('changing the model stamps the conversation as updated', async () => {
+    const created = await store.create({ model: 'anthropic::claude-fable-5' });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    tick('2026-07-17T18:00:00.000Z');
+
+    const changed = await store.setModel({ id: created.value.id, model: 'local::qwen' });
+
+    expect(changed.ok && changed.value.updatedAt).toBe('2026-07-17T18:00:00.000Z');
+  });
+
+  test('a reference that is not a reference is refused rather than stored', async () => {
+    const created = await store.create({ model: 'anthropic::claude-fable-5' });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const changed = await store.setModel({ id: created.value.id, model: 'claude-fable-5' });
+
+    expect(changed.ok).toBe(false);
+    if (changed.ok) return;
+    expect(changed.error.kind).toBe('invalid');
+    const reopened = await store.get(created.value.id);
+    expect(reopened.ok && reopened.value.model).toBe('anthropic::claude-fable-5');
+  });
+
+  test('changing the model of a conversation that is gone reports it as missing', async () => {
+    const changed = await store.setModel({ id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301', model: 'local::qwen' });
+
+    expect(changed.ok).toBe(false);
+    if (changed.ok) return;
+    expect(changed.error.kind).toBe('not-found');
+  });
+
+  test('an id that could reach a path is refused before it does', async () => {
+    const changed = await store.setModel({ id: '../escape', model: 'local::qwen' });
+
+    expect(changed.ok).toBe(false);
+    if (changed.ok) return;
+    expect(changed.error.kind).toBe('malformed-id');
+  });
+});

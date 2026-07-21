@@ -15,8 +15,9 @@ import { conversationId, newConversationId } from '../../../shared/conversation-
 import { byMostRecentlyUpdated, newConversation, parseConversation, serialiseConversation, toMeta } from '../../../shared/conversation-doc.ts';
 import { conversationFilePath, conversationsDir, workspaceDir } from '../../../shared/paths.ts';
 import { readJsonFile, removeFile, writeJsonFileAtomic } from './json-file.ts';
+import { parseModelRef } from '../../../shared/model-ref.ts';
 import { formatError } from '../../../shared/utilities/format-error.ts';
-import type { CreateConversationInput, RenameConversationInput, StoreError } from '../../../shared/ipc-contract.ts';
+import type { CreateConversationInput, RenameConversationInput, SetConversationModelInput, StoreError } from '../../../shared/ipc-contract.ts';
 import type { Conversation, ConversationMeta } from '../../../shared/types.ts';
 import type { Result } from '../../../shared/result.ts';
 import { err, ok } from '../../../shared/result.ts';
@@ -33,6 +34,8 @@ export type ConversationsStore = {
   readonly create: (input: CreateConversationInput) => Promise<Result<Conversation, StoreError>>;
   readonly get: (id: string) => Promise<Result<Conversation, StoreError>>;
   readonly rename: (input: RenameConversationInput) => Promise<Result<ConversationMeta, StoreError>>;
+  // Takes effect from the next message: the runtime reads the model per send.
+  readonly setModel: (input: SetConversationModelInput) => Promise<Result<ConversationMeta, StoreError>>;
   readonly remove: (id: string) => Promise<Result<null, StoreError>>;
   readonly workspaceFor: (id: string) => Promise<Result<string, StoreError>>;
   // Writes a whole conversation back. The agent runtime calls this once per turn end
@@ -98,6 +101,20 @@ export const createConversationsStore = (deps: ConversationsStoreDeps): Conversa
     return ok(toMeta(written.value));
   };
 
+  const setModel = async (input: SetConversationModelInput): Promise<Result<ConversationMeta, StoreError>> => {
+    const existing = await readOne(input.id);
+    if (!existing.ok) return existing;
+
+    // Shape only. Whether the reference names something the user actually has set up
+    // is a settings question, answered at the IPC boundary where settings are readable.
+    const parsed = parseModelRef(input.model);
+    if (!parsed.ok) return err({ kind: 'invalid', message: parsed.error.message });
+
+    const written = await writeOne({ ...existing.value, model: input.model, updatedAt: deps.now() });
+    if (!written.ok) return written;
+    return ok(toMeta(written.value));
+  };
+
   const remove = async (rawId: string): Promise<Result<null, StoreError>> => {
     const checked = conversationId(rawId);
     if (!checked.ok) return err({ kind: 'malformed-id', message: checked.error.message });
@@ -125,5 +142,5 @@ export const createConversationsStore = (deps: ConversationsStoreDeps): Conversa
     }
   };
 
-  return { list, create, get: readOne, rename, remove, workspaceFor, save: writeOne };
+  return { list, create, get: readOne, rename, setModel, remove, workspaceFor, save: writeOne };
 };

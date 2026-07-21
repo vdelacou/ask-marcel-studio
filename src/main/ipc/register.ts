@@ -11,6 +11,7 @@
  */
 import { dialog, ipcMain } from 'electron';
 import { CHANNEL } from '../../shared/ipc-contract.ts';
+import { modelRefIsConfigured } from '../../shared/model-ref.ts';
 import type { AgentRuntime } from '../services/agent/agent-runtime.ts';
 import type { SkillsService } from '../services/skills/skills-service.ts';
 import type { OfficeService } from '../services/office/office-service.ts';
@@ -38,6 +39,17 @@ export const registerIpc = (deps: IpcDeps): void => {
   ipcMain.handle(CHANNEL.conversationsRename, (_event, input: unknown) => {
     const draft = input as { id?: unknown; title?: unknown } | undefined;
     return deps.conversations.rename({ id: asString(draft?.id), title: asString(draft?.title) });
+  });
+  // The reference is checked against what is actually configured here, where settings
+  // are readable: a conversation pinned to a model the user has since removed would
+  // fail deep inside the runtime on its next turn instead of at the click that caused it.
+  ipcMain.handle(CHANNEL.conversationsSetModel, async (_event, input: unknown) => {
+    const draft = input as { id?: unknown; model?: unknown } | undefined;
+    const model = asString(draft?.model);
+    const settings = await deps.settings.get();
+    if (!settings.ok) return err(settings.error);
+    if (!modelRefIsConfigured(settings.value.providers, model)) return err({ kind: 'invalid', message: 'that model is not set up any more' });
+    return deps.conversations.setModel({ id: asString(draft?.id), model });
   });
   ipcMain.handle(CHANNEL.conversationsDelete, (_event, id: unknown) => deps.conversations.remove(asString(id)));
 

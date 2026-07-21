@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { formatModelRef, parseModelRef } from './model-ref.ts';
+import { formatModelRef, modelRefIsConfigured, parseModelRef } from './model-ref.ts';
 
 describe('addressing a model that belongs to a configured provider', () => {
   test('a reference naming an Anthropic provider and one of its models resolves to both parts', () => {
@@ -83,5 +83,33 @@ describe('rejecting a model reference the app cannot route', () => {
     expect(parsed.ok).toBe(false);
     if (parsed.ok) return;
     expect(parsed.error.reference).toBe('nonsense');
+  });
+});
+
+describe('checking a reference against what is set up', () => {
+  const providers = [
+    { id: 'anthropic', modelIds: ['claude-fable-5', 'claude-haiku-4-5'] },
+    { id: 'local', modelIds: ['qwen'] },
+  ];
+
+  test('a reference naming a configured model is accepted', () => {
+    expect(modelRefIsConfigured(providers, 'anthropic::claude-haiku-4-5')).toBe(true);
+  });
+
+  test('a reference to a provider that is not there is refused', () => {
+    expect(modelRefIsConfigured(providers, 'openai::gpt-5')).toBe(false);
+  });
+
+  test('a reference to a model the provider does not offer is refused', () => {
+    // The provider survived a settings edit; the model did not.
+    expect(modelRefIsConfigured(providers, 'anthropic::claude-2')).toBe(false);
+  });
+
+  test('a reference that is not a reference at all is refused', () => {
+    expect(modelRefIsConfigured(providers, 'claude-fable-5')).toBe(false);
+  });
+
+  test('nothing configured accepts nothing', () => {
+    expect(modelRefIsConfigured([], 'anthropic::claude-fable-5')).toBe(false);
   });
 });

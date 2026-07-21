@@ -29,6 +29,10 @@ export type ModelRefError = {
 
 export const formatModelRef = (ref: ModelRef): string => `${ref.providerId}${SEPARATOR}${ref.modelId}`;
 
+// Just enough of a provider to check a reference against it, so both the settings
+// document and an in-progress draft can be checked by the same function.
+export type ConfiguredProvider = { readonly id: string; readonly modelIds: readonly string[] };
+
 export const parseModelRef = (reference: string): Result<ModelRef, ModelRefError> => {
   const at = reference.indexOf(SEPARATOR);
   if (at <= 0) return err({ kind: 'malformed', reference, message: `model reference must be 'providerId${SEPARATOR}modelId'` });
@@ -40,4 +44,16 @@ export const parseModelRef = (reference: string): Result<ModelRef, ModelRefError
   if (modelId.length === 0) return err({ kind: 'malformed', reference, message: `model reference must be 'providerId${SEPARATOR}modelId'` });
 
   return ok({ providerId, modelId });
+};
+
+// Whether a reference still names something the user has set up. A conversation
+// carries its model, and a provider can be removed or renamed long after: pointing a
+// turn at a model that is gone fails deep inside the runtime, so it is checked at the
+// boundary instead.
+export const modelRefIsConfigured = (providers: readonly ConfiguredProvider[], reference: string): boolean => {
+  const parsed = parseModelRef(reference);
+  if (!parsed.ok) return false;
+  const provider = providers.find((p) => p.id === parsed.value.providerId);
+  if (provider === undefined) return false;
+  return provider.modelIds.includes(parsed.value.modelId);
 };

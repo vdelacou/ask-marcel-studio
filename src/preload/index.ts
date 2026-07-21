@@ -10,7 +10,7 @@
  */
 import { contextBridge, ipcRenderer } from 'electron';
 import { CHANNEL, CHAT_EVENT } from '../shared/ipc-contract.ts';
-import type { ChatSendInput, CreateConversationInput, RenameConversationInput, StudioApi, UIEvent } from '../shared/ipc-contract.ts';
+import type { ChatSendInput, CreateConversationInput, RenameConversationInput, SetConversationModelInput, StudioApi, UIEvent } from '../shared/ipc-contract.ts';
 import type { Settings } from '../shared/types.ts';
 
 const api: StudioApi = {
@@ -23,6 +23,7 @@ const api: StudioApi = {
     create: (input: CreateConversationInput) => ipcRenderer.invoke(CHANNEL.conversationsCreate, input),
     get: (id: string) => ipcRenderer.invoke(CHANNEL.conversationsGet, id),
     rename: (input: RenameConversationInput) => ipcRenderer.invoke(CHANNEL.conversationsRename, input),
+    setModel: (input: SetConversationModelInput) => ipcRenderer.invoke(CHANNEL.conversationsSetModel, input),
     remove: (id: string) => ipcRenderer.invoke(CHANNEL.conversationsDelete, id),
   },
   chat: {

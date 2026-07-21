@@ -20,6 +20,7 @@ export const CHANNEL = {
   conversationsCreate: 'conversations:create',
   conversationsGet: 'conversations:get',
   conversationsRename: 'conversations:rename',
+  conversationsSetModel: 'conversations:setModel',
   conversationsDelete: 'conversations:delete',
   chatSend: 'chat:send',
   chatCancel: 'chat:cancel',
@@ -146,6 +147,15 @@ export type RenameConversationInput = {
   readonly title: string;
 };
 
+// Changing which model answers this conversation. Applies from the next message: the
+// runtime reads the conversation's model on every send.
+export type SetConversationModelInput = {
+  // Untrusted, like every id crossing IPC. See RenameConversationInput.
+  readonly id: string;
+  // A model reference, 'providerId::modelId'.
+  readonly model: string;
+};
+
 // Why each kind exists (see office-service):
 //   spawn-failed  the office CLI could not be launched at all
 //   busy          a login is already in progress (single-flight)
@@ -170,6 +180,7 @@ export type StudioApi = {
     readonly create: (input: CreateConversationInput) => Promise<Result<Conversation, StoreError>>;
     readonly get: (id: string) => Promise<Result<Conversation, StoreError>>;
     readonly rename: (input: RenameConversationInput) => Promise<Result<ConversationMeta, StoreError>>;
+    readonly setModel: (input: SetConversationModelInput) => Promise<Result<ConversationMeta, StoreError>>;
     readonly remove: (id: string) => Promise<Result<null, StoreError>>;
   };
   readonly chat: {
