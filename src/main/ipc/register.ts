@@ -18,6 +18,10 @@ import type { OfficeService } from '../services/office/office-service.ts';
 import type { OfficeCatalog } from '../services/office/office-catalog-io.ts';
 import type { ConversationsStore } from '../services/store/conversations-store.ts';
 import type { SettingsStore } from '../services/store/settings-store.ts';
+import type { AgentsStore } from '../services/store/agents-store.ts';
+import type { AgentFilesStore } from '../services/store/agent-files-store.ts';
+import type { AgentFileError } from '../../shared/agent-files.ts';
+import type { Result } from '../../shared/result.ts';
 import { err } from '../../shared/result.ts';
 
 export type IpcDeps = {
@@ -27,6 +31,11 @@ export type IpcDeps = {
   readonly skills: SkillsService;
   readonly office: OfficeService;
   readonly officeCatalog: OfficeCatalog;
+  readonly agentsStore: AgentsStore;
+  readonly agentFiles: AgentFilesStore;
+  // Filled by the background runner once it exists; until then it says so honestly and
+  // the panel disables the button.
+  readonly regenerateAgentFile: (doc: unknown) => Promise<Result<string, AgentFileError>>;
 };
 
 const asString = (value: unknown): string => (typeof value === 'string' ? value : '');
@@ -98,4 +107,24 @@ export const registerIpc = (deps: IpcDeps): void => {
     if (picked.canceled || dir === undefined) return err({ kind: 'cancelled', message: 'no folder chosen' });
     return deps.skills.add(dir);
   });
+  ipcMain.handle(CHANNEL.skillsRead, (_event, folder: unknown) => deps.skills.read(asString(folder)));
+  ipcMain.handle(CHANNEL.skillsWrite, (_event, input: unknown) => {
+    const draft = input as { folder?: unknown; contents?: unknown } | undefined;
+    return deps.skills.write(asString(draft?.folder), asString(draft?.contents));
+  });
+  ipcMain.handle(CHANNEL.skillsRestore, (_event, folder: unknown) => deps.skills.restore(asString(folder)));
+
+  // The stores validate what arrives; nothing is coerced on the way in beyond the
+  // shape the handler needs to read.
+  ipcMain.handle(CHANNEL.agentsList, () => deps.agentsStore.list());
+  ipcMain.handle(CHANNEL.agentsSave, (_event, agent: unknown) => deps.agentsStore.save(agent));
+  ipcMain.handle(CHANNEL.agentsRemove, (_event, name: unknown) => deps.agentsStore.remove(name));
+  ipcMain.handle(CHANNEL.agentsRestore, (_event, name: unknown) => deps.agentsStore.restore(name));
+
+  ipcMain.handle(CHANNEL.agentFileGet, (_event, doc: unknown) => deps.agentFiles.get(doc));
+  ipcMain.handle(CHANNEL.agentFileSave, (_event, input: unknown) => {
+    const draft = input as { doc?: unknown; text?: unknown } | undefined;
+    return deps.agentFiles.save(draft?.doc, draft?.text);
+  });
+  ipcMain.handle(CHANNEL.agentFileRegenerate, (_event, doc: unknown) => deps.regenerateAgentFile(doc));
 };

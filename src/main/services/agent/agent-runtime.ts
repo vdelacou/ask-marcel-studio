@@ -10,7 +10,6 @@
  * running. See .claude/LESSONS.md.
  */
 import { query } from '@anthropic-ai/claude-agent-sdk';
-import { m365Reader } from './m365-reader.ts';
 import { buildAgentHooks } from './agent-hooks.ts';
 import { emptyFold, foldSdkMessage } from '../../../shared/sdk-event-fold.ts';
 import { buildSessionEnv } from '../../../shared/session-env.ts';
@@ -18,6 +17,7 @@ import { formatModelRef, parseModelRef } from '../../../shared/model-ref.ts';
 import { appendTurn } from '../../../shared/conversation-doc.ts';
 import { rewriteSlashSkill } from '../../../shared/slash-skill.ts';
 import { formatError } from '../../../shared/utilities/format-error.ts';
+import type { SdkAgentDefinition } from '../../../shared/agents-doc.ts';
 import type { ChatError, ChatSendInput, UIEvent } from '../../../shared/ipc-contract.ts';
 import type { Conversation, Provider, Settings } from '../../../shared/types.ts';
 import type { ConversationsStore } from '../store/conversations-store.ts';
@@ -49,6 +49,9 @@ export type AgentRuntimeDeps = {
   // Microsoft 365 command name to category, from the CLI's own catalog. Feeds the
   // PreToolUse guard so a category switched off in settings is actually refused.
   readonly officeCommandCategories: ReadonlyMap<string, string>;
+  // The helpers this turn may delegate to: the built-ins with any change the user made,
+  // plus their own. Read per send so an edit in settings applies from the next message.
+  readonly listAgents: () => Promise<Readonly<Record<string, SdkAgentDefinition>>>;
 };
 
 export type AgentRuntime = {
@@ -83,6 +86,7 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
     modelId: string,
     workspace: string,
     disabledOfficeCategories: readonly string[],
+    agents: Readonly<Record<string, SdkAgentDefinition>>,
     controller: AbortController
   ): Promise<void> => {
     const messageId = newMessageId();
@@ -105,10 +109,11 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
           cwd: workspace,
           env: buildSessionEnv({ provider, modelId, userData: deps.userData, inheritedEnv: deps.inheritedEnv, ...(gateway === undefined ? {} : { gateway }) }),
           // The M365 core rides `append` on the preset, not a CLAUDE.md: it loads on
-          // every turn regardless of setting sources or cwd. m365-reader is a programmatic
-          // subagent the read skill delegates heavy artifacts to, versioned here in-repo.
+          // every turn regardless of setting sources or cwd. The helpers are passed
+          // programmatically for the same reason: settingSources: ['user'] loads no
+          // agent files, so there is nowhere on disk for them to come from.
           systemPrompt: { type: 'preset', preset: 'claude_code', append: deps.corePrompt },
-          agents: { 'm365-reader': m365Reader },
+          agents,
           settingSources: ['user'],
           // No approval prompts anywhere in this app: a PreToolUse hook denial
           // short-circuits regardless of the permission mode, which is what lets the
@@ -208,6 +213,7 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
       resolved.value.modelId,
       workspace.value,
       settings.value.officePolicy?.disabledCategories ?? [],
+      await deps.listAgents(),
       controller
     );
     return ok(null);

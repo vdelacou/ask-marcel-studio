@@ -19,6 +19,11 @@ import { readAgentCore } from './services/agent/agent-core-io.ts';
 import { createConversationsStore } from './services/store/conversations-store.ts';
 import { createSettingsStore } from './services/store/settings-store.ts';
 import { createSkillsService } from './services/skills/skills-service.ts';
+import { createAgentsStore } from './services/store/agents-store.ts';
+import { createAgentFilesStore } from './services/store/agent-files-store.ts';
+import { BUILTIN_AGENTS } from './services/agent/builtin-agents.ts';
+import { EMPTY_AGENTS_DOC, mergeAgents, toSdkAgents } from '../shared/agents-doc.ts';
+import { err } from '../shared/result.ts';
 import { createGateway } from './services/gateway/gateway-server.ts';
 import { createOfficeService } from './services/office/office-service.ts';
 import { createOfficeRun, writeOfficeShim } from './services/office/office-io.ts';
@@ -172,6 +177,8 @@ const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; sk
     },
   });
   const officeCatalog = createOfficeCatalog(officeCatalogPath());
+  const agentsStore = createAgentsStore({ userData, builtins: BUILTIN_AGENTS });
+  const agentFiles = createAgentFilesStore({ userData });
   const agent = createAgentRuntime({
     settings,
     conversations,
@@ -189,6 +196,12 @@ const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; sk
       const listed = await skills.list();
       return listed.ok ? listed.value.map((skill) => skill.folder) : [];
     },
+    // Read per send too: a helper edited in settings applies from the next message. A
+    // read failure falls back to the built-ins rather than failing the turn.
+    listAgents: async () => {
+      const listed = await agentsStore.list();
+      return toSdkAgents(listed.ok ? listed.value : mergeAgents(BUILTIN_AGENTS, EMPTY_AGENTS_DOC));
+    },
   });
 
   const location = officeCliLocation();
@@ -202,7 +215,19 @@ const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; sk
   // Build the per-user Python venv in the background so python3 resolves offline.
   startPython(userData);
 
-  registerIpc({ settings, conversations, agent, skills, office, officeCatalog });
+  registerIpc({
+    settings,
+    conversations,
+    agent,
+    skills,
+    office,
+    officeCatalog,
+    agentsStore,
+    agentFiles,
+    // Filled in when the background runner lands; until then the panel's Regenerate
+    // button is disabled by this very answer.
+    regenerateAgentFile: () => Promise.resolve(err({ kind: 'unavailable', message: 'this cannot be rebuilt automatically yet' })),
+  });
   return { agent, skills, gateway };
 };
 

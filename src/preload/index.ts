@@ -63,6 +63,20 @@ const api: StudioApi = {
     list: () => ipcRenderer.invoke(CHANNEL.skillsList),
     add: () => ipcRenderer.invoke(CHANNEL.skillsAdd),
     remove: (name: string) => ipcRenderer.invoke(CHANNEL.skillsRemove, name),
+    read: (folder: string) => ipcRenderer.invoke(CHANNEL.skillsRead, folder),
+    write: (input) => ipcRenderer.invoke(CHANNEL.skillsWrite, input),
+    restore: (folder: string) => ipcRenderer.invoke(CHANNEL.skillsRestore, folder),
+  },
+  agents: {
+    list: () => ipcRenderer.invoke(CHANNEL.agentsList),
+    save: (agent) => ipcRenderer.invoke(CHANNEL.agentsSave, agent),
+    remove: (name: string) => ipcRenderer.invoke(CHANNEL.agentsRemove, name),
+    restore: (name: string) => ipcRenderer.invoke(CHANNEL.agentsRestore, name),
+  },
+  agentFiles: {
+    get: (doc) => ipcRenderer.invoke(CHANNEL.agentFileGet, doc),
+    save: (input) => ipcRenderer.invoke(CHANNEL.agentFileSave, input),
+    regenerate: (doc) => ipcRenderer.invoke(CHANNEL.agentFileRegenerate, doc),
   },
   office: {
     status: () => ipcRenderer.invoke(CHANNEL.officeStatus),
