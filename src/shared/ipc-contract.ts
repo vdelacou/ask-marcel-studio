@@ -22,6 +22,9 @@ export const CHANNEL = {
   conversationsRename: 'conversations:rename',
   conversationsSetModel: 'conversations:setModel',
   conversationsDelete: 'conversations:delete',
+  conversationsImportPick: 'conversations:importPick',
+  conversationsImportPaths: 'conversations:importPaths',
+  conversationsImportData: 'conversations:importData',
   chatSend: 'chat:send',
   chatCancel: 'chat:cancel',
   skillsList: 'skills:list',
@@ -156,6 +159,33 @@ export type SetConversationModelInput = {
   readonly model: string;
 };
 
+// A file copied into the conversation's workspace, ready for the agent to open.
+export type ImportedFile = {
+  readonly name: string;
+  // Relative to the workspace, which is the agent's working directory.
+  readonly relativePath: string;
+  readonly size: number;
+};
+
+//   cancelled  the user closed the file picker; not a failure, and says nothing
+//   too-large  one of the files is bigger than the app will copy into a conversation
+export type ImportError = StoreError | { readonly kind: 'cancelled'; readonly message: string } | { readonly kind: 'too-large'; readonly message: string };
+
+export type ImportPathsInput = {
+  readonly id: string;
+  // Real paths, resolved in the preload via webUtils. Untrusted all the same: main
+  // reduces each to a bare filename before it joins anything.
+  readonly paths: readonly string[];
+};
+
+// A file that has no path on disk, e.g. an attachment dragged straight out of Outlook.
+// Its bytes cross IPC because there is nothing else to copy from.
+export type ImportDataInput = {
+  readonly id: string;
+  readonly name: string;
+  readonly bytes: ArrayBuffer;
+};
+
 // Why each kind exists (see office-service):
 //   spawn-failed  the office CLI could not be launched at all
 //   busy          a login is already in progress (single-flight)
@@ -182,6 +212,17 @@ export type StudioApi = {
     readonly rename: (input: RenameConversationInput) => Promise<Result<ConversationMeta, StoreError>>;
     readonly setModel: (input: SetConversationModelInput) => Promise<Result<ConversationMeta, StoreError>>;
     readonly remove: (id: string) => Promise<Result<null, StoreError>>;
+    // Opens the file picker in MAIN, for the same reason skills.add does: a path
+    // chosen renderer-side would be an untrusted string reaching the filesystem.
+    readonly importPick: (id: string) => Promise<Result<readonly ImportedFile[], ImportError>>;
+    readonly importPaths: (input: ImportPathsInput) => Promise<Result<readonly ImportedFile[], ImportError>>;
+    readonly importData: (input: ImportDataInput) => Promise<Result<ImportedFile, ImportError>>;
+  };
+  // Not a channel: a renderer-side call into electron's webUtils, which is the only
+  // way to learn a dropped File's real path since Electron 32 removed File.path.
+  // Resolves to '' for a file that has no path, which is the signal to send bytes.
+  readonly files: {
+    readonly pathForFile: (file: File) => string;
   };
   readonly chat: {
     // Resolves when the turn is ACCEPTED, not when it finishes. Everything the turn

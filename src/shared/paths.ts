@@ -30,6 +30,10 @@ export const workspacesDir = (userData: string): string => join(userData, 'works
 
 export const workspaceDir = (userData: string, id: ConversationId): string => join(workspacesDir(userData), id);
 
+// Files the user dragged in or picked, copied into the conversation's workspace so the
+// agent can open them by a short relative path and they go when the conversation does.
+export const importsDir = (userData: string, id: ConversationId): string => join(workspaceDir(userData, id), 'imports');
+
 // CLAUDE_CONFIG_DIR for the agent subprocess. Its skills/ subfolder is what
 // settingSources: ['user'] loads.
 export const claudeConfigDir = (userData: string): string => join(userData, 'claude-config');
