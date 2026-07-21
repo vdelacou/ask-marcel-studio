@@ -10,6 +10,8 @@
  * land in M2 with the agent runtime that emits them.
  */
 import type { Conversation, ConversationMeta, Settings } from './types.ts';
+import type { AgentFileDoc, AgentFileError } from './agent-files.ts';
+import type { AgentView, SubAgent } from './agents-doc.ts';
 import type { OfficeCategory } from './office-catalog.ts';
 import type { OfficeStatus } from './office-status.ts';
 import type { Result } from './result.ts';
@@ -31,6 +33,16 @@ export const CHANNEL = {
   skillsList: 'skills:list',
   skillsAdd: 'skills:add',
   skillsRemove: 'skills:remove',
+  skillsRead: 'skills:read',
+  skillsWrite: 'skills:write',
+  skillsRestore: 'skills:restore',
+  agentsList: 'agents:list',
+  agentsSave: 'agents:save',
+  agentsRemove: 'agents:remove',
+  agentsRestore: 'agents:restore',
+  agentFileGet: 'agent-file:get',
+  agentFileSave: 'agent-file:save',
+  agentFileRegenerate: 'agent-file:regenerate',
   officeStatus: 'office:status',
   officeLogin: 'office:login',
   officeCommands: 'office:commands',
@@ -85,9 +97,12 @@ export type Skill = {
   // The name from its frontmatter, which is what the agent sees.
   readonly name: string;
   readonly description: string;
-  // Shipped with the app: re-seeded every launch, so removing it is refused rather
-  // than silently undone on the next start.
+  // Shipped with the app: removing it is refused rather than silently undone on the
+  // next start.
   readonly isBuiltIn: boolean;
+  // A built-in the user has edited. It no longer follows app updates, and the panel
+  // offers to put the original back.
+  readonly isModified: boolean;
 };
 
 //   not-a-skill       the folder has no SKILL.md, or it has no usable frontmatter
@@ -99,6 +114,7 @@ export type SkillsError =
   | { readonly kind: 'bad-name'; readonly message: string }
   | { readonly kind: 'already-installed'; readonly message: string }
   | { readonly kind: 'built-in'; readonly message: string }
+  | { readonly kind: 'invalid'; readonly message: string }
   | { readonly kind: 'not-found'; readonly message: string }
   | { readonly kind: 'cancelled'; readonly message: string }
   | { readonly kind: 'unreadable'; readonly message: string }
@@ -241,6 +257,22 @@ export type StudioApi = {
     // reaching the filesystem.
     readonly add: () => Promise<Result<Skill, SkillsError>>;
     readonly remove: (name: string) => Promise<Result<null, SkillsError>>;
+    readonly read: (folder: string) => Promise<Result<string, SkillsError>>;
+    readonly write: (input: { readonly folder: string; readonly contents: string }) => Promise<Result<Skill, SkillsError>>;
+    readonly restore: (folder: string) => Promise<Result<Skill, SkillsError>>;
+  };
+  readonly agents: {
+    readonly list: () => Promise<Result<readonly AgentView[], StoreError>>;
+    readonly save: (agent: SubAgent) => Promise<Result<AgentView, StoreError>>;
+    readonly remove: (name: string) => Promise<Result<null, StoreError>>;
+    readonly restore: (name: string) => Promise<Result<AgentView, StoreError>>;
+  };
+  readonly agentFiles: {
+    readonly get: (doc: AgentFileDoc) => Promise<Result<string, AgentFileError>>;
+    readonly save: (input: { readonly doc: AgentFileDoc; readonly text: string }) => Promise<Result<string, AgentFileError>>;
+    // Resolves with the new contents once the background job that writes it finishes.
+    // Long, like login: the renderer shows a spinner rather than polling.
+    readonly regenerate: (doc: AgentFileDoc) => Promise<Result<string, AgentFileError>>;
   };
   readonly office: {
     // A cheap local token decode: signed-out resolves ok with { signedIn: false }.
