@@ -46,3 +46,8 @@ export const retitleConversation = (view: ConversationListView, id: string, titl
   if (!view.conversations.some((c) => c.id === id)) return view;
   return { ...view, conversations: view.conversations.map((c) => (c.id === id ? { ...c, title } : c)) };
 };
+
+export const setConversationModel = (view: ConversationListView, id: string, model: string): ConversationListView => {
+  if (!view.conversations.some((c) => c.id === id)) return view;
+  return { ...view, conversations: view.conversations.map((c) => (c.id === id ? { ...c, model } : c)) };
+};

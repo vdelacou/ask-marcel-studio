@@ -10,7 +10,15 @@
  * .claude/LESSONS.md.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { addConversation, emptyConversationList, loadConversations, removeConversation, retitleConversation, selectConversation } from '../lib/conversation-list.ts';
+import {
+  addConversation,
+  emptyConversationList,
+  loadConversations,
+  removeConversation,
+  retitleConversation,
+  selectConversation,
+  setConversationModel,
+} from '../lib/conversation-list.ts';
 import type { ConversationListView } from '../lib/conversation-list.ts';
 import { applyActivityEvent, clearActivity, emptyActivity } from '../lib/conversation-activity.ts';
 import type { ActivityMap } from '../lib/conversation-activity.ts';
@@ -26,6 +34,8 @@ export type ConversationsController = {
   readonly confirmingDeleteId?: string;
   readonly create: () => void;
   readonly select: (id: string) => void;
+  // Applies from the next message; the turn in flight keeps the model it started with.
+  readonly setModel: (id: string, model: string) => void;
   readonly startRename: (id: string, currentTitle: string) => void;
   readonly changeDraft: (title: string) => void;
   readonly commitRename: () => void;
@@ -100,6 +110,14 @@ export const useConversations = (defaultModel: string | undefined, onDeleted?: (
     setActivity((a) => clearActivity(a, id));
   }, []);
 
+  const setModel = useCallback((id: string, model: string): void => {
+    void (async (): Promise<void> => {
+      const changed = await studio.conversations.setModel({ id, model });
+      if (!changed.ok) return setError(changed.error.message);
+      return setView((v) => setConversationModel(v, changed.value.id, changed.value.model));
+    })();
+  }, []);
+
   const startRename = useCallback((id: string, currentTitle: string): void => {
     setConfirmingDeleteId(undefined);
     setEditingId(id);
@@ -149,6 +167,7 @@ export const useConversations = (defaultModel: string | undefined, onDeleted?: (
     ...(confirmingDeleteId === undefined ? {} : { confirmingDeleteId }),
     create,
     select,
+    setModel,
     startRename,
     changeDraft,
     commitRename,

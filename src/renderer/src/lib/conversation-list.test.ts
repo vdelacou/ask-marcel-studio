@@ -1,5 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import { addConversation, emptyConversationList, loadConversations, removeConversation, retitleConversation, selectConversation } from './conversation-list.ts';
+import {
+  addConversation,
+  emptyConversationList,
+  loadConversations,
+  removeConversation,
+  retitleConversation,
+  selectConversation,
+  setConversationModel,
+} from './conversation-list.ts';
 import { conversationId } from '../../../shared/conversation-id.ts';
 import type { ConversationMeta } from '../../../shared/types.ts';
 
@@ -69,5 +77,29 @@ describe('the conversation sidebar list', () => {
   test('deleting the last conversation opens nothing', () => {
     const view = removeConversation(loadConversations([meta(1, 'a')]), id(1));
     expect(view.activeId).toBeUndefined();
+  });
+});
+
+describe('changing which model answers a conversation', () => {
+  test('the conversation on screen shows the model it was just switched to', () => {
+    const loaded = loadConversations([meta(1, '2026-07-17T10:00:00.000Z'), meta(2, '2026-07-16T10:00:00.000Z')]);
+
+    const next = setConversationModel(loaded, id(1), 'local::qwen');
+
+    expect(next.conversations.find((c) => c.id === id(1))?.model).toBe('local::qwen');
+  });
+
+  test('every other conversation keeps its own model', () => {
+    const loaded = loadConversations([meta(1, '2026-07-17T10:00:00.000Z'), meta(2, '2026-07-16T10:00:00.000Z')]);
+
+    const next = setConversationModel(loaded, id(1), 'local::qwen');
+
+    expect(next.conversations.find((c) => c.id === id(2))?.model).toBe('p::m');
+  });
+
+  test('a conversation that is not listed changes nothing', () => {
+    const loaded = loadConversations([meta(1, '2026-07-17T10:00:00.000Z')]);
+
+    expect(setConversationModel(loaded, id(9), 'local::qwen')).toBe(loaded);
   });
 });

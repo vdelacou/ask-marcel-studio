@@ -17,16 +17,19 @@ import { EmptyConversations } from './components/organisms/empty-conversations/i
 import { Sidebar } from './components/organisms/sidebar/index.tsx';
 import { SettingsOverlay } from './components/organisms/settings-overlay/index.tsx';
 import { Toast } from './components/molecules/toast/index.tsx';
+import { ChatHeader } from './components/organisms/chat-header/index.tsx';
 import { ChatPage } from './page/chat-page.tsx';
 import { SettingsPage } from './page/settings-page.tsx';
 import { useConversations } from './hooks/use-conversations.ts';
 import { useChatViews } from './hooks/use-chat-views.ts';
+import { modelOptions } from './lib/model-options.ts';
+import type { ModelOption } from './lib/model-options.ts';
 import { formatModelRef } from '../../shared/model-ref.ts';
 
 type Boot =
   | { readonly step: 'loading' }
   | { readonly step: 'no-provider' }
-  | { readonly step: 'ready'; readonly defaultModel: string }
+  | { readonly step: 'ready'; readonly defaultModel: string; readonly models: readonly ModelOption[] }
   | { readonly step: 'failed'; readonly message: string };
 
 export const App: FC = () => {
@@ -46,7 +49,7 @@ export const App: FC = () => {
       const firstModel = first?.modelIds[0];
       if (first === undefined || firstModel === undefined) return setBoot({ step: 'no-provider' });
       const defaultModel = settings.value.defaultModel ?? formatModelRef({ providerId: first.id, modelId: firstModel });
-      return setBoot({ step: 'ready', defaultModel });
+      return setBoot({ step: 'ready', defaultModel, models: modelOptions(settings.value.providers) });
     })().finally(() => {
       bootstrapping.current = false;
     });
@@ -96,6 +99,16 @@ export const App: FC = () => {
   }, [settingsOpen, closeSettings]);
 
   const isReady = boot.step === 'ready';
+  // Only worth a picker when there is a choice to make.
+  const models = boot.step === 'ready' && boot.models.length > 1 ? boot.models : undefined;
+  const activeModel = list.conversations.find((c) => c.id === activeId)?.model;
+  const { setModel } = conversations;
+  const changeModel = useCallback(
+    (model: string): void => {
+      if (activeId !== undefined) setModel(activeId, model);
+    },
+    [activeId, setModel]
+  );
 
   const sidebar = (
     <Sidebar
@@ -127,6 +140,7 @@ export const App: FC = () => {
       <AppFrame sidebar={sidebar}>
         {boot.step === 'no-provider' && <NoProviderNotice onOpenSettings={openSettings} />}
         {boot.step === 'failed' && <NoProviderNotice onOpenSettings={openSettings} />}
+        {isReady && activeId !== undefined && models !== undefined && activeModel !== undefined && <ChatHeader value={activeModel} options={models} onChange={changeModel} />}
         {isReady && activeId !== undefined && (
           // Keyed so the composer draft resets between conversations. The transcript no
           // longer lives in this component, so remounting costs nothing.
