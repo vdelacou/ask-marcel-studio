@@ -13,7 +13,8 @@
  * stays duplicated rather than abstracted (Rule of Three).
  */
 import { MODEL_REF_SEPARATOR } from './model-ref.ts';
-import type { Provider, Settings, StoredProvider, StoredSettings } from './types.ts';
+import { ALWAYS_ENABLED_CATEGORY } from './office-policy.ts';
+import type { OfficePolicy, Provider, Settings, StoredProvider, StoredSettings } from './types.ts';
 import type { Result } from './result.ts';
 import { err, ok } from './result.ts';
 
@@ -38,6 +39,20 @@ const isSealed = (v: unknown): boolean => isRecord(v) && typeof v['enc'] === 'st
 const isHttpUrl = (value: string): boolean => {
   const url = URL.parse(value);
   return url !== null && (url.protocol === 'http:' || url.protocol === 'https:');
+};
+
+// Shared by both entry points because the shape and the rule are the same on disk and
+// over IPC: a list of category names, normalised so the file does not churn. Unknown
+// names are kept rather than rejected — a category can disappear in a CLI downgrade
+// and come back, and dropping it would silently switch it on.
+const officePolicyField = (raw: unknown): Result<OfficePolicy | undefined, string> => {
+  if (raw === undefined) return ok(undefined);
+  if (!isRecord(raw)) return err('officePolicy must be an object');
+  const disabled = raw['disabledCategories'];
+  if (!isStringArray(disabled)) return err('officePolicy.disabledCategories must be an array of strings');
+
+  const names = disabled.map((name) => name.trim()).filter((name) => name.length > 0 && name !== ALWAYS_ENABLED_CATEGORY);
+  return ok({ disabledCategories: [...new Set(names)].sort((a, b) => a.localeCompare(b)) });
 };
 
 // Fields shared by both shapes. Returns the common part or a reason.
@@ -68,6 +83,8 @@ export const parseStoredSettings = (raw: unknown): Result<StoredSettings, Settin
   if (!Array.isArray(raw['providers'])) return unreadable('settings must have a providers array');
   const defaultModel = raw['defaultModel'];
   if (defaultModel !== undefined && typeof defaultModel !== 'string') return unreadable('defaultModel must be a string');
+  const officePolicy = officePolicyField(raw['officePolicy']);
+  if (!officePolicy.ok) return unreadable(officePolicy.error);
 
   const providers: StoredProvider[] = [];
   for (const candidate of raw['providers']) {
@@ -75,7 +92,7 @@ export const parseStoredSettings = (raw: unknown): Result<StoredSettings, Settin
     if (!provider.ok) return provider;
     providers.push(provider.value);
   }
-  return ok({ providers, ...(defaultModel === undefined ? {} : { defaultModel }) });
+  return ok({ providers, ...(defaultModel === undefined ? {} : { defaultModel }), ...(officePolicy.value === undefined ? {} : { officePolicy: officePolicy.value }) });
 };
 
 const validateProvider = (raw: unknown): Result<Provider, SettingsDocError> => {
@@ -101,6 +118,8 @@ export const validateSettings = (raw: unknown): Result<Settings, SettingsDocErro
   if (!Array.isArray(raw['providers'])) return invalid('settings must have a providers array');
   const defaultModel = raw['defaultModel'];
   if (defaultModel !== undefined && typeof defaultModel !== 'string') return invalid('defaultModel must be a string');
+  const officePolicy = officePolicyField(raw['officePolicy']);
+  if (!officePolicy.ok) return invalid(officePolicy.error);
 
   const providers: Provider[] = [];
   for (const candidate of raw['providers']) {
@@ -109,7 +128,7 @@ export const validateSettings = (raw: unknown): Result<Settings, SettingsDocErro
     if (providers.some((p) => p.id === provider.value.id)) return invalid(`two providers share the id ${provider.value.id}`);
     providers.push(provider.value);
   }
-  return ok({ providers, ...(defaultModel === undefined ? {} : { defaultModel }) });
+  return ok({ providers, ...(defaultModel === undefined ? {} : { defaultModel }), ...(officePolicy.value === undefined ? {} : { officePolicy: officePolicy.value }) });
 };
 
 export const serialiseStoredSettings = (settings: StoredSettings): string => JSON.stringify(settings, null, 2);

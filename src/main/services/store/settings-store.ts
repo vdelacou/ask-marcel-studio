@@ -79,7 +79,11 @@ const unsealAll = (stored: StoredSettings): Result<Settings, StoreError> => {
     if (!opened.ok) return opened;
     providers.push(opened.value);
   }
-  return ok({ providers, ...(stored.defaultModel === undefined ? {} : { defaultModel: stored.defaultModel }) });
+  return ok({
+    providers,
+    ...(stored.defaultModel === undefined ? {} : { defaultModel: stored.defaultModel }),
+    ...(stored.officePolicy === undefined ? {} : { officePolicy: stored.officePolicy }),
+  });
 };
 
 const sealAll = (settings: Settings): Result<StoredSettings, StoreError> => {
@@ -89,7 +93,11 @@ const sealAll = (settings: Settings): Result<StoredSettings, StoreError> => {
     if (!closed.ok) return closed;
     providers.push(closed.value);
   }
-  return ok({ providers, ...(settings.defaultModel === undefined ? {} : { defaultModel: settings.defaultModel }) });
+  return ok({
+    providers,
+    ...(settings.defaultModel === undefined ? {} : { defaultModel: settings.defaultModel }),
+    ...(settings.officePolicy === undefined ? {} : { officePolicy: settings.officePolicy }),
+  });
 };
 
 export const createSettingsStore = (deps: SettingsStoreDeps): SettingsStore => {

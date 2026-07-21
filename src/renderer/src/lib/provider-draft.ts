@@ -10,7 +10,7 @@
  */
 import { assignProviderIds } from '../../../shared/provider-id.ts';
 import type { ProviderDraft } from '../components/molecules/provider-form/index.tsx';
-import type { Provider, Settings } from '../../../shared/types.ts';
+import type { OfficePolicy, Provider, Settings } from '../../../shared/types.ts';
 
 // A key for React's list reconciliation, not a domain id. A provider's real id is
 // generated from its label at save time (provider-id.ts), never typed, so a draft has
@@ -57,9 +57,12 @@ const toProvider = (draft: ProviderDraft): Provider => {
   return { ...common, kind: 'anthropic', ...(baseUrl.length === 0 ? {} : { baseUrl }) };
 };
 
-export const draftsToSettings = (drafts: readonly ProviderDraft[], defaultModel?: string): Settings => ({
+// The whole settings document is saved at once, so everything the screen holds has to
+// ride along: what is not passed is what gets erased.
+export const draftsToSettings = (drafts: readonly ProviderDraft[], defaultModel?: string, officePolicy?: OfficePolicy): Settings => ({
   // assignProviderIds fills the id of any new provider (blank) from its label and keeps
   // every existing id untouched, so a saved provider's id never shifts under it.
   providers: assignProviderIds(drafts.map(toProvider)),
   ...(defaultModel === undefined ? {} : { defaultModel }),
+  ...(officePolicy === undefined ? {} : { officePolicy }),
 });

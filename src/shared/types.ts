@@ -29,15 +29,24 @@ export type Provider = ProviderOf<string>;
 // On disk, in settings.json. What the pure core parses and serialises.
 export type StoredProvider = ProviderOf<SealedSecret>;
 
+// Which parts of Microsoft 365 the agent may reach. A DISABLED list, not an allowed
+// one: a category added by a CLI update is available by default, and switching
+// nothing off (the normal case) stores nothing at all.
+export type OfficePolicy = {
+  readonly disabledCategories: readonly string[];
+};
+
 export type Settings = {
   readonly providers: readonly Provider[];
   // A model reference, 'providerId::modelId'. See model-ref.ts.
   readonly defaultModel?: string;
+  readonly officePolicy?: OfficePolicy;
 };
 
 export type StoredSettings = {
   readonly providers: readonly StoredProvider[];
   readonly defaultModel?: string;
+  readonly officePolicy?: OfficePolicy;
 };
 
 export type MessagePart =

@@ -259,3 +259,65 @@ describe('writing settings back to disk', () => {
     expect(serialiseStoredSettings(EMPTY_STORED_SETTINGS)).toBe('{\n  "providers": []\n}');
   });
 });
+
+describe('remembering which parts of Microsoft 365 are switched off', () => {
+  const withPolicy = (officePolicy: unknown): unknown => ({ providers: [], officePolicy });
+
+  test('settings with nothing switched off store nothing about it', () => {
+    const parsed = validateSettings({ providers: [] });
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect('officePolicy' in parsed.value).toBe(false);
+  });
+
+  test('a switched-off category round trips', () => {
+    const parsed = validateSettings(withPolicy({ disabledCategories: ['calendar'] }));
+
+    expect(parsed.ok && parsed.value.officePolicy).toEqual({ disabledCategories: ['calendar'] });
+  });
+
+  test('the list is sorted and deduplicated, so the file does not churn', () => {
+    const parsed = validateSettings(withPolicy({ disabledCategories: ['mail', 'calendar', 'mail'] }));
+
+    expect(parsed.ok && parsed.value.officePolicy).toEqual({ disabledCategories: ['calendar', 'mail'] });
+  });
+
+  test('the self-check category cannot be switched off, however it arrives', () => {
+    const parsed = validateSettings(withPolicy({ disabledCategories: ['meta'] }));
+
+    expect(parsed.ok && parsed.value.officePolicy).toEqual({ disabledCategories: [] });
+  });
+
+  test('a blank category name is dropped rather than stored', () => {
+    const parsed = validateSettings(withPolicy({ disabledCategories: ['  ', 'mail'] }));
+
+    expect(parsed.ok && parsed.value.officePolicy).toEqual({ disabledCategories: ['mail'] });
+  });
+
+  test('a policy that is not an object is refused as something the user can fix', () => {
+    const parsed = validateSettings(withPolicy('nope'));
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) return;
+    expect(parsed.error.kind).toBe('invalid');
+  });
+
+  test('a disabled list that is not a list of strings is refused', () => {
+    expect(validateSettings(withPolicy({ disabledCategories: [1, 2] })).ok).toBe(false);
+  });
+
+  test('a policy on disk that is corrupt is unreadable, not invalid: the form cannot fix a file', () => {
+    const parsed = parseStoredSettings({ providers: [], officePolicy: 'nope' });
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) return;
+    expect(parsed.error.kind).toBe('unreadable');
+  });
+
+  test('a policy on disk round trips back out', () => {
+    const parsed = parseStoredSettings({ providers: [], officePolicy: { disabledCategories: ['calendar'] } });
+
+    expect(parsed.ok && parsed.value.officePolicy).toEqual({ disabledCategories: ['calendar'] });
+  });
+});
