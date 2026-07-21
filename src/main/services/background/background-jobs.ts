@@ -15,6 +15,7 @@ import type { Options } from '@anthropic-ai/claude-agent-sdk';
 import type { BackgroundJob, BackgroundJobError } from './background-runner.ts';
 import type { SignatureService } from '../office/signature-service.ts';
 import type { VoiceProfileJob } from './voice-profile-job.ts';
+import type { MemoryExtractor } from '../memory/memory-extractor.ts';
 import type { Gateway } from '../gateway/gateway-server.ts';
 import type { SettingsStore } from '../store/settings-store.ts';
 import type { Result } from '../../../shared/result.ts';
@@ -32,6 +33,7 @@ export type BackgroundJobsDeps = {
   readonly gateway: Gateway;
   readonly signature: SignatureService;
   readonly voice: VoiceProfileJob;
+  readonly memoryExtractor: MemoryExtractor;
   readonly userData: string;
   readonly workspaceDir: string;
   readonly inheritedEnv: Readonly<Record<string, string | undefined>>;
@@ -74,8 +76,7 @@ export const createBackgroundJobs = (deps: BackgroundJobsDeps): BackgroundJobs =
   const run = (job: BackgroundJob, signal: AbortSignal): Promise<Result<null, BackgroundJobError>> => {
     if (job.kind === 'signature-prefill') return deps.signature.prefill(job.force === true);
     if (job.kind === 'voice-profile') return deps.voice.run(job.force === true, signal);
-    // memory-extract lands with the memory system.
-    return Promise.resolve(err({ kind: 'skipped', message: 'nothing to do for that job yet' }));
+    return deps.memoryExtractor.extract(job.conversationId, signal);
   };
 
   return { run, session };
