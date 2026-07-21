@@ -63,6 +63,17 @@ describe('provisioning the embedded python environment', () => {
     expect(state.written).toBe(BUILD);
   });
 
+  test('with nothing to seed, the venv is built and stamped without running pip at all', async () => {
+    // The shipping configuration: no library is preinstalled, and pip errors when handed
+    // no requirements, so the seed step must be skipped rather than run empty.
+    const { io, state } = fakeIo(undefined, [ranOk()]);
+    const service = createPythonService(io, { ...CONFIG, seedPackages: [] });
+
+    expect(await service.provision()).toEqual({ state: 'ready', version: BUILD });
+    expect(state.calls).toEqual([{ binary: CONFIG.runtimePython, args: ['-m', 'venv', CONFIG.venvDir] }]);
+    expect(state.written).toBe(BUILD);
+  });
+
   test('a stale venv from an older build is rebuilt against the current one', async () => {
     const { io, state } = fakeIo('3.12.0+old', [ranOk(), ranOk()]);
     const service = createPythonService(io, CONFIG);

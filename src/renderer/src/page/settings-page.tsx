@@ -4,7 +4,7 @@
  *
  * Carries no class string (rule 22) and no design decisions: it drives the left menu,
  * shows one section's panel at a time, and wires callbacks. The only logic it contains
- * is orchestration; the transforms live in lib/provider-draft.ts where they are tested.
+ * is orchestration; the transforms live in lib/ where they are tested.
  */
 import { useCallback, useEffect, useState } from 'react';
 import type { FC } from 'react';
@@ -14,56 +14,40 @@ import { SkillsPanel } from '../components/organisms/skills-panel/index.tsx';
 import type { SkillRow } from '../components/organisms/skills-panel/index.tsx';
 import { OfficePanel } from '../components/organisms/office-panel/index.tsx';
 import type { OfficeView } from '../components/organisms/office-panel/index.tsx';
-import { PythonPanel } from '../components/organisms/python-panel/index.tsx';
-import type { PythonView } from '../components/organisms/python-panel/index.tsx';
 import { SettingsLayout } from '../components/organisms/settings-layout/index.tsx';
 import { SettingsNav } from '../components/organisms/settings-nav/index.tsx';
 import type { SettingsNavGroup } from '../components/organisms/settings-nav/index.tsx';
 import type { ProviderDraft } from '../components/molecules/provider-form/index.tsx';
 import { draftsToSettings, emptyDraft, settingsToDrafts } from '../lib/provider-draft.ts';
-import type { PythonStatus } from '../../../shared/python-status.ts';
+import { modelOptionsFromDrafts } from '../lib/model-options.ts';
+import { scopeRows, scopesSummary } from '../lib/office-scopes.ts';
 
-// The left-menu structure. Providers and Skills configure the agent; Microsoft 365 is a
-// connected app; Python is a bundled runtime. Each id matches a section rendered on the right.
+// The left-menu structure. Models and Skills configure the agent; Microsoft 365 is a
+// connected app. Each id matches a section rendered on the right.
 const NAV_GROUPS: readonly SettingsNavGroup[] = [
   {
     heading: 'Agent',
     items: [
-      { id: 'providers', label: 'Providers', icon: 'providers' },
+      { id: 'models', label: 'Models', icon: 'models' },
       { id: 'skills', label: 'Skills', icon: 'skills' },
     ],
   },
   { heading: 'Connections', items: [{ id: 'office', label: 'Microsoft 365', icon: 'office' }] },
-  { heading: 'Runtimes', items: [{ id: 'python', label: 'Python', icon: 'python' }] },
 ];
 
-const toPythonView = (status: PythonStatus): PythonView => {
-  if (status.state === 'ready') return { kind: 'ready' };
-  if (status.state === 'provisioning') return { kind: 'provisioning' };
-  if (status.state === 'failed') return { kind: 'failed', message: status.message };
-  return { kind: 'not-provisioned' };
-};
-
 export const SettingsPage: FC = () => {
-  const [section, setSection] = useState('providers');
+  const [section, setSection] = useState('models');
   const [drafts, setDrafts] = useState<readonly ProviderDraft[]>([]);
+  const [expandedRowId, setExpandedRowId] = useState<string | undefined>(undefined);
   const [defaultModel, setDefaultModel] = useState<string | undefined>(undefined);
   const [notice, setNotice] = useState<PanelNotice | undefined>(undefined);
   const [skills, setSkills] = useState<readonly SkillRow[]>([]);
   const [skillsError, setSkillsError] = useState<string | undefined>(undefined);
   const [isAdding, setIsAdding] = useState(false);
   const [officeView, setOfficeView] = useState<OfficeView>({ kind: 'loading' });
+  const [isScopesOpen, setIsScopesOpen] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [officeError, setOfficeError] = useState<string | undefined>(undefined);
-  const [pythonView, setPythonView] = useState<PythonView>({ kind: 'loading' });
-
-  const loadPython = useCallback((): void => {
-    void (async (): Promise<void> => {
-      setPythonView(toPythonView(await studio.python.status()));
-    })();
-  }, []);
-
-  useEffect(loadPython, [loadPython]);
 
   const loadOffice = useCallback((): void => {
     void (async (): Promise<void> => {
@@ -74,7 +58,7 @@ export const SettingsPage: FC = () => {
         setOfficeView({ kind: 'signed-out' });
         return;
       }
-      setOfficeView(status.value.signedIn ? { kind: 'signed-in', scopeCount: status.value.scopes.length } : { kind: 'signed-out' });
+      setOfficeView(status.value.signedIn ? { kind: 'signed-in', summary: scopesSummary(status.value.scopes), scopes: scopeRows(status.value.scopes) } : { kind: 'signed-out' });
     })();
   }, []);
 
@@ -160,16 +144,23 @@ export const SettingsPage: FC = () => {
     setDrafts((current) => current.filter((d) => d.rowId !== rowId));
   }, []);
 
+  // A new provider opens straight away: an empty collapsed row would be a dead end.
   const onAddDraft = useCallback((): void => {
     setNotice(undefined);
-    setDrafts((current) => [...current, emptyDraft()]);
+    const created = emptyDraft();
+    setDrafts((current) => [...current, created]);
+    setExpandedRowId(created.rowId);
+  }, []);
+
+  const onToggleRow = useCallback((rowId: string): void => {
+    setExpandedRowId((current) => (current === rowId ? undefined : rowId));
   }, []);
 
   // A provider's Save button persists the whole set. Re-seed from what main echoed back
   // (trimmed, ids assigned) so the form shows exactly what was stored.
-  const onSave = useCallback((): void => {
+  const persist = useCallback((nextDrafts: readonly ProviderDraft[], nextDefaultModel: string | undefined): void => {
     void (async (): Promise<void> => {
-      const saved = await studio.settings.save(draftsToSettings(drafts, defaultModel));
+      const saved = await studio.settings.save(draftsToSettings(nextDrafts, nextDefaultModel));
       if (!saved.ok) {
         setNotice({ tone: 'error', message: saved.error.message });
         return;
@@ -177,16 +168,51 @@ export const SettingsPage: FC = () => {
       setDrafts(settingsToDrafts(saved.value));
       setNotice({ tone: 'saved', message: 'Saved' });
     })();
-  }, [drafts, defaultModel]);
+  }, []);
+
+  const onSave = useCallback((): void => {
+    persist(drafts, defaultModel);
+  }, [persist, drafts, defaultModel]);
+
+  // The empty option means "no explicit choice", which is stored as an absent field,
+  // not as an empty reference.
+  const onChangeDefaultModel = useCallback(
+    (reference: string): void => {
+      const next = reference.length === 0 ? undefined : reference;
+      setDefaultModel(next);
+      persist(drafts, next);
+    },
+    [persist, drafts]
+  );
 
   return (
     <SettingsLayout nav={<SettingsNav groups={NAV_GROUPS} activeId={section} onSelect={setSection} />}>
-      {section === 'providers' && (
-        <ProvidersPanel drafts={drafts} notice={notice} onChangeDraft={onChangeDraft} onRemoveDraft={onRemoveDraft} onAddDraft={onAddDraft} onSave={onSave} />
+      {section === 'models' && (
+        <ProvidersPanel
+          drafts={drafts}
+          expandedRowId={expandedRowId}
+          defaultModel={defaultModel}
+          modelChoices={modelOptionsFromDrafts(drafts)}
+          notice={notice}
+          onToggleRow={onToggleRow}
+          onChangeDefaultModel={onChangeDefaultModel}
+          onChangeDraft={onChangeDraft}
+          onRemoveDraft={onRemoveDraft}
+          onAddDraft={onAddDraft}
+          onSave={onSave}
+        />
       )}
       {section === 'skills' && <SkillsPanel skills={skills} error={skillsError} isAdding={isAdding} onAdd={onAddSkill} onRemove={onRemoveSkill} />}
-      {section === 'office' && <OfficePanel view={officeView} isLoggingIn={isLoggingIn} error={officeError} onLogin={onLogin} />}
-      {section === 'python' && <PythonPanel view={pythonView} />}
+      {section === 'office' && (
+        <OfficePanel
+          view={officeView}
+          isLoggingIn={isLoggingIn}
+          error={officeError}
+          isScopesOpen={isScopesOpen}
+          onToggleScopes={() => setIsScopesOpen((open) => !open)}
+          onLogin={onLogin}
+        />
+      )}
     </SettingsLayout>
   );
 };

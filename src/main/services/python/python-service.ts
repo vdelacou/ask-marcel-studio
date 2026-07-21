@@ -63,10 +63,14 @@ export const createPythonService = (io: PythonIo, config: PythonProvisionConfig)
     const createFail = runFailure(created, 'could not create the python environment');
     if (createFail !== undefined) return { state: 'failed', message: createFail };
 
-    const seedArgs = ['-m', 'pip', 'install', '--no-index', '--find-links', config.wheelsDir, ...config.seedPackages];
-    const seeded = await io.run(config.venvPython, seedArgs, SEED_TIMEOUT_MS);
-    const seedFail = runFailure(seeded, 'could not install the bundled python packages');
-    if (seedFail !== undefined) return { state: 'failed', message: seedFail };
+    // An empty seed list is the normal case now: nothing is preinstalled, and pip errors
+    // out when it is handed no requirements, so the step is skipped rather than run empty.
+    if (config.seedPackages.length > 0) {
+      const seedArgs = ['-m', 'pip', 'install', '--no-index', '--find-links', config.wheelsDir, ...config.seedPackages];
+      const seeded = await io.run(config.venvPython, seedArgs, SEED_TIMEOUT_MS);
+      const seedFail = runFailure(seeded, 'could not install the bundled python packages');
+      if (seedFail !== undefined) return { state: 'failed', message: seedFail };
+    }
 
     // Stamp last: the marker is the proof that both steps completed.
     await io.writeMarker(config.build);

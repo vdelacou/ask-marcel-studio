@@ -28,7 +28,6 @@ import { createPythonIo } from './services/python/python-io.ts';
 import { platformOf, pythonVenvDir, runtimePythonPath, venvPythonPath } from '../shared/python-paths.ts';
 import type { OfficeCliLocation } from './services/office/office-io.ts';
 import type { ToolCliLocation } from './services/shims/tool-shims-io.ts';
-import type { PythonService } from './services/python/python-service.ts';
 import type { AgentRuntime } from './services/agent/agent-runtime.ts';
 import type { SkillsService } from './services/skills/skills-service.ts';
 import type { Gateway } from './services/gateway/gateway-server.ts';
@@ -111,10 +110,14 @@ const toolCliLocation = (): ToolCliLocation => {
   return { execPath: process.execPath, npmCliPath: join(npmDir, 'bin', 'npm-cli.js'), npxCliPath: join(npmDir, 'bin', 'npx-cli.js') };
 };
 
-// The embedded Python runtime and its seed wheels (M8 Phase B). The build string is the
-// runtime pin from scripts/fetch-python.ts; a change forces the venv to be rebuilt.
+// The embedded Python runtime (M8 Phase B). The build string is the runtime pin from
+// scripts/fetch-python.ts; a change forces the venv to be rebuilt.
+//
+// Nothing is seeded any more. Naming preinstalled libraries only confused the people this
+// app is for; the agent pip-installs whatever a task needs, and an empty seed list skips
+// the offline wheel install entirely.
 const PYTHON_BUILD = '3.13.14+20260718';
-const PYTHON_SEED = ['openpyxl', 'pandas'];
+const PYTHON_SEED: readonly string[] = [];
 
 // dev on darwin resolves the vendored triple; any other host falls through to a name with
 // no vendor dir, so provisioning just fails to launch rather than crashing the app.
@@ -124,9 +127,10 @@ const hostPythonTriple = (): string => {
 };
 
 // Packaged, the runtime and wheels ship as extraResources; in dev they are the fetched
-// vendor/ folders (bun run fetch:python && bun run fetch:wheels). Returns the service so
-// IPC can report status; provisioning is kicked off here and runs in the background.
-const startPython = (userData: string): PythonService => {
+// vendor/ folders (bun run fetch:python && bun run fetch:wheels). Provisioning is kicked
+// off here and runs in the background; nothing reports it, because the app no longer
+// shows a runtime section.
+const startPython = (userData: string): void => {
   const runtimeDir = app.isPackaged ? join(process.resourcesPath, 'python-runtime') : join(__dirname, '../../vendor/python', hostPythonTriple());
   const wheelsDir = app.isPackaged ? join(process.resourcesPath, 'python-wheels') : join(__dirname, '../../vendor/wheels');
   const platform = platformOf(process.platform);
@@ -142,7 +146,6 @@ const startPython = (userData: string): PythonService => {
   // Not awaited: the venv builds in the background and is a no-op once the marker matches.
   // A python3 call before it finishes simply fails, like the office CLI before sign-in.
   void python.provision();
-  return python;
 };
 
 const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; skills: SkillsService; gateway: Gateway } => {
@@ -170,9 +173,9 @@ const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; sk
   // Same reasoning for node/npm/npx: rewritten every launch, lands well before a turn.
   void writeToolShims(userData, toolCliLocation());
   // Build the per-user Python venv in the background so python3 resolves offline.
-  const python = startPython(userData);
+  startPython(userData);
 
-  registerIpc({ settings, conversations, agent, skills, office, python });
+  registerIpc({ settings, conversations, agent, skills, office });
   return { agent, skills, gateway };
 };
 

@@ -48,9 +48,6 @@ const api: StudioApi = {
     status: () => ipcRenderer.invoke(CHANNEL.officeStatus),
     login: () => ipcRenderer.invoke(CHANNEL.officeLogin),
   },
-  python: {
-    status: () => ipcRenderer.invoke(CHANNEL.pythonStatus),
-  },
 };
 
 contextBridge.exposeInMainWorld('studio', api);

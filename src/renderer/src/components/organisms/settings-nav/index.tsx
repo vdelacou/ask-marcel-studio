@@ -3,7 +3,7 @@ import type { FC } from 'react';
 // Props-only (rule 21). A grouped left menu for the settings sections. The page shell
 // supplies the groups, labels and which icon each row wears; this component owns the
 // icon shapes and the active-row styling.
-export type SettingsNavIcon = 'providers' | 'skills' | 'office' | 'python';
+export type SettingsNavIcon = 'models' | 'skills' | 'office';
 export type SettingsNavItem = { id: string; label: string; icon: SettingsNavIcon };
 export type SettingsNavGroup = { heading: string; items: readonly SettingsNavItem[] };
 
@@ -31,14 +31,7 @@ const GridIcon: FC = () => (
   </svg>
 );
 
-const TerminalIcon: FC = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 shrink-0" aria-hidden="true">
-    <path d="m5 8 4 4-4 4M12 16h6" />
-    <rect x="2" y="3" width="20" height="18" rx="3" />
-  </svg>
-);
-
-const icons: Record<SettingsNavIcon, FC> = { providers: SparklesIcon, skills: BoltIcon, office: GridIcon, python: TerminalIcon };
+const icons: Record<SettingsNavIcon, FC> = { models: SparklesIcon, skills: BoltIcon, office: GridIcon };
 
 export const SettingsNav: FC<SettingsNavProps> = ({ groups, activeId, onSelect }) => (
   <nav className="flex flex-col gap-y-6">
