@@ -3,7 +3,7 @@ import type { FC } from 'react';
 // Props-only (rule 21). A grouped left menu for the settings sections. The page shell
 // supplies the groups, labels and which icon each row wears; this component owns the
 // icon shapes and the active-row styling.
-export type SettingsNavIcon = 'models' | 'skills' | 'agents' | 'signature' | 'voice' | 'office';
+export type SettingsNavIcon = 'models' | 'skills' | 'agents' | 'memory' | 'signature' | 'voice' | 'office';
 export type SettingsNavItem = { id: string; label: string; icon: SettingsNavIcon };
 export type SettingsNavGroup = { heading: string; items: readonly SettingsNavItem[] };
 
@@ -49,7 +49,21 @@ const SpeechIcon: FC = () => (
   </svg>
 );
 
-const icons: Record<SettingsNavIcon, FC> = { models: SparklesIcon, skills: BoltIcon, agents: PeopleIcon, signature: PenIcon, voice: SpeechIcon, office: GridIcon };
+const BookIcon: FC = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 shrink-0" aria-hidden="true">
+    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+  </svg>
+);
+
+const icons: Record<SettingsNavIcon, FC> = {
+  models: SparklesIcon,
+  skills: BoltIcon,
+  agents: PeopleIcon,
+  memory: BookIcon,
+  signature: PenIcon,
+  voice: SpeechIcon,
+  office: GridIcon,
+};
 
 export const SettingsNav: FC<SettingsNavProps> = ({ groups, activeId, onSelect }) => (
   <nav className="flex flex-col gap-y-6">

@@ -16,6 +16,8 @@ import { AgentsPanel } from '../components/organisms/agents-panel/index.tsx';
 import { AgentEditor } from '../components/organisms/agent-editor/index.tsx';
 import { SignaturePanel } from '../components/organisms/signature-panel/index.tsx';
 import { VoicePanel } from '../components/organisms/voice-panel/index.tsx';
+import { MemoryPanel } from '../components/organisms/memory-panel/index.tsx';
+import type { MemoryNoteId } from '../components/organisms/memory-panel/index.tsx';
 import { DocumentEditor } from '../components/organisms/document-editor/index.tsx';
 import type { EditorMode } from '../components/organisms/document-editor/index.tsx';
 import { OfficePanel } from '../components/organisms/office-panel/index.tsx';
@@ -48,6 +50,7 @@ const NAV_GROUPS: readonly SettingsNavGroup[] = [
       { id: 'models', label: 'Models', icon: 'models' },
       { id: 'skills', label: 'Skills', icon: 'skills' },
       { id: 'agents', label: 'Helpers', icon: 'agents' },
+      { id: 'memory', label: 'What it remembers', icon: 'memory' },
     ],
   },
   {
@@ -88,11 +91,17 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
   const [voiceMode, setVoiceMode] = useState<EditorMode>('view');
   const [promptMode, setPromptMode] = useState<EditorMode>('markdown');
   const [isEditingSignature, setIsEditingSignature] = useState(false);
+  const [memoryNote, setMemoryNote] = useState<MemoryNoteId>('jargon');
+  const [memoryMode, setMemoryMode] = useState<EditorMode>('view');
+  const [memoryText, setMemoryText] = useState('');
+  const [memoryStored, setMemoryStored] = useState('');
+  const [memorySaving, setMemorySaving] = useState(false);
   const [officeView, setOfficeView] = useState<OfficeView>({ kind: 'loading' });
   const [isScopesOpen, setIsScopesOpen] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [officeError, setOfficeError] = useState<string | undefined>(undefined);
   const [officeCatalog, setOfficeCatalog] = useState<readonly OfficeCategory[]>([]);
+  const [pendingNotes, setPendingNotes] = useState(0);
   const [officePolicy, setOfficePolicy] = useState<OfficePolicy | undefined>(undefined);
   const [expandedCategory, setExpandedCategory] = useState<string | undefined>(undefined);
 
@@ -116,6 +125,31 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
       setOfficeCatalog(await studio.office.commands());
     })();
   }, []);
+
+  useEffect(() => {
+    void (async (): Promise<void> => {
+      const read = await studio.memory.read(memoryNote);
+      const text = read.ok ? read.value : '';
+      setMemoryStored(text);
+      setMemoryText(text);
+    })();
+  }, [memoryNote]);
+
+  useEffect(() => {
+    void (async (): Promise<void> => {
+      const waiting = await studio.memory.pending();
+      if (waiting.ok) setPendingNotes(waiting.value.length);
+    })();
+  }, []);
+
+  const saveMemory = useCallback((): void => {
+    setMemorySaving(true);
+    void (async (): Promise<void> => {
+      await studio.memory.write({ name: memoryNote, contents: memoryText });
+      setMemorySaving(false);
+      setMemoryStored(memoryText);
+    })();
+  }, [memoryNote, memoryText]);
 
   const onLogin = useCallback((): void => {
     setOfficeError(undefined);
@@ -299,6 +333,24 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
       {section === 'skills' && skillsSection}
 
       {section === 'agents' && agentsSection}
+
+      {section === 'memory' && (
+        <MemoryPanel note={memoryNote} pendingCount={pendingNotes} onSelectNote={setMemoryNote}>
+          <DocumentEditor
+            mode={memoryMode}
+            viewNode={<MarkdownView>{renderMarkdown(memoryText)}</MarkdownView>}
+            richNode={<MarkdownEditor key={`${memoryNote}-${memoryStored}`} defaultValue={memoryText} onChange={setMemoryText} />}
+            markdownValue={memoryText}
+            emptyHint="Nothing yet. Marcel adds to this as it notices words you use, and always asks first."
+            isSaving={memorySaving}
+            isDirty={memoryText !== memoryStored}
+            onSelectMode={setMemoryMode}
+            onChangeMarkdown={setMemoryText}
+            onSave={saveMemory}
+            onCancel={() => setMemoryText(memoryStored)}
+          />
+        </MemoryPanel>
+      )}
 
       {section === 'signature' && (
         <SignaturePanel

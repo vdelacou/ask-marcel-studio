@@ -31,6 +31,9 @@ export type ChatPageProps = {
   onHydrate: () => void;
   onSend: (text: string) => void;
   onCancel: () => void;
+  // The app asks the user about things it noticed, and does it only when they are not
+  // mid-sentence. This is how it knows.
+  onComposerActivity: (hasText: boolean) => void;
 };
 
 const MENU_ITEMS = [{ id: 'import-file', label: 'Attach a file…' }];
@@ -69,7 +72,7 @@ const toThreadMessage =
     }),
   });
 
-export const ChatPage: FC<ChatPageProps> = ({ conversationId, view, onHydrate, onSend, onCancel }) => {
+export const ChatPage: FC<ChatPageProps> = ({ conversationId, view, onHydrate, onSend, onCancel, onComposerActivity }) => {
   const [draft, setDraft] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [skills, setSkills] = useState<readonly SkillSuggestion[]>([]);
@@ -94,11 +97,15 @@ export const ChatPage: FC<ChatPageProps> = ({ conversationId, view, onHydrate, o
   const suggestions: readonly SuggestItem[] =
     query === undefined || suggestionsDismissed ? [] : filterSkills(skills, query).map((skill) => ({ id: skill.name, title: `/${skill.name}`, subtitle: skill.description }));
 
-  const changeDraft = useCallback((next: string): void => {
-    setDraft(next);
-    setSuggestionsDismissed(false);
-    setActiveSuggestion(0);
-  }, []);
+  const changeDraft = useCallback(
+    (next: string): void => {
+      setDraft(next);
+      setSuggestionsDismissed(false);
+      setActiveSuggestion(0);
+      onComposerActivity(next.trim().length > 0);
+    },
+    [onComposerActivity]
+  );
 
   const pickSuggestion = useCallback((name: string): void => {
     setDraft(insertSkill(name));
@@ -112,9 +119,10 @@ export const ChatPage: FC<ChatPageProps> = ({ conversationId, view, onHydrate, o
     if (text.length === 0) return;
     setDraft('');
     setMenuOpen(false);
+    onComposerActivity(false);
     onSend(`${text}${attachmentSuffix(attached)}`);
     clear();
-  }, [draft, onSend, attached, clear]);
+  }, [draft, onSend, attached, clear, onComposerActivity]);
 
   const { pick, acceptDrop } = attachments;
   const pickMenu = useCallback(

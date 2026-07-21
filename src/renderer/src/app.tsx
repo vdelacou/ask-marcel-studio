@@ -18,12 +18,14 @@ import { Sidebar } from './components/organisms/sidebar/index.tsx';
 import { SettingsOverlay } from './components/organisms/settings-overlay/index.tsx';
 import { OfficeStatusPopover } from './components/organisms/office-status-popover/index.tsx';
 import { Toast } from './components/molecules/toast/index.tsx';
+import { MemoryConfirmDialog } from './components/organisms/memory-confirm-dialog/index.tsx';
 import { ChatHeader } from './components/organisms/chat-header/index.tsx';
 import { ChatPage } from './page/chat-page.tsx';
 import { SettingsPage } from './page/settings-page.tsx';
 import { useConversations } from './hooks/use-conversations.ts';
 import { useChatViews } from './hooks/use-chat-views.ts';
 import { useOfficeHealth } from './hooks/use-office-health.ts';
+import { useMemory } from './hooks/use-memory.ts';
 import { modelOptions } from './lib/model-options.ts';
 import type { ModelOption } from './lib/model-options.ts';
 import { formatModelRef } from '../../shared/model-ref.ts';
@@ -36,6 +38,8 @@ type Boot =
 
 export const App: FC = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Whether the user is mid-sentence, so a question the app wants to ask waits.
+  const [composerEmpty, setComposerEmpty] = useState(true);
   const [boot, setBoot] = useState<Boot>({ step: 'loading' });
   // Same read guard the hook documents: StrictMode double-invokes the effect and
   // closing settings re-runs bootstrap.
@@ -84,6 +88,7 @@ export const App: FC = () => {
   }, [activeId, cancel]);
 
   const office = useOfficeHealth();
+  const memory = useMemory({ composerEmpty, settingsOpen });
   const [officeOpen, setOfficeOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<string | undefined>(undefined);
 
@@ -178,7 +183,15 @@ export const App: FC = () => {
         {isReady && activeId !== undefined && (
           // Keyed so the composer draft resets between conversations. The transcript no
           // longer lives in this component, so remounting costs nothing.
-          <ChatPage key={activeId} conversationId={activeId} view={viewFor(activeId)} onHydrate={hydrateActive} onSend={sendToActive} onCancel={cancelActive} />
+          <ChatPage
+            key={activeId}
+            conversationId={activeId}
+            view={viewFor(activeId)}
+            onHydrate={hydrateActive}
+            onSend={sendToActive}
+            onCancel={cancelActive}
+            onComposerActivity={(hasText) => setComposerEmpty(!hasText)}
+          />
         )}
         {isReady && activeId === undefined && <EmptyConversations onNew={create} />}
       </AppFrame>
@@ -186,6 +199,26 @@ export const App: FC = () => {
         <SettingsOverlay onClose={closeSettings}>
           <SettingsPage {...(settingsSection === undefined ? {} : { initialSection: settingsSection })} onOfficeChanged={reloadOffice} />
         </SettingsOverlay>
+      )}
+      {memory.isOpen && memory.current !== undefined && (
+        <MemoryConfirmDialog
+          question={{
+            term: memory.current.term,
+            kind: memory.current.kind,
+            quote: memory.current.quote,
+            choices: [memory.current.suggestedDetail, ...memory.current.alternatives].filter((choice) => choice.length > 0),
+            ...(memory.current.enrichment === undefined ? {} : { enrichment: memory.current.enrichment }),
+          }}
+          remaining={memory.pending.length}
+          {...(memory.selected === undefined ? {} : { selected: memory.selected })}
+          ownAnswer={memory.ownAnswer}
+          isSaving={memory.isSaving}
+          onSelect={memory.select}
+          onChangeOwn={memory.changeOwn}
+          onAccept={memory.accept}
+          onSkip={memory.skip}
+          onClose={memory.snooze}
+        />
       )}
       {conversations.error !== undefined && <Toast message={conversations.error} onDismiss={conversations.dismissError} />}
     </>
