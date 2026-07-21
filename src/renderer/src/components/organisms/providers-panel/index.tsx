@@ -3,6 +3,7 @@ import { Button } from '../../atoms/button/index.tsx';
 import { ProviderForm } from '../../molecules/provider-form/index.tsx';
 import { ProviderRow } from '../../molecules/provider-row/index.tsx';
 import type { ProviderDraft } from '../../molecules/provider-form/index.tsx';
+import type { ModelTestRow } from '../../molecules/model-list/index.tsx';
 
 // A saved/error/idle banner. A typed variant, not a free-form className, so the
 // app cannot style it (rule 22).
@@ -12,6 +13,8 @@ export type ProvidersPanelProps = {
   drafts: readonly ProviderDraft[];
   // At most one provider's form is open at a time; the rest stay one line each.
   expandedRowId?: string;
+  // The open provider's model test results, keyed by model name.
+  modelTests?: Readonly<Record<string, ModelTestRow>>;
   // The result of the last save (a provider's Save button persists the whole set).
   notice?: PanelNotice;
   onToggleRow: (rowId: string) => void;
@@ -19,6 +22,7 @@ export type ProvidersPanelProps = {
   onRemoveDraft: (rowId: string) => void;
   onAddDraft: () => void;
   onSave: () => void;
+  onTestModel: (model: string) => void;
 };
 
 const noticeStyles: Record<PanelNotice['tone'], string> = {
@@ -31,7 +35,18 @@ const rowLabel = (draft: ProviderDraft): string => {
   return label.length > 0 ? label : 'New provider';
 };
 
-export const ProvidersPanel: FC<ProvidersPanelProps> = ({ drafts, expandedRowId, notice, onToggleRow, onChangeDraft, onRemoveDraft, onAddDraft, onSave }) => (
+export const ProvidersPanel: FC<ProvidersPanelProps> = ({
+  drafts,
+  expandedRowId,
+  modelTests,
+  notice,
+  onToggleRow,
+  onChangeDraft,
+  onRemoveDraft,
+  onAddDraft,
+  onSave,
+  onTestModel,
+}) => (
   <section className="flex flex-col gap-y-4">
     <header className="flex items-baseline justify-between">
       <div className="flex flex-col gap-y-1">
@@ -61,7 +76,14 @@ export const ProvidersPanel: FC<ProvidersPanelProps> = ({ drafts, expandedRowId,
             onToggle={() => onToggleRow(draft.rowId)}
           />
           {draft.rowId === expandedRowId && (
-            <ProviderForm draft={draft} onChange={(patch) => onChangeDraft(draft.rowId, patch)} onRemove={() => onRemoveDraft(draft.rowId)} onSave={onSave} />
+            <ProviderForm
+              draft={draft}
+              {...(modelTests === undefined ? {} : { modelTests })}
+              onChange={(patch) => onChangeDraft(draft.rowId, patch)}
+              onRemove={() => onRemoveDraft(draft.rowId)}
+              onSave={onSave}
+              onTestModel={onTestModel}
+            />
           )}
         </div>
       ))}

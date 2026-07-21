@@ -33,6 +33,8 @@ import { toggleCategory } from '../../../shared/office-policy.ts';
 import type { OfficeCategory } from '../../../shared/office-catalog.ts';
 import type { OfficePolicy } from '../../../shared/types.ts';
 import { AGENT_TOOL_OPTIONS } from '../../../shared/agents-doc.ts';
+import { useModelTest } from '../hooks/use-model-test.ts';
+import { rowForTest } from '../lib/model-test-view.ts';
 import { useSkills } from '../hooks/use-skills.ts';
 import { useAgents } from '../hooks/use-agents.ts';
 import { useAgentFile } from '../hooks/use-agent-file.ts';
@@ -200,9 +202,35 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
     setExpandedRowId(created.rowId);
   }, []);
 
-  const onToggleRow = useCallback((rowId: string): void => {
-    setExpandedRowId((current) => (current === rowId ? undefined : rowId));
-  }, []);
+  const { tests: modelTests, run: runModelTest, clear: clearModelTests } = useModelTest();
+
+  // Closing or switching provider drops the results with it: they were about the key
+  // and address that were on screen at the time.
+  const onToggleRow = useCallback(
+    (rowId: string): void => {
+      clearModelTests();
+      setExpandedRowId((current) => (current === rowId ? undefined : rowId));
+    },
+    [clearModelTests]
+  );
+
+  // Tests what is typed, not what is saved: the useful moment to check a key is before
+  // committing it.
+  const onTestModel = useCallback(
+    (model: string): void => {
+      const draft = drafts.find((candidate) => candidate.rowId === expandedRowId);
+      if (draft === undefined) return;
+      runModelTest({ kind: draft.kind, baseUrl: draft.baseUrl, apiKey: draft.apiKey, modelId: model });
+    },
+    [drafts, expandedRowId, runModelTest]
+  );
+
+  const modelTestRows = Object.fromEntries(
+    Object.entries(modelTests).flatMap(([model, state]) => {
+      const row = rowForTest(state);
+      return row === undefined ? [] : [[model, row] as const];
+    })
+  );
 
   // A provider's Save button persists the whole set. Re-seed from what main echoed back
   // (trimmed, ids assigned) so the form shows exactly what was stored.
@@ -315,8 +343,10 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
           onToggleRow={onToggleRow}
           onChangeDraft={onChangeDraft}
           onRemoveDraft={onRemoveDraft}
+          modelTests={modelTestRows}
           onAddDraft={onAddDraft}
           onSave={onSave}
+          onTestModel={onTestModel}
         />
       )}
       {section === 'skills' && skillsSection}

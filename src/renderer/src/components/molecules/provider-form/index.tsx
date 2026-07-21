@@ -4,6 +4,7 @@ import { Field } from '../../atoms/field/index.tsx';
 import { Select } from '../../atoms/select/index.tsx';
 import { TextInput } from '../../atoms/text-input/index.tsx';
 import { ModelList } from '../model-list/index.tsx';
+import type { ModelTestRow } from '../model-list/index.tsx';
 
 // What one provider looks like while it is being edited. Text fields hold strings; the
 // models are a list edited one entry at a time. The page shell saves it, trimming each
@@ -20,11 +21,14 @@ export type ProviderDraft = {
 
 export type ProviderFormProps = {
   draft: ProviderDraft;
+  // What the last Test said about each model, keyed by name.
+  modelTests?: Readonly<Record<string, ModelTestRow>>;
   // State lives upstream in the page shell (rule 21): this reports intent, it does
   // not hold anything.
   onChange: (patch: Partial<ProviderDraft>) => void;
   onRemove: () => void;
   onSave: () => void;
+  onTestModel: (model: string) => void;
 };
 
 const KIND_OPTIONS = [
@@ -32,7 +36,7 @@ const KIND_OPTIONS = [
   { value: 'openai', label: 'OpenAI compatible' },
 ];
 
-export const ProviderForm: FC<ProviderFormProps> = ({ draft, onChange, onRemove, onSave }) => (
+export const ProviderForm: FC<ProviderFormProps> = ({ draft, modelTests, onChange, onRemove, onSave, onTestModel }) => (
   <section className="flex flex-col gap-y-3 rounded-panel border border-border-subtle bg-surface-raised p-4">
     <div className="grid grid-cols-2 gap-3">
       <Field label="Name" htmlFor={`${draft.rowId}-label`}>
@@ -57,7 +61,7 @@ export const ProviderForm: FC<ProviderFormProps> = ({ draft, onChange, onRemove,
 
     <div className="flex flex-col gap-y-1.5">
       <span className="text-xs font-medium text-ink-muted">Models</span>
-      <ModelList models={draft.modelIds} onChange={(models) => onChange({ modelIds: models })} />
+      <ModelList models={draft.modelIds} {...(modelTests === undefined ? {} : { tests: modelTests })} onChange={(models) => onChange({ modelIds: models })} onTest={onTestModel} />
     </div>
 
     <div className="flex justify-end gap-x-2">
