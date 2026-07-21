@@ -19,7 +19,6 @@ import { SettingsOverlay } from './components/organisms/settings-overlay/index.t
 import { OfficeStatusPopover } from './components/organisms/office-status-popover/index.tsx';
 import { Toast } from './components/molecules/toast/index.tsx';
 import { MemoryConfirmDialog } from './components/organisms/memory-confirm-dialog/index.tsx';
-import { ChatHeader } from './components/organisms/chat-header/index.tsx';
 import { ChatPage } from './page/chat-page.tsx';
 import { SettingsPage } from './page/settings-page.tsx';
 import { useConversations } from './hooks/use-conversations.ts';
@@ -179,7 +178,6 @@ export const App: FC = () => {
       <AppFrame sidebar={sidebar}>
         {boot.step === 'no-provider' && <NoProviderNotice onOpenSettings={openSettings} />}
         {boot.step === 'failed' && <NoProviderNotice onOpenSettings={openSettings} />}
-        {isReady && activeId !== undefined && models !== undefined && activeModel !== undefined && <ChatHeader value={activeModel} options={models} onChange={changeModel} />}
         {isReady && activeId !== undefined && (
           // Keyed so the composer draft resets between conversations. The transcript no
           // longer lives in this component, so remounting costs nothing.
@@ -187,9 +185,11 @@ export const App: FC = () => {
             key={activeId}
             conversationId={activeId}
             view={viewFor(activeId)}
+            {...(models === undefined || activeModel === undefined ? {} : { model: { value: activeModel, options: models } })}
             onHydrate={hydrateActive}
             onSend={sendToActive}
             onCancel={cancelActive}
+            onChangeModel={changeModel}
             onComposerActivity={(hasText) => setComposerEmpty(!hasText)}
           />
         )}

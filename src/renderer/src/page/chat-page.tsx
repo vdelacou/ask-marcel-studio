@@ -11,6 +11,7 @@ import type { DragEvent, FC } from 'react';
 import { ChatThread } from '../components/organisms/chat-thread/index.tsx';
 import type { ThreadMessage } from '../components/organisms/chat-thread/index.tsx';
 import { Composer } from '../components/organisms/composer/index.tsx';
+import type { ComposerModel } from '../components/organisms/composer/index.tsx';
 import { DropTarget } from '../components/organisms/drop-target/index.tsx';
 import { Toast } from '../components/molecules/toast/index.tsx';
 import type { ChatPart } from '../components/molecules/chat-message/index.tsx';
@@ -28,6 +29,9 @@ import type { Message } from '../../../shared/types.ts';
 export type ChatPageProps = {
   conversationId: string;
   view: ChatView;
+  // Absent when only one model is set up: there is nothing to choose.
+  model?: ComposerModel;
+  onChangeModel: (value: string) => void;
   onHydrate: () => void;
   onSend: (text: string) => void;
   onCancel: () => void;
@@ -72,7 +76,7 @@ const toThreadMessage =
     }),
   });
 
-export const ChatPage: FC<ChatPageProps> = ({ conversationId, view, onHydrate, onSend, onCancel, onComposerActivity }) => {
+export const ChatPage: FC<ChatPageProps> = ({ conversationId, view, model, onHydrate, onSend, onCancel, onChangeModel, onComposerActivity }) => {
   const [draft, setDraft] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [skills, setSkills] = useState<readonly SkillSuggestion[]>([]);
@@ -176,6 +180,7 @@ export const ChatPage: FC<ChatPageProps> = ({ conversationId, view, onHydrate, o
         menuItems={MENU_ITEMS}
         suggestions={suggestions}
         activeSuggestion={activeSuggestion}
+        {...(model === undefined ? {} : { model })}
         onChange={changeDraft}
         onSend={send}
         onCancel={onCancel}
@@ -186,6 +191,7 @@ export const ChatPage: FC<ChatPageProps> = ({ conversationId, view, onHydrate, o
         onMoveSuggestion={(delta) => setActiveSuggestion((current) => stepActive(suggestions.length, current, delta))}
         onHoverSuggestion={setActiveSuggestion}
         onDismissSuggestions={() => setSuggestionsDismissed(true)}
+        onChangeModel={onChangeModel}
       />
       {attachments.error !== undefined && <Toast message={attachments.error} onDismiss={attachments.dismissError} />}
     </DropTarget>

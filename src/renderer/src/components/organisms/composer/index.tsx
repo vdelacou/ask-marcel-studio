@@ -7,6 +7,12 @@ import type { SuggestItem } from '../../molecules/suggest-popover/index.tsx';
 
 export type ComposerAttachment = { id: string; name: string };
 
+export type ComposerModelChoice = { readonly value: string; readonly label: string };
+
+// Absent when there is nothing to choose: with one model set up the row does not
+// appear at all, rather than a select holding a single option.
+export type ComposerModel = { value: string; options: readonly ComposerModelChoice[] };
+
 export type ComposerProps = {
   value: string;
   isStreaming: boolean;
@@ -18,6 +24,7 @@ export type ComposerProps = {
   // Open only while a "/" name is being typed; the page shell decides (lib/slash-suggest).
   suggestions: readonly SuggestItem[];
   activeSuggestion: number;
+  model?: ComposerModel;
   onChange: (value: string) => void;
   onSend: () => void;
   onCancel: () => void;
@@ -28,6 +35,7 @@ export type ComposerProps = {
   onMoveSuggestion: (delta: 1 | -1) => void;
   onHoverSuggestion: (index: number) => void;
   onDismissSuggestions: () => void;
+  onChangeModel: (value: string) => void;
 };
 
 export const Composer: FC<ComposerProps> = ({
@@ -40,6 +48,7 @@ export const Composer: FC<ComposerProps> = ({
   menuItems,
   suggestions,
   activeSuggestion,
+  model,
   onChange,
   onSend,
   onCancel,
@@ -50,6 +59,7 @@ export const Composer: FC<ComposerProps> = ({
   onMoveSuggestion,
   onHoverSuggestion,
   onDismissSuggestions,
+  onChangeModel,
 }) => {
   const isSuggesting = suggestions.length > 0;
 
@@ -139,6 +149,25 @@ export const Composer: FC<ComposerProps> = ({
             </button>
           )}
         </div>
+
+        {/* Under the message, not above the conversation: it belongs to what you are
+            about to send, and it is the last thing you glance at before sending it. */}
+        {model !== undefined && (
+          <div className="flex items-center justify-end px-1 pb-0.5">
+            <select
+              aria-label="Model for this conversation"
+              value={model.value}
+              onChange={(event) => onChangeModel(event.target.value)}
+              className="max-w-[18rem] truncate rounded-md bg-transparent py-0.5 text-xs text-ink-muted transition hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+            >
+              {model.options.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
     </form>
   );
