@@ -44,6 +44,26 @@ export type UIEvent =
   | { readonly type: 'text-delta'; readonly conversationId: string; readonly messageId: string; readonly delta: string }
   | { readonly type: 'tool-start'; readonly conversationId: string; readonly messageId: string; readonly toolUseId: string; readonly name: string; readonly input: unknown }
   | { readonly type: 'tool-result'; readonly conversationId: string; readonly messageId: string; readonly toolUseId: string; readonly result: string; readonly isError: boolean }
+  // What a subagent is doing, nested under the tool call that spawned it. Live only:
+  // these never reach the conversation file, because the spawning tool's own result
+  // (the summary the subagent hands back) is the durable record of what it did.
+  | {
+      readonly type: 'subagent-tool-start';
+      readonly conversationId: string;
+      readonly messageId: string;
+      readonly parentToolUseId: string;
+      readonly toolUseId: string;
+      readonly name: string;
+      readonly input: unknown;
+    }
+  | {
+      readonly type: 'subagent-tool-result';
+      readonly conversationId: string;
+      readonly messageId: string;
+      readonly parentToolUseId: string;
+      readonly toolUseId: string;
+      readonly isError: boolean;
+    }
   | { readonly type: 'turn-done'; readonly conversationId: string; readonly usage: TurnUsage }
   // Emitted once the turn's file write has landed. turn-done fires from the SDK's
   // result message, which is BEFORE the save, so a renderer that re-reads on turn-done

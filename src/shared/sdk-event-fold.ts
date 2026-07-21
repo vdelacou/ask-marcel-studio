@@ -11,8 +11,11 @@
  * Deliberate omissions:
  * - Text comes from stream_event deltas ONLY. The assistant message repeats the whole
  *   text, so folding both would show everything twice.
- * - Messages with parent_tool_use_id set belong to a subagent. Subagent UI is a
- *   non-goal, and folding them would interleave a second conversation into this one.
+ * - Messages with parent_tool_use_id set belong to a subagent. Their TOOL CALLS are
+ *   surfaced as subagent events so the user can watch a delegated job progress, but
+ *   their narration is dropped (it would interleave a second conversation into this
+ *   one) and none of it touches `parts`: the spawning tool's own result is what gets
+ *   persisted, so the file keeps saying what the subagent concluded, not how.
  * - Thinking blocks are dropped in v1.
  */
 import type { MessagePart } from './types.ts';
@@ -115,6 +118,45 @@ const foldUser = (state: FoldState, message: Record<string, unknown>, conversati
   return { state: next, events };
 };
 
+// A subagent's own tool calls. Every path returns the state it was given: nothing a
+// subagent does is persisted, so these can only emit.
+const foldSubagentStarts = (state: FoldState, blocks: readonly Record<string, unknown>[], conversationId: string, parentToolUseId: string): Step => {
+  const events: UIEvent[] = [];
+  for (const block of blocks) {
+    if (block['type'] !== 'tool_use') continue;
+    const toolUseId = asString(block['id']);
+    const name = asString(block['name']);
+    if (toolUseId === undefined || name === undefined) continue;
+    events.push({ type: 'subagent-tool-start', conversationId, messageId: state.messageId, parentToolUseId, toolUseId, name, input: block['input'] });
+  }
+  return { state, events };
+};
+
+const foldSubagentResults = (state: FoldState, blocks: readonly Record<string, unknown>[], conversationId: string, parentToolUseId: string): Step => {
+  const events: UIEvent[] = [];
+  for (const block of blocks) {
+    if (block['type'] !== 'tool_result') continue;
+    const toolUseId = asString(block['tool_use_id']);
+    if (toolUseId === undefined) continue;
+    // No result body: the step list shows what was done and whether it worked. The
+    // output itself belongs to the subagent's own reasoning, not to this transcript.
+    events.push({ type: 'subagent-tool-result', conversationId, messageId: state.messageId, parentToolUseId, toolUseId, isError: block['is_error'] === true });
+  }
+  return { state, events };
+};
+
+const foldSubagent = (state: FoldState, message: Record<string, unknown>, conversationId: string, parentToolUseId: string): Step => {
+  const inner = message['message'];
+  if (!isRecord(inner) || !Array.isArray(inner['content'])) return unchanged(state);
+  const blocks = inner['content'].filter(isRecord);
+
+  if (message['type'] === 'assistant') return foldSubagentStarts(state, blocks, conversationId, parentToolUseId);
+  if (message['type'] === 'user') return foldSubagentResults(state, blocks, conversationId, parentToolUseId);
+  // Its narration, its own result message, its system init: a second conversation we
+  // do not render.
+  return unchanged(state);
+};
+
 const readUsage = (message: Record<string, unknown>): TurnUsage => {
   const usage = message['usage'];
   const cost = message['total_cost_usd'];
@@ -141,8 +183,10 @@ const foldResult = (state: FoldState, message: Record<string, unknown>, conversa
 export const foldSdkMessage = (state: FoldState, message: unknown, conversationId: string): Step => {
   if (!isRecord(message)) return unchanged(state);
 
-  // Anything from a subagent belongs to a nested conversation we do not render.
-  if (message['parent_tool_use_id'] !== null && message['parent_tool_use_id'] !== undefined) return unchanged(state);
+  // Anything from a subagent belongs to a nested conversation. Its tool calls are
+  // surfaced under the tool that spawned it; everything else it says is dropped.
+  const parentToolUseId = asString(message['parent_tool_use_id']);
+  if (parentToolUseId !== undefined) return foldSubagent(state, message, conversationId, parentToolUseId);
 
   switch (message['type']) {
     case 'stream_event':

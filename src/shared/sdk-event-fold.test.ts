@@ -212,11 +212,57 @@ describe('watching the agent use a tool', () => {
   });
 });
 
-describe('keeping subagent chatter out of the transcript', () => {
+describe('showing what a subagent is doing without letting it into the transcript', () => {
   // A Task tool spawns a subagent whose messages arrive on the same stream with
-  // parent_tool_use_id set. Subagent UI is an explicit non-goal, and folding these
-  // in would interleave a second conversation into this one.
-  test('a subagent text delta is not shown', () => {
+  // parent_tool_use_id set. Its tool calls are surfaced so the user can watch a
+  // delegated job progress; nothing it does is persisted, because the spawning tool's
+  // own result is the durable record of what it concluded.
+  const subagentToolUse = {
+    type: 'assistant',
+    session_id: 's1',
+    parent_tool_use_id: 't1',
+    message: { role: 'assistant', content: [{ type: 'tool_use', id: 'inner', name: 'Read', input: { file_path: '/deck.pptx' } }] },
+  };
+
+  test('a subagent tool call is reported under the tool that spawned it', () => {
+    const { events } = run([subagentToolUse]);
+
+    expect(events).toEqual([
+      { type: 'subagent-tool-start', conversationId: CONV, messageId: MSG, parentToolUseId: 't1', toolUseId: 'inner', name: 'Read', input: { file_path: '/deck.pptx' } },
+    ]);
+  });
+
+  test('nothing a subagent does reaches the conversation file', () => {
+    const { state } = run([subagentToolUse]);
+
+    expect(state.parts).toEqual([]);
+  });
+
+  test('a subagent tool result reports only whether it worked, not what it returned', () => {
+    const nested = {
+      type: 'user',
+      session_id: 's1',
+      parent_tool_use_id: 't1',
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'inner', content: 'forty pages of slides' }] },
+    };
+    const { state, events } = run([nested]);
+
+    expect(events).toEqual([{ type: 'subagent-tool-result', conversationId: CONV, messageId: MSG, parentToolUseId: 't1', toolUseId: 'inner', isError: false }]);
+    expect(state.parts).toEqual([]);
+  });
+
+  test('a subagent tool that failed says so', () => {
+    const nested = {
+      type: 'user',
+      session_id: 's1',
+      parent_tool_use_id: 't1',
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'inner', content: 'nope', is_error: true }] },
+    };
+
+    expect(run([nested]).events).toEqual([{ type: 'subagent-tool-result', conversationId: CONV, messageId: MSG, parentToolUseId: 't1', toolUseId: 'inner', isError: true }]);
+  });
+
+  test('a subagent text delta is still not shown: its narration is a second conversation', () => {
     const nested = {
       type: 'stream_event',
       session_id: 's1',
@@ -229,15 +275,80 @@ describe('keeping subagent chatter out of the transcript', () => {
     expect(state.parts).toEqual([]);
   });
 
-  test('a subagent tool call is not shown', () => {
+  test("a subagent's own result message does not end the outer turn", () => {
+    const nested = { type: 'result', subtype: 'success', session_id: 's1', parent_tool_use_id: 't1', usage: { input_tokens: 5, output_tokens: 5 } };
+    const { state, events } = run([nested]);
+
+    expect(events).toEqual([]);
+    expect(state.done).toBe(false);
+  });
+
+  test('a malformed subagent message is ignored rather than crashing the turn', () => {
+    expect(run([{ type: 'assistant', parent_tool_use_id: 't1', message: 'not an object' }]).events).toEqual([]);
+  });
+
+  test('a subagent message whose content is not a list is ignored', () => {
+    expect(run([{ type: 'assistant', parent_tool_use_id: 't1', message: { role: 'assistant', content: 'nope' } }]).events).toEqual([]);
+  });
+
+  test('a subagent message that is neither a reply nor a tool result is ignored', () => {
+    // A system or result message from the subagent carrying blocks must not be read as
+    // if it were the subagent using a tool.
+    const nested = { type: 'system', parent_tool_use_id: 't1', message: { role: 'system', content: [{ type: 'tool_result', tool_use_id: 'inner' }] } };
+
+    expect(run([nested]).events).toEqual([]);
+  });
+
+  test('a subagent tool call missing its id is skipped', () => {
+    const nested = { type: 'assistant', parent_tool_use_id: 't1', message: { role: 'assistant', content: [{ type: 'tool_use', name: 'Read' }, 'junk'] } };
+
+    expect(run([nested]).events).toEqual([]);
+  });
+
+  test('a subagent tool call missing its name is skipped', () => {
+    const nested = { type: 'assistant', parent_tool_use_id: 't1', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'inner' }] } };
+
+    expect(run([nested]).events).toEqual([]);
+  });
+
+  test('only tool_use blocks count as subagent steps', () => {
+    // A text block can carry an id and a name of its own; reading it as a step would
+    // invent work the subagent never did.
     const nested = {
       type: 'assistant',
-      session_id: 's1',
       parent_tool_use_id: 't1',
-      message: { role: 'assistant', content: [{ type: 'tool_use', id: 'inner', name: 'Read', input: {} }] },
+      message: {
+        role: 'assistant',
+        content: [
+          { type: 'text', id: 'not-a-step', name: 'Read', text: 'thinking' },
+          { type: 'tool_use', id: 'inner', name: 'Read', input: {} },
+        ],
+      },
     };
 
-    expect(run([nested]).state.parts).toEqual([]);
+    expect(run([nested]).events.map((e) => (e.type === 'subagent-tool-start' ? e.toolUseId : e.type))).toEqual(['inner']);
+  });
+
+  test('only tool_result blocks resolve a subagent step', () => {
+    const nested = {
+      type: 'user',
+      parent_tool_use_id: 't1',
+      message: {
+        role: 'user',
+        content: [
+          { type: 'text', tool_use_id: 'not-a-step', text: 'chatter' },
+          { type: 'tool_result', tool_use_id: 'inner' },
+        ],
+      },
+    };
+
+    expect(run([nested]).events.map((e) => (e.type === 'subagent-tool-result' ? e.toolUseId : e.type))).toEqual(['inner']);
+  });
+
+  test('a subagent tool result missing its id is skipped', () => {
+    const nested = { type: 'user', parent_tool_use_id: 't1', message: { role: 'user', content: [{ type: 'tool_result', content: 'x' }] } };
+
+    expect(run([nested]).events).toEqual([]);
   });
 });
 
@@ -338,4 +449,39 @@ describe('ignoring what the fold has no use for', () => {
       expect(state.done).toBe(false);
     });
   }
+});
+
+describe('reading only the blocks that mean something', () => {
+  test('a text block carrying an id and a name is not folded as a tool call', () => {
+    // Blocks share a shape; only `type` says what one is. Trusting id+name alone would
+    // put a card in the transcript for something the agent never ran.
+    const assistant = {
+      type: 'assistant',
+      session_id: 's1',
+      parent_tool_use_id: null,
+      message: {
+        role: 'assistant',
+        content: [
+          { type: 'text', id: 'not-a-tool', name: 'Bash', text: 'about to look' },
+          { type: 'tool_use', id: 't1', name: 'Bash', input: {} },
+        ],
+      },
+    };
+    const { state } = run([assistant]);
+
+    expect(state.parts).toEqual([{ type: 'tool', toolUseId: 't1', name: 'Bash', input: {}, status: 'running' }]);
+  });
+
+  test('a text block carrying a tool_use_id does not resolve a running tool', () => {
+    const user = {
+      type: 'user',
+      session_id: 's1',
+      parent_tool_use_id: null,
+      message: { role: 'user', content: [{ type: 'text', tool_use_id: 't1', text: 'chatter' }] },
+    };
+    const { state, events } = run([assistantToolUse('t1', 'Bash', {}), user]);
+
+    expect(events).toHaveLength(1);
+    expect(state.parts[0]).toMatchObject({ status: 'running' });
+  });
 });
