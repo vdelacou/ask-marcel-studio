@@ -58,10 +58,13 @@ const BUN_TESTABLE_MAIN: ReadonlyArray<string> = [
   'src/main/services/store/conversations-store.ts',
   'src/main/services/store/agent-files-store.ts',
   'src/main/services/store/agents-store.ts',
+  'src/main/services/background/background-runner.ts',
+  'src/main/services/background/voice-profile-job.ts',
   // Pure value derived from the built-in agent definitions (import type only).
   'src/main/services/agent/builtin-agents.ts',
   'src/main/services/skills/skills-service.ts',
   'src/main/services/office/office-service.ts',
+  'src/main/services/office/signature-service.ts',
   'src/main/services/python/python-service.ts',
   // Pure agent-config value (import type only), so the bun runner covers it.
   'src/main/services/agent/m365-reader.ts',
