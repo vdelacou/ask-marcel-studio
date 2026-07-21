@@ -279,3 +279,31 @@ workspace is created with the conversation; a background job belongs to no conve
 
 The general form: when a spawn error names something that is obviously fine, suspect the cwd
 before the executable.
+
+## [gotcha] WebSearch is Anthropic's own tool, so off Anthropic it answers nothing (2026-07-21)
+
+A conversation on `LVMH · deepseek-v4-pro` searched the web eight times and got eight empty
+results, no error. The agent then wrote a confident answer from memory and cited a Wikipedia
+page it had fetched, which made the whole thing read as a successful search.
+
+WebSearch is not run locally. The CLI offers it in the turn as an ordinary tool (name,
+description, input_schema, like Bash), and when the model calls it, executes it by making a
+SECOND request to the same `ANTHROPIC_BASE_URL` carrying `{ type: 'web_search_20250305',
+name: 'web_search', max_uses: 8 }` and the message "Perform a web search for the query: ...".
+The real API runs that server-side tool and streams back `web_search_tool_result` blocks. Any
+other endpoint has no such tool, returns none, and the CLI renders its zero-result template:
+the "Web search results for query" header, then nothing, then the cite-your-sources reminder.
+Not even its own "No links found." line, which needs a result block to be absent from.
+
+Proven by pointing the vendored `claude` binary at a capture server (scratchpad, not the
+repo): request 2 carried 28 typeless tools including WebSearch, request 3 carried the single
+server-tool spec above. That probe also corrected the first guess, which was that the server
+tool rode in the main turn's `tools` array. It does not.
+
+WebFetch is the opposite and kept working throughout: the CLI does that HTTP itself and only
+uses the model to summarise, which any provider can do.
+
+Two consequences landed: `disallowedTools` on every turn plus a withdrawn-tools list in
+`agents-doc`, and a gateway that refuses a tool spec with a `type` and no `input_schema`
+instead of forwarding it as an ordinary one. The general form: when a capability silently
+returns nothing on a third-party endpoint, ask whether the real API was running it for you.
