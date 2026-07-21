@@ -23,7 +23,9 @@ export type OfficeRun = (args: readonly string[], timeoutMs: number) => Promise<
 
 export type OfficeService = {
   readonly status: () => Promise<Result<OfficeStatus, OfficeError>>;
-  readonly login: () => Promise<Result<null, OfficeError>>;
+  // force re-captures every token, not just the ones that expired. It is the only way
+  // to renew the elevated token, which carries no refresh token of its own.
+  readonly login: (force: boolean) => Promise<Result<null, OfficeError>>;
 };
 
 // scopes-check decodes a local token, so it is fast; login opens a browser the user
@@ -41,17 +43,17 @@ export const createOfficeService = (run: OfficeRun): OfficeService => {
     return ok(parseScopesCheck(outcome.stdout));
   };
 
-  const runLogin = async (): Promise<Result<null, OfficeError>> => {
-    const outcome = await run(['login'], LOGIN_TIMEOUT_MS);
+  const runLogin = async (force: boolean): Promise<Result<null, OfficeError>> => {
+    const outcome = await run(force ? ['login', '--force'] : ['login'], LOGIN_TIMEOUT_MS);
     if (!outcome.ran) return err({ kind: 'login-failed', message: outcome.message });
     if (outcome.timedOut) return err({ kind: 'timed-out', message: 'sign-in timed out after ten minutes' });
     if (outcome.code !== 0) return err({ kind: 'login-failed', message: outcome.stderr.trim().length > 0 ? outcome.stderr.trim() : `login exited with code ${outcome.code}` });
     return ok(null);
   };
 
-  const login = (): Promise<Result<null, OfficeError>> => {
+  const login = (force: boolean): Promise<Result<null, OfficeError>> => {
     if (loginInFlight !== undefined) return Promise.resolve(err({ kind: 'busy', message: 'a sign-in is already in progress' }));
-    const flight = runLogin().finally(() => {
+    const flight = runLogin(force).finally(() => {
       loginInFlight = undefined;
     });
     loginInFlight = flight;

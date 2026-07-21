@@ -10,6 +10,7 @@
  * land in M2 with the agent runtime that emits them.
  */
 import type { Conversation, ConversationMeta, Settings } from './types.ts';
+import type { OfficeCategory } from './office-catalog.ts';
 import type { OfficeStatus } from './office-status.ts';
 import type { Result } from './result.ts';
 
@@ -32,6 +33,7 @@ export const CHANNEL = {
   skillsRemove: 'skills:remove',
   officeStatus: 'office:status',
   officeLogin: 'office:login',
+  officeCommands: 'office:commands',
 } as const;
 
 // The one main-to-renderer stream. Everything the UI learns during a turn arrives here.
@@ -243,7 +245,12 @@ export type StudioApi = {
   readonly office: {
     // A cheap local token decode: signed-out resolves ok with { signedIn: false }.
     readonly status: () => Promise<Result<OfficeStatus, OfficeError>>;
-    // Opens the interactive browser sign-in. Single-flight in main.
-    readonly login: () => Promise<Result<null, OfficeError>>;
+    // Opens the interactive browser sign-in. Single-flight in main. `force` re-captures
+    // every token, which is the only way to renew the one that cannot refresh itself.
+    readonly login: (options?: { readonly force?: boolean }) => Promise<Result<null, OfficeError>>;
+    // What the bundled CLI can do, grouped by category, for the settings toggles. No
+    // Result: a catalog that could not be read is an empty list, which the panel shows
+    // as "nothing to configure" rather than as a failure.
+    readonly commands: () => Promise<readonly OfficeCategory[]>;
   };
 };

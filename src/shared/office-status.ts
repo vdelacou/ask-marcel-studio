@@ -7,7 +7,35 @@
  * when it is not. Process output is untrusted input, so this parser is the checkpoint:
  * it never assumes a field is present or well typed.
  */
-export type OfficeStatus = { readonly signedIn: true; readonly scopes: readonly string[]; readonly expiresAt: string } | { readonly signedIn: false; readonly message: string };
+// One of the extra tokens the CLI caches beside the basic one. The elevated tier is
+// the interesting one: it carries no refresh token of its own, so it can only come
+// back from a browser sign-in, and it expires while everything else still works.
+export type TokenTier = {
+  readonly available: boolean;
+  readonly expiresInSeconds?: number;
+  readonly scopes: readonly string[];
+  readonly refresh: 'automatic' | 'interactive';
+  // Present only when the tier is unavailable: a plain-language note on why.
+  readonly reason?: string;
+};
+
+export type OfficeTiers = {
+  readonly elevated?: TokenTier;
+  readonly chatsvcagg?: TokenTier;
+  readonly ic3?: TokenTier;
+};
+
+export type OfficeStatus =
+  | {
+      readonly signedIn: true;
+      readonly scopes: readonly string[];
+      readonly expiresAt: string;
+      readonly expiresInSeconds?: number;
+      // Empty when the CLI predates the tier blocks. Absent tiers are unknown, not
+      // broken, so the health dot treats them as fine.
+      readonly tiers: OfficeTiers;
+    }
+  | { readonly signedIn: false; readonly message: string };
 
 // No Array.isArray guard: this module only reads named fields (`ok`, `error`, `data`,
 // `scopes`, `expiresAt`), and an array has none of them, so it falls through to the
@@ -29,13 +57,52 @@ const signedOutMessage = (parsed: unknown, raw: string): string => {
   return trimmed.length > 0 ? trimmed : 'not signed in';
 };
 
+const stringsOf = (value: unknown): readonly string[] => (Array.isArray(value) ? value.filter((s): s is string => typeof s === 'string') : []);
+
+const numberOr = (value: unknown): number | undefined => (typeof value === 'number' ? value : undefined);
+
+// A tier block, or nothing. `available` is the only field this insists on: without it
+// there is no claim being made, and inventing one would either raise a false alarm or
+// hide a real one.
+const parseTier = (value: unknown): TokenTier | undefined => {
+  if (!isRecord(value) || typeof value['available'] !== 'boolean') return undefined;
+  const expiresInSeconds = numberOr(value['expiresInSeconds']);
+  const reason = typeof value['reason'] === 'string' ? value['reason'] : undefined;
+  return {
+    available: value['available'],
+    ...(expiresInSeconds === undefined ? {} : { expiresInSeconds }),
+    scopes: stringsOf(value['scopes']),
+    // Only the exact word counts; anything else is the self-healing kind, which is
+    // the safe assumption because it needs no action from the user.
+    refresh: value['refresh'] === 'interactive' ? 'interactive' : 'automatic',
+    ...(reason === undefined ? {} : { reason }),
+  };
+};
+
+const parseTiers = (data: Record<string, unknown>): OfficeTiers => {
+  const elevated = parseTier(data['elevated']);
+  const chatsvcagg = parseTier(data['chatsvcagg']);
+  const ic3 = parseTier(data['ic3']);
+  return {
+    ...(elevated === undefined ? {} : { elevated }),
+    ...(chatsvcagg === undefined ? {} : { chatsvcagg }),
+    ...(ic3 === undefined ? {} : { ic3 }),
+  };
+};
+
 export const parseScopesCheck = (stdout: string): OfficeStatus => {
   const parsed = parseJson(stdout);
   if (!isRecord(parsed) || parsed['ok'] !== true) return { signedIn: false, message: signedOutMessage(parsed, stdout) };
 
   const data = parsed['data'];
-  const rawScopes = isRecord(data) ? data['scopes'] : undefined;
-  const scopes = Array.isArray(rawScopes) ? rawScopes.filter((s): s is string => typeof s === 'string') : [];
-  const expiresAt = isRecord(data) && typeof data['expiresAt'] === 'string' ? data['expiresAt'] : '';
-  return { signedIn: true, scopes, expiresAt };
+  if (!isRecord(data)) return { signedIn: true, scopes: [], expiresAt: '', tiers: {} };
+
+  const expiresInSeconds = numberOr(data['expiresInSeconds']);
+  return {
+    signedIn: true,
+    scopes: stringsOf(data['scopes']),
+    expiresAt: typeof data['expiresAt'] === 'string' ? data['expiresAt'] : '',
+    ...(expiresInSeconds === undefined ? {} : { expiresInSeconds }),
+    tiers: parseTiers(data),
+  };
 };

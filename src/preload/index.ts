@@ -66,7 +66,8 @@ const api: StudioApi = {
   },
   office: {
     status: () => ipcRenderer.invoke(CHANNEL.officeStatus),
-    login: () => ipcRenderer.invoke(CHANNEL.officeLogin),
+    login: (options) => ipcRenderer.invoke(CHANNEL.officeLogin, options),
+    commands: () => ipcRenderer.invoke(CHANNEL.officeCommands),
   },
 };
 
