@@ -21,6 +21,10 @@ export type DocumentEditorProps = {
   emptyHint?: string;
   isSaving: boolean;
   isDirty: boolean;
+  // False when the document breaks a rule the panel has already explained in `notice`
+  // (a note past its limit, say). Refusing here rather than trimming on save is the
+  // point: nothing is stored that would not be read back.
+  canSave?: boolean;
   notice?: { tone: PanelNoticeTone; message: string };
   onSelectMode: (mode: EditorMode) => void;
   onChangeMarkdown: (value: string) => void;
@@ -44,6 +48,7 @@ export const DocumentEditor: FC<DocumentEditorProps> = ({
   emptyHint,
   isSaving,
   isDirty,
+  canSave = true,
   notice,
   onSelectMode,
   onChangeMarkdown,
@@ -73,7 +78,7 @@ export const DocumentEditor: FC<DocumentEditorProps> = ({
           <Button variant="secondary" onClick={onCancel} disabled={isSaving}>
             Cancel
           </Button>
-          <Button onClick={onSave} disabled={isSaving || !isDirty}>
+          <Button onClick={onSave} disabled={isSaving || !isDirty || !canSave}>
             {isSaving ? 'Saving…' : 'Save'}
           </Button>
         </div>
