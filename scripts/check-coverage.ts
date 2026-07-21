@@ -61,6 +61,8 @@ const BUN_TESTABLE_MAIN: ReadonlyArray<string> = [
   'src/main/services/python/python-service.ts',
   // Pure agent-config value (import type only), so the bun runner covers it.
   'src/main/services/agent/m365-reader.ts',
+  // The PreToolUse guard: import type only, so no SDK reaches the bun runner.
+  'src/main/services/agent/agent-hooks.ts',
 ];
 
 const COVERAGE_RULES: ReadonlyArray<Tier> = [

@@ -11,6 +11,7 @@
  */
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { m365Reader } from './m365-reader.ts';
+import { buildAgentHooks } from './agent-hooks.ts';
 import { emptyFold, foldSdkMessage } from '../../../shared/sdk-event-fold.ts';
 import { buildSessionEnv } from '../../../shared/session-env.ts';
 import { formatModelRef, parseModelRef } from '../../../shared/model-ref.ts';
@@ -45,6 +46,9 @@ export type AgentRuntimeDeps = {
   // The installed skills' folder names, read per send so a skill added in settings
   // applies from the next message. Used only to recognise a `/name` invocation.
   readonly listSkillFolders: () => Promise<readonly string[]>;
+  // Microsoft 365 command name to category, from the CLI's own catalog. Feeds the
+  // PreToolUse guard so a category switched off in settings is actually refused.
+  readonly officeCommandCategories: ReadonlyMap<string, string>;
 };
 
 export type AgentRuntime = {
@@ -78,6 +82,7 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
     provider: Provider,
     modelId: string,
     workspace: string,
+    disabledOfficeCategories: readonly string[],
     controller: AbortController
   ): Promise<void> => {
     const messageId = newMessageId();
@@ -105,6 +110,11 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
           systemPrompt: { type: 'preset', preset: 'claude_code', append: deps.corePrompt },
           agents: { 'm365-reader': m365Reader },
           settingSources: ['user'],
+          // No approval prompts anywhere in this app: a PreToolUse hook denial
+          // short-circuits regardless of the permission mode, which is what lets the
+          // handful of irreversible commands be refused without a dialog appearing in
+          // front of someone who cannot judge it.
+          hooks: buildAgentHooks({ workspaceDir: workspace, disabledOfficeCategories, officeCommandCategories: deps.officeCommandCategories }),
           permissionMode: 'bypassPermissions',
           includePartialMessages: true,
           ...(conversation.sdkSessionId === undefined ? {} : { resume: conversation.sdkSessionId }),
@@ -190,7 +200,16 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
     running.set(input.conversationId, controller);
     // Deliberately not awaited: send resolves when the turn is ACCEPTED. Everything
     // it produces reaches the renderer on the event stream.
-    void runTurn(conversation.value, input.text, prompt, resolved.value.provider, resolved.value.modelId, workspace.value, controller);
+    void runTurn(
+      conversation.value,
+      input.text,
+      prompt,
+      resolved.value.provider,
+      resolved.value.modelId,
+      workspace.value,
+      settings.value.officePolicy?.disabledCategories ?? [],
+      controller
+    );
     return ok(null);
   };
 

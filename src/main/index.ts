@@ -22,6 +22,7 @@ import { createSkillsService } from './services/skills/skills-service.ts';
 import { createGateway } from './services/gateway/gateway-server.ts';
 import { createOfficeService } from './services/office/office-service.ts';
 import { createOfficeRun, writeOfficeShim } from './services/office/office-io.ts';
+import { createOfficeCatalog } from './services/office/office-catalog-io.ts';
 import { writeToolShims } from './services/shims/tool-shims-io.ts';
 import { createPythonService } from './services/python/python-service.ts';
 import { createPythonIo } from './services/python/python-io.ts';
@@ -101,6 +102,14 @@ const officeCliLocation = (): OfficeCliLocation => {
   return { execPath: process.execPath, cliPath: join(dirname(resolveFrom.resolve('ask-marcel-office-cli/package.json')), 'dist', 'cli.js') };
 };
 
+// The CLI's own description of every command it has, shipped beside its cli.js. Read
+// once so settings can list the categories and the shell guard can place a command in
+// one.
+const officeCatalogPath = (): string => {
+  const resolveFrom = createRequire(__filename);
+  return join(dirname(resolveFrom.resolve('ask-marcel-office-cli/package.json')), 'dist', 'commands.json');
+};
+
 // The bundled npm package's bin scripts, resolved the same way as the office CLI so it
 // works in dev and packaged alike. node is the app binary itself (run as Node), so it
 // needs no path. This gives the agent node/npm/npx with no Node on the machine (M8).
@@ -162,10 +171,12 @@ const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; sk
       return current.ok ? current.value.providers.find((p) => p.id === providerId) : undefined;
     },
   });
+  const officeCatalog = createOfficeCatalog(officeCatalogPath());
   const agent = createAgentRuntime({
     settings,
     conversations,
     gateway,
+    officeCommandCategories: officeCatalog.commandCategories(),
     userData,
     now,
     emit,
@@ -191,7 +202,7 @@ const buildRuntime = (emit: (event: UIEvent) => void): { agent: AgentRuntime; sk
   // Build the per-user Python venv in the background so python3 resolves offline.
   startPython(userData);
 
-  registerIpc({ settings, conversations, agent, skills, office });
+  registerIpc({ settings, conversations, agent, skills, office, officeCatalog });
   return { agent, skills, gateway };
 };
 

@@ -15,6 +15,7 @@ import { modelRefIsConfigured } from '../../shared/model-ref.ts';
 import type { AgentRuntime } from '../services/agent/agent-runtime.ts';
 import type { SkillsService } from '../services/skills/skills-service.ts';
 import type { OfficeService } from '../services/office/office-service.ts';
+import type { OfficeCatalog } from '../services/office/office-catalog-io.ts';
 import type { ConversationsStore } from '../services/store/conversations-store.ts';
 import type { SettingsStore } from '../services/store/settings-store.ts';
 import { err } from '../../shared/result.ts';
@@ -25,6 +26,7 @@ export type IpcDeps = {
   readonly agent: AgentRuntime;
   readonly skills: SkillsService;
   readonly office: OfficeService;
+  readonly officeCatalog: OfficeCatalog;
 };
 
 const asString = (value: unknown): string => (typeof value === 'string' ? value : '');
@@ -81,7 +83,10 @@ export const registerIpc = (deps: IpcDeps): void => {
   // Status and login take no argument: the CLI reads the one cached token, and login
   // is a single-flight action with no parameters.
   ipcMain.handle(CHANNEL.officeStatus, () => deps.office.status());
-  ipcMain.handle(CHANNEL.officeLogin, () => deps.office.login());
+  // Only a literal true forces a full re-capture; anything else crossing IPC is an
+  // ordinary sign-in.
+  ipcMain.handle(CHANNEL.officeLogin, (_event, input: unknown) => deps.office.login((input as { force?: unknown } | undefined)?.force === true));
+  ipcMain.handle(CHANNEL.officeCommands, () => Promise.resolve(deps.officeCatalog.categories()));
 
   ipcMain.handle(CHANNEL.skillsList, () => deps.skills.list());
   ipcMain.handle(CHANNEL.skillsRemove, (_event, name: unknown) => deps.skills.remove(asString(name)));
