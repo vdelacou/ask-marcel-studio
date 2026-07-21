@@ -5,6 +5,8 @@ import {
   conversationFilePath,
   conversationsDir,
   npmCacheDir,
+  signatureFilePath,
+  voiceProfileFilePath,
   npmPrefixDir,
   pipCacheDir,
   settingsFilePath,
@@ -88,5 +90,17 @@ describe('keeping every derived path inside the data folder', () => {
 
   test('a data folder given with a trailing slash does not produce a doubled separator', () => {
     expect(conversationFilePath(`${USER_DATA}/`, ID)).toBe(`${USER_DATA}/conversations/3f2504e0-4f89-41d3-9a0c-0305e82c3301.json`);
+  });
+});
+
+describe('where the agent finds what the user wrote about themselves', () => {
+  test('the signature sits in the folder the agent already reads', () => {
+    // The drafting skill opens it as $CLAUDE_CONFIG_DIR/signature.html, so it has to
+    // live under the same directory the agent's config points at.
+    expect(signatureFilePath('/data')).toBe(`${claudeConfigDir('/data')}/signature.html`);
+  });
+
+  test('the voice profile sits beside it', () => {
+    expect(voiceProfileFilePath('/data')).toBe(`${claudeConfigDir('/data')}/voice-profile.md`);
   });
 });

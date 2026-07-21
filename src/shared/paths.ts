@@ -22,6 +22,10 @@ import type { SkillFolderName } from './skill-name.ts';
 
 export const settingsFilePath = (userData: string): string => join(userData, 'settings.json');
 
+// The helpers the agent can delegate to: the user's own, plus their changes to the ones
+// that ship with the app.
+export const agentsFilePath = (userData: string): string => join(userData, 'agents.json');
+
 export const conversationsDir = (userData: string): string => join(userData, 'conversations');
 
 export const conversationFilePath = (userData: string, id: ConversationId): string => join(conversationsDir(userData), `${id}.json`);
@@ -37,6 +41,15 @@ export const importsDir = (userData: string, id: ConversationId): string => join
 // CLAUDE_CONFIG_DIR for the agent subprocess. Its skills/ subfolder is what
 // settingSources: ['user'] loads.
 export const claudeConfigDir = (userData: string): string => join(userData, 'claude-config');
+
+// The user's own email signature, written by the app and read by the drafting skill as
+// $CLAUDE_CONFIG_DIR/signature.html. Plain HTML on purpose: it is pasted into a draft
+// whole, and it holds nothing secret.
+export const signatureFilePath = (userData: string): string => join(claudeConfigDir(userData), 'signature.html');
+
+// How the user writes, in markdown, read by the drafting skill as
+// $CLAUDE_CONFIG_DIR/voice-profile.md.
+export const voiceProfileFilePath = (userData: string): string => join(claudeConfigDir(userData), 'voice-profile.md');
 
 // What settingSources: ['user'] loads. One folder per skill, each with a SKILL.md.
 export const skillsDir = (userData: string): string => join(claudeConfigDir(userData), 'skills');
