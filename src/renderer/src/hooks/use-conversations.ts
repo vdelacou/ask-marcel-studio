@@ -12,10 +12,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { addConversation, emptyConversationList, loadConversations, removeConversation, retitleConversation, selectConversation } from '../lib/conversation-list.ts';
 import type { ConversationListView } from '../lib/conversation-list.ts';
+import { applyActivityEvent, clearActivity, emptyActivity } from '../lib/conversation-activity.ts';
+import type { ActivityMap } from '../lib/conversation-activity.ts';
 import { toMeta } from '../../../shared/conversation-doc.ts';
 
 export type ConversationsController = {
   readonly view: ConversationListView;
+  // Which conversations are working, and which finished while the user was elsewhere.
+  readonly activity: ActivityMap;
   readonly error?: string;
   readonly editingId?: string;
   readonly draftTitle: string;
@@ -35,8 +39,11 @@ export type ConversationsController = {
 // defaultModel is undefined until settings resolve (or while no provider exists). The
 // list still loads in that window; only auto-creating a first conversation waits for a
 // model, so the sidebar never mints a conversation pinned to a model that is not there.
-export const useConversations = (defaultModel: string | undefined): ConversationsController => {
+// onDeleted lets the app drop the deleted conversation's held transcript; the hook
+// itself knows nothing about transcripts.
+export const useConversations = (defaultModel: string | undefined, onDeleted?: (id: string) => void): ConversationsController => {
   const [view, setView] = useState<ConversationListView>(emptyConversationList);
+  const [activity, setActivity] = useState<ActivityMap>(emptyActivity);
   const [error, setError] = useState<string>();
   const [editingId, setEditingId] = useState<string>();
   const [draftTitle, setDraftTitle] = useState('');
@@ -44,6 +51,11 @@ export const useConversations = (defaultModel: string | undefined): Conversation
   // Same read-then-write guard app.tsx documents: StrictMode double-invokes the
   // effect, and two empty-list reads would both create a conversation.
   const booting = useRef(false);
+  // Read inside the event listener, which is attached once: state would be stale there.
+  const activeIdRef = useRef<string | undefined>(undefined);
+  activeIdRef.current = view.activeId;
+  const onDeletedRef = useRef(onDeleted);
+  onDeletedRef.current = onDeleted;
 
   const boot = useCallback((): void => {
     if (booting.current) return;
@@ -68,6 +80,7 @@ export const useConversations = (defaultModel: string | undefined): Conversation
     // its first turn; keep the sidebar in step without re-reading every file.
     const unsubscribe = studio.chat.onEvent((event) => {
       if (event.type === 'title') setView((v) => retitleConversation(v, event.conversationId, event.title));
+      setActivity((a) => applyActivityEvent(a, event, activeIdRef.current));
     });
     return unsubscribe;
   }, []);
@@ -81,7 +94,11 @@ export const useConversations = (defaultModel: string | undefined): Conversation
     })();
   }, [defaultModel]);
 
-  const select = useCallback((id: string): void => setView((v) => selectConversation(v, id)), []);
+  // Opening a conversation is reading it, so its "new reply" mark goes away.
+  const select = useCallback((id: string): void => {
+    setView((v) => selectConversation(v, id));
+    setActivity((a) => clearActivity(a, id));
+  }, []);
 
   const startRename = useCallback((id: string, currentTitle: string): void => {
     setConfirmingDeleteId(undefined);
@@ -115,6 +132,8 @@ export const useConversations = (defaultModel: string | undefined): Conversation
     void (async (): Promise<void> => {
       const removed = await studio.conversations.remove(id);
       if (!removed.ok) return setError(removed.error.message);
+      setActivity((a) => clearActivity(a, id));
+      onDeletedRef.current?.(id);
       return setView((v) => removeConversation(v, id));
     })();
   }, [confirmingDeleteId]);
@@ -123,6 +142,7 @@ export const useConversations = (defaultModel: string | undefined): Conversation
 
   return {
     view,
+    activity,
     ...(error === undefined ? {} : { error }),
     ...(editingId === undefined ? {} : { editingId }),
     draftTitle,

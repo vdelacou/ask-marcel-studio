@@ -20,6 +20,9 @@
   --color-danger: oklch(0.55 0.19 27);
   --color-danger-wash: oklch(0.95 0.03 30);
   --color-success: oklch(0.55 0.13 150);
+  /* The one cool colour in a warm palette: reserved for "there is something new here",
+     so it cannot be confused with the accent (which means "this is yours to act on"). */
+  --color-info: oklch(0.58 0.14 250);
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --radius-panel: 0.75rem;

@@ -1,7 +1,7 @@
 import type { FC } from 'react';
 import { ConversationItem } from '../../molecules/conversation-item/index.tsx';
 
-export type SidebarConversation = { id: string; title: string };
+export type SidebarConversation = { id: string; title: string; activity?: 'running' | 'unseen' };
 
 // Props-only (rule 21). The app's whole navigation: New on top, recent conversations in
 // the middle, Settings pinned to the bottom. The page shell owns every id-taking
@@ -76,6 +76,7 @@ export const Sidebar: FC<SidebarProps> = ({
           <ConversationItem
             key={conversation.id}
             title={conversation.title}
+            {...(conversation.activity === undefined ? {} : { activity: conversation.activity })}
             isActive={!isSettingsActive && conversation.id === activeId}
             isEditing={conversation.id === editingId}
             isConfirmingDelete={conversation.id === confirmingDeleteId}

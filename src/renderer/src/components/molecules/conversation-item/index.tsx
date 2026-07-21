@@ -1,10 +1,13 @@
 import type { FC } from 'react';
+import { StatusDot } from '../../atoms/status-dot/index.tsx';
 
 // Props-only (rule 21). One row of the sidebar, in one of three states: normal
 // (select it, or reveal rename/delete on hover), renaming (an inline input), or
 // confirming a delete (an inline yes/no, never a browser dialog).
 export type ConversationItemProps = {
   title: string;
+  // Absent when the conversation is idle and up to date.
+  activity?: 'running' | 'unseen';
   isActive: boolean;
   isEditing: boolean;
   isConfirmingDelete: boolean;
@@ -40,6 +43,7 @@ const iconButton = 'rounded p-1 text-ink-muted opacity-0 transition hover:bg-sur
 
 export const ConversationItem: FC<ConversationItemProps> = ({
   title,
+  activity,
   isActive,
   isEditing,
   isConfirmingDelete,
@@ -90,6 +94,7 @@ export const ConversationItem: FC<ConversationItemProps> = ({
 
   return (
     <li className={`${rowBase} ${isActive ? 'bg-surface-raised text-ink' : 'text-ink-muted hover:bg-surface-raised hover:text-ink'}`}>
+      {activity !== undefined && <StatusDot kind={activity} />}
       <button type="button" onClick={onSelect} aria-current={isActive ? 'page' : undefined} className="flex-1 truncate text-left focus-visible:outline-none">
         {title}
       </button>
