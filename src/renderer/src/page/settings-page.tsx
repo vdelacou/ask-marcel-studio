@@ -27,7 +27,6 @@ import { SettingsNav } from '../components/organisms/settings-nav/index.tsx';
 import type { SettingsNavGroup } from '../components/organisms/settings-nav/index.tsx';
 import type { ProviderDraft } from '../components/molecules/provider-form/index.tsx';
 import { draftsToSettings, emptyDraft, settingsToDrafts } from '../lib/provider-draft.ts';
-import { modelOptionsFromDrafts } from '../lib/model-options.ts';
 import { scopeRows, scopesSummary } from '../lib/office-scopes.ts';
 import { categoryRows } from '../lib/office-categories.ts';
 import { toggleCategory } from '../../../shared/office-policy.ts';
@@ -81,6 +80,9 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
   const [section, setSection] = useState(initialSection ?? 'models');
   const [drafts, setDrafts] = useState<readonly ProviderDraft[]>([]);
   const [expandedRowId, setExpandedRowId] = useState<string | undefined>(undefined);
+  // Read and written back untouched. There is no control for it any more: a
+  // conversation carries its own model, and the picker sits above the conversation.
+  // Kept so that saving a provider does not silently drop a choice made earlier.
   const [defaultModel, setDefaultModel] = useState<string | undefined>(undefined);
   const [notice, setNotice] = useState<PanelNotice | undefined>(undefined);
   const skills = useSkills();
@@ -220,17 +222,6 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
     persist(drafts, defaultModel, officePolicy);
   }, [persist, drafts, defaultModel, officePolicy]);
 
-  // The empty option means "no explicit choice", which is stored as an absent field,
-  // not as an empty reference.
-  const onChangeDefaultModel = useCallback(
-    (reference: string): void => {
-      const next = reference.length === 0 ? undefined : reference;
-      setDefaultModel(next);
-      persist(drafts, next, officePolicy);
-    },
-    [persist, drafts, officePolicy]
-  );
-
   // Optimistic: the switch moves at once and the save follows. A save that fails
   // reports through the same notice as everything else, and the next settings read
   // puts the switch back where it belongs.
@@ -320,11 +311,8 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
         <ProvidersPanel
           drafts={drafts}
           expandedRowId={expandedRowId}
-          defaultModel={defaultModel}
-          modelChoices={modelOptionsFromDrafts(drafts)}
           notice={notice}
           onToggleRow={onToggleRow}
-          onChangeDefaultModel={onChangeDefaultModel}
           onChangeDraft={onChangeDraft}
           onRemoveDraft={onRemoveDraft}
           onAddDraft={onAddDraft}

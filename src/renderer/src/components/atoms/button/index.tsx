@@ -27,7 +27,7 @@ const styleFor = (variant: ButtonVariant): string => {
 export const Button: FC<ButtonProps> = ({ children, variant = 'primary', type = 'button', ...props }) => (
   <button
     type={type}
-    className={`inline-flex items-center justify-center gap-x-2 rounded-md px-3 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${styleFor(variant)}`}
+    className={`inline-flex items-center justify-center gap-x-2 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${styleFor(variant)}`}
     {...props}
   >
     {children}

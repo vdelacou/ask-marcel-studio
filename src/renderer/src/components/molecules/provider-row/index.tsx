@@ -6,6 +6,8 @@ export type ProviderRowProps = {
   label: string;
   kind: 'anthropic' | 'openai';
   modelCount: number;
+  // Only ever announced when it is missing: "Key set" on every row is a row of green
+  // ticks saying nothing, while a provider with no key is the one thing worth flagging.
   hasKey: boolean;
   isExpanded: boolean;
   onToggle: () => void;
@@ -37,7 +39,7 @@ export const ProviderRow: FC<ProviderRowProps> = ({ label, kind, modelCount, has
     <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{label}</span>
     <span className="shrink-0 rounded-full border border-border-subtle px-2 py-0.5 text-[10px] uppercase tracking-wide text-ink-muted">{KIND_LABEL[kind]}</span>
     <span className="shrink-0 text-xs text-ink-muted">{modelsLabel(modelCount)}</span>
-    <span className={`shrink-0 text-xs ${hasKey ? 'text-success' : 'text-danger'}`}>{hasKey ? 'Key set' : 'No key'}</span>
+    {!hasKey && <span className="shrink-0 text-xs text-danger">No key</span>}
   </button>
 );
 
