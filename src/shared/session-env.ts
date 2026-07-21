@@ -43,7 +43,9 @@ export type SessionEnvInput = {
 // Written without a regex on purpose: /\/+$/ is the classic (a+)$ backtracking
 // shape and trips sonarjs/super-linear-regex. A loop is linear and reads better.
 const V1_SUFFIX = '/v1';
-const normaliseBaseUrl = (raw: string): string => {
+// Exported so the model test hits the same address a real turn would: if these two
+// disagreed about the /v1, a passing test would prove nothing.
+export const normaliseBaseUrl = (raw: string): string => {
   let url = raw;
   while (url.endsWith('/')) url = url.slice(0, -1);
   if (url.endsWith(V1_SUFFIX)) url = url.slice(0, -V1_SUFFIX.length);
