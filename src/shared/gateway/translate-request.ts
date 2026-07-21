@@ -165,6 +165,14 @@ export const translateRequest = (raw: unknown): Result<TranslatedRequest, Gatewa
       if (!isRecord(tool)) continue;
       const name = asString(tool['name']);
       if (name === undefined) continue;
+      // Anthropic's server-side tools arrive as a dated `type` and a name with no schema
+      // ({ type: 'web_search_20250305', name: 'web_search', max_uses: 8 }), because the
+      // API runs them itself and the caller never sees the call. No upstream reached
+      // through here can. Left alone, the loop below would hand one on as an ordinary
+      // tool with an empty schema, and the agent would get a silent nothing back rather
+      // than a failure. An ordinary tool always carries a schema, so requiring one is
+      // enough to tell them apart.
+      if (asString(tool['type']) !== undefined && !isRecord(tool['input_schema'])) return badRequest(`${name} is a tool only Anthropic's own API can run`);
       tools.push({ name, description: asString(tool['description']) ?? '', inputSchema: tool['input_schema'] ?? { type: 'object' } });
     }
   }

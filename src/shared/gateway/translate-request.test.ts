@@ -271,6 +271,15 @@ describe('carrying a system message the sdk put in the array', () => {
     expect(t.value.messages).toEqual([{ role: 'system', content: 'You are Claude Code.' }]);
   });
 
+  test('a system message in several blocks is joined, and anything without text is dropped', () => {
+    const content = ['loose', { type: 'text', text: 'Rules.' }, { type: 'text' }, { type: 'text', text: '' }, { type: 'text', text: 'More rules.' }];
+    const t = translateRequest(ask({ messages: [{ role: 'system', content }] }));
+
+    expect(t.ok).toBe(true);
+    if (!t.ok) return;
+    expect(t.value.messages).toEqual([{ role: 'system', content: 'Rules.\n\nMore rules.' }]);
+  });
+
   test('a system message given as a plain string is carried too', () => {
     const t = translateRequest(ask({ messages: [{ role: 'system', content: 'Be terse.' }] }));
 
@@ -316,6 +325,22 @@ describe('offering the agent tools', () => {
     const t = translateRequest(ask());
 
     expect(t.ok && t.value.tools).toEqual([]);
+  });
+
+  test("a tool only Anthropic's own API can run is refused, not passed on as an ordinary one", () => {
+    const t = translateRequest(ask({ tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 8 }] }));
+
+    expect(t.ok).toBe(false);
+    if (t.ok) return;
+    expect(t.error.message).toContain('web_search');
+  });
+
+  test('a tool that carries a schema is an ordinary one, whatever its type says', () => {
+    const t = translateRequest(ask({ tools: [{ type: 'custom', name: 'Bash', description: 'd', input_schema: { type: 'object' } }] }));
+
+    expect(t.ok).toBe(true);
+    if (!t.ok) return;
+    expect(t.value.tools.map((x) => x.name)).toEqual(['Bash']);
   });
 
   test('a tool entry that is not an object is skipped rather than breaking the turn', () => {
@@ -437,4 +462,23 @@ describe('refusing a request that cannot be routed', () => {
       expect(t.error.kind).toBe('bad-request');
     });
   }
+
+  // The table above proves the refusal; these two prove the caller is told WHICH
+  // refusal it was. The message is the body of the 400 the gateway sends back, so a
+  // wrong or empty one is a turn failing for no stated reason.
+  test('a body that is not an object says that, and not something else', () => {
+    const t = translateRequest('nonsense');
+
+    expect(t.ok).toBe(false);
+    if (t.ok) return;
+    expect(t.error.message).toBe('the request body must be an object');
+  });
+
+  test('a body with no model names the field it wants', () => {
+    const t = translateRequest({ messages: [] });
+
+    expect(t.ok).toBe(false);
+    if (t.ok) return;
+    expect(t.error.message).toBe('the request needs a model');
+  });
 });
