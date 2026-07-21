@@ -259,3 +259,23 @@ Already in this file for scores you tried to improve; it bit repeatedly across M
 splitting commits. `rm -f reports/stryker-incremental.json` before trusting any
 `mutate:staged` result on a file whose tests just changed. The pre-commit hook uses the same
 cache, so a commit can fail the gate on a score the file no longer has.
+
+## [gotcha] a missing cwd is reported by the SDK as a native-binary mismatch (2026-07-21)
+
+The voice profile could not be built, and what the panel showed was: "Claude Code native
+binary at ...-darwin-x64/claude exists but failed to launch. This usually means the binary
+does not match this system's libc". The binary was fine, and this is an Intel Mac, so x64 was
+right too. The real fault was `<userData>/background-workspace`, which nothing ever created.
+
+The SDK checks `existsSync(binary)` when the spawn errors, then classifies ENOENT, EACCES,
+EPERM, ENOTDIR, ELOOP, ENAMETOOLONG and EROFS as a loader problem (sdk.mjs, `nE`/`AB`). A
+`cwd` that does not exist fails the spawn with ENOENT, and the message names the binary,
+because the binary is the only path the SDK thinks to mention.
+
+Reproduced in seconds against scripts/fake-anthropic.mjs with no key: run any background turn
+in a directory that is not there. Conversations never hit it because a conversation's
+workspace is created with the conversation; a background job belongs to no conversation, so
+`background-agent-io` now creates its own working directory before it spawns.
+
+The general form: when a spawn error names something that is obviously fine, suspect the cwd
+before the executable.

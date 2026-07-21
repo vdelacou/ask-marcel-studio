@@ -9,6 +9,7 @@
  * exactly as it is in a conversation) and the same PreToolUse guard, because a job the
  * user cannot see is the last place to relax what the shell may do.
  */
+import { mkdir } from 'node:fs/promises';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { formatError } from '../../../shared/utilities/format-error.ts';
 import type { Options } from '@anthropic-ai/claude-agent-sdk';
@@ -35,6 +36,16 @@ export const createRunAgentText = (): RunAgentText => async (input) => {
   input.signal.addEventListener('abort', () => controller.abort());
 
   try {
+    // The working directory is made here, not at startup, because this is the only
+    // caller that needs it and nothing else ever creates it: a conversation gets its
+    // workspace when it is created, and a background job belongs to no conversation.
+    // It matters more than it looks. Spawning into a directory that does not exist
+    // fails with ENOENT, and the SDK reads any ENOENT from that spawn as a missing
+    // dynamic loader, so the user is told their native binary does not match this
+    // system's libc. It does; the folder was simply not there.
+    // Directory boundary: Bun has no mkdir, so node:fs is the sanctioned tool (rule 20).
+    await mkdir(input.cwd, { recursive: true });
+
     const turn = query({
       prompt: input.prompt,
       options: {
