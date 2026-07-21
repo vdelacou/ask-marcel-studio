@@ -14,10 +14,10 @@ import { m365Reader } from './m365-reader.ts';
 import { emptyFold, foldSdkMessage } from '../../../shared/sdk-event-fold.ts';
 import { buildSessionEnv } from '../../../shared/session-env.ts';
 import { formatModelRef, parseModelRef } from '../../../shared/model-ref.ts';
-import { titleFromFirstMessage } from '../../../shared/conversation-doc.ts';
+import { appendTurn } from '../../../shared/conversation-doc.ts';
 import { formatError } from '../../../shared/utilities/format-error.ts';
 import type { ChatError, ChatSendInput, UIEvent } from '../../../shared/ipc-contract.ts';
-import type { Conversation, Message, Provider, Settings } from '../../../shared/types.ts';
+import type { Conversation, Provider, Settings } from '../../../shared/types.ts';
 import type { ConversationsStore } from '../store/conversations-store.ts';
 import type { Gateway } from '../gateway/gateway-server.ts';
 import type { SettingsStore } from '../store/settings-store.ts';
@@ -108,39 +108,49 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
         deps.emit({ type: 'error', conversationId: conversation.id, message: formatError(e) });
       }
     } finally {
-      running.delete(conversation.id);
+      // Persisted BEFORE the conversation leaves the running map: a second send that
+      // arrives in this window must be refused as busy rather than read a file that is
+      // missing the exchange the user just watched.
       await persist(conversation, text, fold.parts, fold.sdkSessionId, messageId);
+      running.delete(conversation.id);
     }
   };
 
   // Persist once per turn end, whatever happened. A cancelled or crashed turn keeps
   // what it produced: the parts are already honest about a tool left running.
+  //
+  // The turn's own snapshot is only a fallback. What is on disk now is the base, so a
+  // rename (or any other edit) that landed while the turn ran is not written over.
   const persist = async (
-    conversation: Conversation,
+    snapshot: Conversation,
     text: string,
     parts: Conversation['messages'][number]['parts'],
     sdkSessionId: string | undefined,
     messageId: string
   ): Promise<void> => {
+    const fresh = await deps.conversations.get(snapshot.id);
+    // Deleted mid-turn: saving would resurrect a conversation the user threw away.
+    if (!fresh.ok && fresh.error.kind === 'not-found') return;
+    // Any other read failure: a stale title beats losing the turn the user just had.
+    const base = fresh.ok ? fresh.value : snapshot;
+
     const at = deps.now();
-    const userMessage: Message = { id: newMessageId(), role: 'user', parts: [{ type: 'text', text }], createdAt: at };
-    const assistantMessage: Message = { id: messageId, role: 'assistant', parts, createdAt: at };
-
-    const isFirst = conversation.messages.length === 0;
-    const title = isFirst ? titleFromFirstMessage(text) : conversation.title;
-
-    const saved = await deps.conversations.save({
-      ...conversation,
-      title,
-      updatedAt: at,
+    const { conversation, titleChanged } = appendTurn(base, {
+      text,
+      parts,
       ...(sdkSessionId === undefined ? {} : { sdkSessionId }),
-      messages: [...conversation.messages, userMessage, ...(parts.length === 0 ? [] : [assistantMessage])],
+      userMessageId: newMessageId(),
+      assistantMessageId: messageId,
+      at,
     });
+
+    const saved = await deps.conversations.save(conversation);
     if (!saved.ok) {
-      deps.emit({ type: 'error', conversationId: conversation.id, message: `the conversation could not be saved: ${saved.error.message}` });
+      deps.emit({ type: 'error', conversationId: snapshot.id, message: `the conversation could not be saved: ${saved.error.message}` });
       return;
     }
-    if (isFirst) deps.emit({ type: 'title', conversationId: conversation.id, title });
+    deps.emit({ type: 'turn-saved', conversationId: snapshot.id });
+    if (titleChanged) deps.emit({ type: 'title', conversationId: snapshot.id, title: conversation.title });
   };
 
   const send = async (input: ChatSendInput): Promise<Result<null, ChatError>> => {

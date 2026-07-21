@@ -45,6 +45,11 @@ export type UIEvent =
   | { readonly type: 'tool-start'; readonly conversationId: string; readonly messageId: string; readonly toolUseId: string; readonly name: string; readonly input: unknown }
   | { readonly type: 'tool-result'; readonly conversationId: string; readonly messageId: string; readonly toolUseId: string; readonly result: string; readonly isError: boolean }
   | { readonly type: 'turn-done'; readonly conversationId: string; readonly usage: TurnUsage }
+  // Emitted once the turn's file write has landed. turn-done fires from the SDK's
+  // result message, which is BEFORE the save, so a renderer that re-reads on turn-done
+  // races the write and gets the previous turn back. This is the "disk is current now"
+  // signal.
+  | { readonly type: 'turn-saved'; readonly conversationId: string }
   | { readonly type: 'error'; readonly conversationId: string; readonly message: string }
   | { readonly type: 'title'; readonly conversationId: string; readonly title: string };
 

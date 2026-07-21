@@ -18,24 +18,67 @@ const unreadable = (message: string): Result<never, ConversationDocError> => err
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
+// What a conversation is called before its first turn names it. Exported because
+// appendTurn tests against it: a title that is still this one may be replaced by the
+// derived one, and a title the user typed may not.
+export const DEFAULT_TITLE = 'New conversation';
+
 // The title shown in the sidebar: the first user message, trimmed to fit. LLM
 // titling is later polish (docs/PLAN.md), so this is deliberately dumb.
 const TITLE_LIMIT = 60;
 export const titleFromFirstMessage = (text: string): string => {
   const oneLine = text.replace(/\s+/g, ' ').trim();
-  if (oneLine.length === 0) return 'New conversation';
+  if (oneLine.length === 0) return DEFAULT_TITLE;
   if (oneLine.length <= TITLE_LIMIT) return oneLine;
   return `${oneLine.slice(0, TITLE_LIMIT - 1).trimEnd()}…`;
 };
 
 export const newConversation = (id: ConversationId, model: string, now: string): Conversation => ({
   id,
-  title: 'New conversation',
+  title: DEFAULT_TITLE,
   model,
   createdAt: now,
   updatedAt: now,
   messages: [],
 });
+
+// One finished turn, ready to be folded onto whatever is on disk NOW.
+export type TurnOutcome = {
+  // What the user typed. Persisted verbatim, even when the prompt the agent saw was
+  // rewritten (a /skill invocation), because the transcript is the user's record.
+  readonly text: string;
+  readonly parts: readonly MessagePart[];
+  readonly sdkSessionId?: string;
+  readonly userMessageId: string;
+  readonly assistantMessageId: string;
+  readonly at: string;
+};
+
+// Appending is a fold onto a freshly read base rather than a write of the snapshot the
+// turn started from: a rename that lands mid-turn is a real edit and must survive the
+// save that follows it.
+export const appendTurn = (base: Conversation, turn: TurnOutcome): { readonly conversation: Conversation; readonly titleChanged: boolean } => {
+  // The derived title only replaces the placeholder. If the user renamed the
+  // conversation while the first turn was running, their name wins.
+  const title = base.messages.length === 0 && base.title === DEFAULT_TITLE ? titleFromFirstMessage(turn.text) : base.title;
+  const userMessage: Message = { id: turn.userMessageId, role: 'user', parts: [{ type: 'text', text: turn.text }], createdAt: turn.at };
+  const assistantMessage: Message = { id: turn.assistantMessageId, role: 'assistant', parts: turn.parts, createdAt: turn.at };
+
+  return {
+    conversation: {
+      ...base,
+      title,
+      updatedAt: turn.at,
+      // A turn that produced no session id (it failed before the SDK reported one)
+      // must not erase the one already stored, or the next turn cannot resume.
+      ...(turn.sdkSessionId === undefined ? {} : { sdkSessionId: turn.sdkSessionId }),
+      // An assistant message with no parts is a turn that produced nothing: an empty
+      // bubble in the transcript would be worse than no bubble.
+      messages: [...base.messages, userMessage, ...(turn.parts.length === 0 ? [] : [assistantMessage])],
+    },
+    titleChanged: title !== base.title,
+  };
+};
 
 const parsePart = (raw: unknown): Result<MessagePart, ConversationDocError> => {
   if (!isRecord(raw)) return unreadable('message part must be an object');

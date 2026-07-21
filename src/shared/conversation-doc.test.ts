@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { byMostRecentlyUpdated, newConversation, parseConversation, serialiseConversation, titleFromFirstMessage, toMeta } from './conversation-doc.ts';
+import { appendTurn, byMostRecentlyUpdated, newConversation, parseConversation, serialiseConversation, titleFromFirstMessage, toMeta } from './conversation-doc.ts';
 import { conversationId } from './conversation-id.ts';
 import { unwrap } from './result.ts';
 import type { ConversationMeta } from './types.ts';
@@ -237,5 +237,75 @@ describe('listing conversations in the sidebar', () => {
     const list = [meta('older', '2026-07-01T00:00:00.000Z'), meta('newest', '2026-07-17T00:00:00.000Z'), meta('middle', '2026-07-10T00:00:00.000Z')];
 
     expect([...list].sort(byMostRecentlyUpdated).map((c) => c.title)).toEqual(['newest', 'middle', 'older']);
+  });
+});
+
+describe('appending a finished turn to whatever is on disk now', () => {
+  const base = newConversation(ID, 'anthropic::claude-fable-5', NOW);
+  const turn = {
+    text: 'What is in my inbox?',
+    parts: [{ type: 'text', text: 'Three unread messages.' }] as const,
+    userMessageId: 'u1',
+    assistantMessageId: 'a1',
+    at: '2026-07-21T10:00:00.000Z',
+  };
+
+  test('the first turn names the conversation after what was asked', () => {
+    const { conversation, titleChanged } = appendTurn(base, turn);
+
+    expect(conversation.title).toBe('What is in my inbox?');
+    expect(titleChanged).toBe(true);
+  });
+
+  test('a title the user typed mid-turn survives the save that ends the turn', () => {
+    // The bug this exists to stop: persist used to write the snapshot captured when the
+    // turn started, so renaming a conversation while it answered was silently undone.
+    const renamed = { ...base, title: 'Inbox triage' };
+
+    const { conversation, titleChanged } = appendTurn(renamed, turn);
+
+    expect(conversation.title).toBe('Inbox triage');
+    expect(titleChanged).toBe(false);
+  });
+
+  test('a later turn leaves the title alone', () => {
+    const withHistory = appendTurn(base, turn).conversation;
+
+    expect(appendTurn(withHistory, { ...turn, text: 'And my calendar?', userMessageId: 'u2', assistantMessageId: 'a2' }).conversation.title).toBe('What is in my inbox?');
+  });
+
+  test('both messages are appended, newest last', () => {
+    const { conversation } = appendTurn(base, turn);
+
+    expect(conversation.messages.map((m) => m.role)).toEqual(['user', 'assistant']);
+    expect(conversation.messages[0]?.parts).toEqual([{ type: 'text', text: 'What is in my inbox?' }]);
+    expect(conversation.messages[1]?.parts).toEqual([{ type: 'text', text: 'Three unread messages.' }]);
+  });
+
+  test('a turn that produced nothing stores the question without an empty answer bubble', () => {
+    const { conversation } = appendTurn(base, { ...turn, parts: [] });
+
+    expect(conversation.messages.map((m) => m.role)).toEqual(['user']);
+  });
+
+  test('the turn timestamp becomes the conversation timestamp, so the sidebar reorders', () => {
+    expect(appendTurn(base, turn).conversation.updatedAt).toBe('2026-07-21T10:00:00.000Z');
+  });
+
+  test('a session id reported by the turn is stored, so the next turn can resume', () => {
+    expect(appendTurn(base, { ...turn, sdkSessionId: 'sess-1' }).conversation.sdkSessionId).toBe('sess-1');
+  });
+
+  test('a turn that reported no session id keeps the one already stored', () => {
+    const resumable = { ...base, sdkSessionId: 'sess-1' };
+
+    expect(appendTurn(resumable, turn).conversation.sdkSessionId).toBe('sess-1');
+  });
+
+  test('a first message of only whitespace leaves the placeholder title alone', () => {
+    const { conversation, titleChanged } = appendTurn(base, { ...turn, text: '   ' });
+
+    expect(conversation.title).toBe('New conversation');
+    expect(titleChanged).toBe(false);
   });
 });
