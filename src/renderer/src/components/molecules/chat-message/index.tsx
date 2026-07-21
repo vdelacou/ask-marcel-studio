@@ -1,12 +1,14 @@
 import type { FC, ReactNode } from 'react';
 import { ToolCallCard } from '../tool-call-card/index.tsx';
-import type { ToolCallStatus } from '../tool-call-card/index.tsx';
+import type { ToolCallStatus, ToolStep } from '../tool-call-card/index.tsx';
 import { MarkdownView } from '../../atoms/markdown-view/index.tsx';
 
 // A view model, not the domain Message: the design system never imports src/shared
 // (rule 21). Text arrives as an already-rendered node so the page shell owns the
 // markdown library (render/markdown) and this stays prop-pure.
-export type ChatPart = { kind: 'text'; content: ReactNode } | { kind: 'tool'; id: string; name: string; input: string; result?: string; status: ToolCallStatus };
+export type ChatPart =
+  | { kind: 'text'; content: ReactNode }
+  | { kind: 'tool'; id: string; label: string; name: string; input: string; result?: string; status: ToolCallStatus; steps?: readonly ToolStep[] };
 
 export type ChatMessageProps = {
   role: 'user' | 'assistant';
@@ -31,7 +33,7 @@ export const ChatMessage: FC<ChatMessageProps> = ({ role, parts }) => (
         <TextBubble key={`text-${String(index)}`} role={role} content={part.content} />
       ) : (
         <div key={part.id} className="w-full min-w-0">
-          <ToolCallCard name={part.name} input={part.input} result={part.result} status={part.status} />
+          <ToolCallCard label={part.label} name={part.name} input={part.input} result={part.result} status={part.status} steps={part.steps} />
         </div>
       )
     )}
