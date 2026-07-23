@@ -35,6 +35,8 @@ import { MemoryPage } from './components/organisms/memory-page/index.tsx';
 import { IconButton } from './components/atoms/icon-button/index.tsx';
 import { PanelIcon } from './components/atoms/panel-icon/index.tsx';
 import { useMemory } from './hooks/use-memory.ts';
+import { useUpdate } from './hooks/use-update.ts';
+import { UpdateBanner } from './components/molecules/update-banner/index.tsx';
 import { dotLabel } from './lib/office-health.ts';
 import { modelOptions } from './lib/model-options.ts';
 import type { ModelOption } from './lib/model-options.ts';
@@ -110,6 +112,8 @@ export const App: FC = () => {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   // Which surface fills the main column: the conversation, or the full Memory page.
   const [view, setView] = useState<'chat' | 'memory'>('chat');
+  const update = useUpdate();
+  const [updateDismissed, setUpdateDismissed] = useState(false);
   const memoryStore = useMemoryStore();
   const [settingsSection, setSettingsSection] = useState<string | undefined>(undefined);
 
@@ -307,6 +311,14 @@ export const App: FC = () => {
             }
           : {})}
       >
+        {update?.updateAvailable === true && !updateDismissed && (
+          <UpdateBanner
+            version={update.latest ?? ''}
+            {...(update.downloadUrl === undefined ? {} : { downloadUrl: update.downloadUrl })}
+            {...(update.releaseUrl === undefined ? {} : { releaseUrl: update.releaseUrl })}
+            onDismiss={() => setUpdateDismissed(true)}
+          />
+        )}
         {boot.step === 'no-provider' && <NoProviderNotice onOpenSettings={openSettings} />}
         {boot.step === 'failed' && <NoProviderNotice onOpenSettings={openSettings} />}
         {view === 'memory' && (

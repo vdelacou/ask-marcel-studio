@@ -25,6 +25,8 @@ import type { OfficeView } from '../components/organisms/office-panel/index.tsx'
 import { SettingsLayout } from '../components/organisms/settings-layout/index.tsx';
 import { SettingsNav } from '../components/organisms/settings-nav/index.tsx';
 import type { SettingsNavGroup } from '../components/organisms/settings-nav/index.tsx';
+import { VersionLine } from '../components/molecules/version-line/index.tsx';
+import { useUpdate } from '../hooks/use-update.ts';
 import type { ProviderDraft } from '../components/molecules/provider-form/index.tsx';
 import { draftsToSettings, emptyDraft, settingsToDrafts } from '../lib/provider-draft.ts';
 import { scopeRows, scopesSummary } from '../lib/office-scopes.ts';
@@ -89,6 +91,7 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
   const [notice, setNotice] = useState<PanelNotice | undefined>(undefined);
   const [skillAddMenuOpen, setSkillAddMenuOpen] = useState(false);
   const memoryConfig = useMemoryConfig();
+  const update = useUpdate();
   const skills = useSkills();
   const agents = useAgents();
   const about = useAgentFile('global-context');
@@ -390,7 +393,10 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
     );
 
   return (
-    <SettingsLayout nav={<SettingsNav groups={NAV_GROUPS} activeId={section} onSelect={setSection} />}>
+    <SettingsLayout
+      nav={<SettingsNav groups={NAV_GROUPS} activeId={section} onSelect={setSection} />}
+      {...(update === undefined ? {} : { footer: <VersionLine version={update.current} updateAvailable={update.updateAvailable} /> })}
+    >
       {section === 'models' && (
         <ProvidersPanel
           drafts={drafts}

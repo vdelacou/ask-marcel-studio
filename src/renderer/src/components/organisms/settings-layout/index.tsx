@@ -6,11 +6,16 @@ import type { FC, ReactNode } from 'react';
 export type SettingsLayoutProps = {
   nav: ReactNode;
   children: ReactNode;
+  // A quiet line pinned to the bottom of the nav column: the app's version lives here.
+  footer?: ReactNode;
 };
 
-export const SettingsLayout: FC<SettingsLayoutProps> = ({ nav, children }) => (
+export const SettingsLayout: FC<SettingsLayoutProps> = ({ nav, children, footer }) => (
   <div className="flex min-h-0 flex-1">
-    <aside className="w-56 shrink-0 overflow-y-auto border-r border-border-subtle px-3 py-6">{nav}</aside>
+    <aside className="flex w-56 shrink-0 flex-col overflow-y-auto border-r border-border-subtle px-3 py-6">
+      {nav}
+      {footer !== undefined && <div className="mt-auto pt-6">{footer}</div>}
+    </aside>
     <div className="flex-1 overflow-y-auto">
       {/* The column stays a reading width even when the dialog grows: a form field
           stretched to a metre wide is harder to fill in, not easier. */}
