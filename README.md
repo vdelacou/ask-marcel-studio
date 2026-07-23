@@ -11,7 +11,8 @@ Electron + React, MIT licensed. Built to the atelier engineering standard.
 > their steps, a transcript that survives switching away mid-answer, and a Stop button. The sidebar
 > marks which conversations are thinking and which have a reply you have not read. Attach files with
 > the + button or by dropping them anywhere on the conversation; type `/` to invoke a skill by name;
-> pick a different model per conversation when you have more than one.
+> pick a different model per conversation when you have more than one, and a new conversation
+> opens on the last model you picked.
 >
 > Settings is where the rest lives: models, skills (editable, including the built-in ones, with the
 > original a click away), the helpers the agent delegates to, your email signature and writing voice,
@@ -159,6 +160,34 @@ agent subprocess ──Anthropic wire──▶ gateway (127.0.0.1, OS-assigned p
 The agent never sees your provider's key — it authenticates to the gateway with a per-run key,
 and the real credentials stay in the main process. The gateway starts on the first turn that
 needs it, so an Anthropic-only setup never opens a socket.
+
+### Google Gemini
+
+Gemini has no Anthropic-compatible endpoint, so it is added as an `openai` provider pointed at
+Google's OpenAI compatibility layer:
+
+| Field | Value |
+|:---|:---|
+| Kind | OpenAI compatible |
+| Base URL | `https://generativelanguage.googleapis.com/v1beta/openai` |
+| API key | a Google AI Studio key |
+| Models | bare ids, no `models/` prefix: `gemini-3.6-flash`, `gemini-2.5-pro` |
+
+`v1beta` is not optional: `/v1/openai/chat/completions` is a 404.
+
+Two things about that endpoint are handled for you, and both are worth knowing if you point
+this app at another Google-backed address. Google omits the `index` field on streamed tool
+calls that the stock OpenAI provider requires, which is why the gateway is built on
+`@ai-sdk/openai-compatible`; and Gemini rejects JSON Schema keywords the agent's own tools
+use (`$schema`, `additionalProperties`, and four more), which is why every tool schema is
+trimmed on the way past by `src/shared/gateway/sanitise-tool-schema.ts`.
+
+A third thing is handled the same way. Gemini 3 refuses a turn that replays a tool call
+without the thought signature it minted with it, and the Anthropic wire format the gateway
+speaks internally has nowhere to carry one. The gateway remembers each signature by tool call
+id and puts it back on the way out (`src/shared/gateway/thought-signatures.ts`); a call it
+never saw signed, after a restart or a resumed conversation, goes out with the dummy Google
+documents for exactly that case.
 
 ## Trying it without an API key
 
