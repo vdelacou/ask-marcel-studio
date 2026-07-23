@@ -18,6 +18,7 @@ import {
   quickContextFilePath,
   cliCheatsheetPath,
   memoryDbPath,
+  memoryMigratedMarkerPath,
   accountDir,
   accountsDir,
   currentAccountPath,
@@ -193,5 +194,9 @@ describe('where the searchable memory keeps its database', () => {
   test('the memory db is bookkeeping, so it sits outside the agent-readable folder', () => {
     expect(memoryDbPath('/data')).toBe('/data/memory/memory.db');
     expect(memoryDbPath('/data').startsWith(claudeConfigDir('/data'))).toBe(false);
+  });
+
+  test('the once-only migration marker sits beside the app bookkeeping', () => {
+    expect(memoryMigratedMarkerPath('/data')).toBe('/data/memory/migrated.json');
   });
 });

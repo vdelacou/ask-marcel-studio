@@ -105,6 +105,10 @@ export const memoryQueuePath = (userData: string): string => join(userData, 'mem
 
 export const memoryStatePath = (userData: string): string => join(userData, 'memory', 'state.json');
 
+// Written once the old notes have been carried into the searchable memory, so the
+// migration runs a single time.
+export const memoryMigratedMarkerPath = (userData: string): string => join(userData, 'memory', 'migrated.json');
+
 // Where a background job runs. Deliberately NOT under workspaces/: those belong to
 // conversations and are deleted with them.
 export const backgroundWorkspaceDir = (userData: string): string => join(userData, 'background-workspace');
