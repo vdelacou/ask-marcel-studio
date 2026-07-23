@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { toolLabel } from './tool-label.ts';
+import { toolBadge, toolLabel } from './tool-label.ts';
 
 describe('saying what a tool call is doing', () => {
   test('a bash call uses the description the agent wrote for it', () => {
@@ -91,12 +91,12 @@ describe('saying what a tool call is doing', () => {
     expect(toolLabel('Agent', { description: 'Read the latest CELINE CIO Meeting deck', subagent_type: 'doc-reader' })).toBe('Read the latest CELINE CIO Meeting deck');
   });
 
-  test('a delegated task with no description names the helper', () => {
-    expect(toolLabel('Task', { subagent_type: 'm365-reader' })).toBe('Asking the m365-reader helper');
+  test('a delegated task with no description names the agent', () => {
+    expect(toolLabel('Task', { subagent_type: 'm365-reader' })).toBe('Asking the m365-reader agent');
   });
 
   test('a delegated task with neither still reads as a sentence', () => {
-    expect(toolLabel('Task', {})).toBe('Asking a helper');
+    expect(toolLabel('Task', {})).toBe('Asking an agent');
   });
 
   test('an mcp tool is shown as its own last segment, opened out', () => {
@@ -127,5 +127,41 @@ describe('saying what a tool call is doing', () => {
     expect(toolLabel('Bash', null)).toBe('Running a command');
     expect(toolLabel('Read', 'oops')).toBe('Reading a file');
     expect(toolLabel('Grep', [1, 2])).toBe('Searching your files');
+  });
+});
+
+describe('what kind of thing a card says it is', () => {
+  test('a bash call that asks Microsoft 365 something is named for what it is', () => {
+    expect(toolBadge('Bash', { command: 'ask-marcel-office list-mail-messages --top 5' })).toBe('Ask Marcel Command');
+  });
+
+  test('the office cli called by its full path is still recognised', () => {
+    expect(toolBadge('Bash', { command: '/usr/local/bin/ask-marcel-office scopes-check' })).toBe('Ask Marcel Command');
+  });
+
+  test('an office command after a pipe or a semicolon counts too', () => {
+    expect(toolBadge('Bash', { command: 'cd ~/work; ask-marcel-office my-quick-context' })).toBe('Ask Marcel Command');
+  });
+
+  test('any other command is still a shell command', () => {
+    expect(toolBadge('Bash', { command: 'grep -n Herve inbox.txt' })).toBe('Bash');
+  });
+
+  test('a command that merely mentions the name in a string is not one', () => {
+    expect(toolBadge('Bash', { command: 'echo "run ask-marcel-office-later"' })).toBe('Bash');
+  });
+
+  test('a bash call with no command at all is still bash', () => {
+    expect(toolBadge('Bash', {})).toBe('Bash');
+  });
+
+  test('every other tool keeps its own name', () => {
+    expect(toolBadge('Read', { file_path: '~/work/a.txt' })).toBe('Read');
+  });
+});
+
+describe('delegating to an agent', () => {
+  test('a delegation with no description names the agent it asks', () => {
+    expect(toolLabel('Agent', { subagent_type: 'mail-reader' })).toBe('Asking the mail-reader agent');
   });
 });

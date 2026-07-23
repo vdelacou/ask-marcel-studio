@@ -18,7 +18,8 @@ import type { ChatPart } from '../components/molecules/chat-message/index.tsx';
 import type { ToolStep } from '../components/molecules/tool-call-card/index.tsx';
 import type { SuggestItem } from '../components/molecules/suggest-popover/index.tsx';
 import { useAttachments } from '../hooks/use-attachments.ts';
-import { toolLabel } from '../lib/tool-label.ts';
+import { toolBadge, toolLabel } from '../lib/tool-label.ts';
+import { formatTurnStats } from '../lib/turn-stats.ts';
 import { filterSkills, insertSkill, slashQuery, stepActive } from '../lib/slash-suggest.ts';
 import type { SkillSuggestion } from '../lib/slash-suggest.ts';
 import { stepHistory } from '../lib/message-history.ts';
@@ -52,6 +53,7 @@ const MENU_ITEMS = [{ id: 'import-file', label: 'Attach a file…' }];
 // Child tool parts (a delegated reader's own steps, tagged parentToolUseId) render
 // nested inside the tool call that spawned them, never as top-level cards.
 const toThreadMessage = (message: Message): ThreadMessage => {
+  const stats = formatTurnStats(message.stats);
   const stepsFor = (parentId: string): readonly ToolStep[] =>
     message.parts.flatMap((part): ToolStep[] =>
       part.type === 'tool' && part.parentToolUseId === parentId
@@ -59,7 +61,7 @@ const toThreadMessage = (message: Message): ThreadMessage => {
             {
               id: part.toolUseId,
               label: toolLabel(part.name, part.input),
-              name: part.name,
+              name: toolBadge(part.name, part.input),
               status: part.status,
               input: JSON.stringify(part.input ?? {}, null, 2),
               ...(part.result === undefined ? {} : { result: part.result }),
@@ -71,6 +73,7 @@ const toThreadMessage = (message: Message): ThreadMessage => {
   return {
     id: message.id,
     role: message.role,
+    ...(stats === undefined ? {} : { stats }),
     parts: message.parts.flatMap((part): ChatPart[] => {
       // The assistant speaks markdown; the user's own text is shown verbatim.
       if (part.type === 'text') return [{ kind: 'text', content: message.role === 'assistant' ? renderMarkdown(part.text) : part.text }];
@@ -82,7 +85,7 @@ const toThreadMessage = (message: Message): ThreadMessage => {
           kind: 'tool',
           id: part.toolUseId,
           label: toolLabel(part.name, part.input),
-          name: part.name,
+          name: toolBadge(part.name, part.input),
           // Pretty-printed here rather than in the card: the card renders strings.
           input: JSON.stringify(part.input ?? {}, null, 2),
           ...(part.result === undefined ? {} : { result: part.result }),

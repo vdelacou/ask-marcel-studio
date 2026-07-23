@@ -3,7 +3,7 @@ import { ChatMessage } from '../../molecules/chat-message/index.tsx';
 import type { ChatPart } from '../../molecules/chat-message/index.tsx';
 import { Spinner } from '../../atoms/spinner/index.tsx';
 
-export type ThreadMessage = { id: string; role: 'user' | 'assistant'; parts: readonly ChatPart[] };
+export type ThreadMessage = { id: string; role: 'user' | 'assistant'; parts: readonly ChatPart[]; stats?: string };
 
 export type ChatThreadProps = {
   messages: readonly ThreadMessage[];
@@ -23,7 +23,7 @@ export const ChatThread: FC<ChatThreadProps> = ({ messages, isStreaming, error, 
     <div className="mx-auto flex w-full min-w-0 max-w-reading flex-col gap-y-6 pb-8 pt-6">
       {messages.length === 0 && !isStreaming && <p className="m-auto max-w-sm py-16 text-center text-sm text-ink-muted">{emptyHint}</p>}
       {messages.map((message) => (
-        <ChatMessage key={message.id} role={message.role} parts={message.parts} />
+        <ChatMessage key={message.id} role={message.role} parts={message.parts} {...(message.stats === undefined ? {} : { stats: message.stats })} />
       ))}
       {isStreaming && <Spinner label="Working…" />}
       {error !== undefined && (

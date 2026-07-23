@@ -13,6 +13,9 @@ export type ChatPart =
 export type ChatMessageProps = {
   role: 'user' | 'assistant';
   parts: readonly ChatPart[];
+  // What the turn cost, already said in words by the page shell. Absent on a user
+  // message and on anything answered before this was recorded.
+  stats?: string;
 };
 
 // The user's own words sit in a soft bubble on the right; the assistant answers as
@@ -26,7 +29,7 @@ const TextBubble: FC<{ role: 'user' | 'assistant'; content: ReactNode }> = ({ ro
   );
 };
 
-export const ChatMessage: FC<ChatMessageProps> = ({ role, parts }) => (
+export const ChatMessage: FC<ChatMessageProps> = ({ role, parts, stats }) => (
   <article className={`flex flex-col gap-y-2 ${role === 'user' ? 'items-end' : 'items-stretch'}`}>
     {parts.map((part, index) =>
       part.kind === 'text' ? (
@@ -37,6 +40,7 @@ export const ChatMessage: FC<ChatMessageProps> = ({ role, parts }) => (
         </div>
       )
     )}
+    {stats !== undefined && <p className="text-[11px] text-ink-faint">{stats}</p>}
   </article>
 );
 

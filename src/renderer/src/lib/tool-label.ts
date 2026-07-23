@@ -55,6 +55,18 @@ const named = (path: string | undefined, verb: string, fallback: string): string
 
 const quoted = (term: string | undefined, prefix: string, fallback: string): string => (term === undefined ? fallback : `${prefix} “${term}”`);
 
+// The badge beside the label: the tool's own wire name, except for the one that matters
+// to a person. A bash call that runs the Microsoft 365 CLI is not "Bash" to the user, it
+// is the app asking their mailbox something, and half the cards in a normal conversation
+// are exactly that.
+const OFFICE_CLI = /(^|[\s;&|(/])ask-marcel-office(\s|$)/;
+
+export const toolBadge = (name: string, input: unknown): string => {
+  if (name !== 'Bash') return name;
+  const command = field(input, 'command');
+  return command !== undefined && OFFICE_CLI.test(command) ? 'Ask Marcel Command' : name;
+};
+
 export const toolLabel = (name: string, input: unknown): string => {
   switch (name) {
     case 'Bash':
@@ -92,7 +104,7 @@ export const toolLabel = (name: string, input: unknown): string => {
       const description = field(input, 'description');
       if (description !== undefined) return truncate(description);
       const helper = field(input, 'subagent_type');
-      return truncate(helper === undefined ? 'Asking a helper' : `Asking the ${helper} helper`);
+      return truncate(helper === undefined ? 'Asking an agent' : `Asking the ${helper} agent`);
     }
     case 'TodoWrite':
       return 'Organising the steps';
