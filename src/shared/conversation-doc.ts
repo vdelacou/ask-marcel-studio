@@ -8,7 +8,7 @@
  */
 import { conversationId } from './conversation-id.ts';
 import type { ConversationId } from './conversation-id.ts';
-import type { Conversation, ConversationMeta, Message, MessagePart } from './types.ts';
+import type { Conversation, ConversationMeta, Message, MessagePart, TurnStats } from './types.ts';
 import { humanizeSkillFolder } from './skill-md.ts';
 import type { Result } from './result.ts';
 import { err, ok } from './result.ts';
@@ -70,6 +70,9 @@ export type TurnOutcome = {
   readonly userMessageId: string;
   readonly assistantMessageId: string;
   readonly at: string;
+  // How long the turn took. Absent when the runtime did not time it (an older caller, or
+  // a turn that never started).
+  readonly durationMs?: number;
 };
 
 // Appending is a fold onto a freshly read base rather than a write of the snapshot the
@@ -80,7 +83,14 @@ export const appendTurn = (base: Conversation, turn: TurnOutcome): { readonly co
   // conversation while the first turn was running, their name wins.
   const title = base.messages.length === 0 && base.title === DEFAULT_TITLE ? titleFromFirstMessage(turn.text) : base.title;
   const userMessage: Message = { id: turn.userMessageId, role: 'user', parts: [{ type: 'text', text: turn.text }], createdAt: turn.at };
-  const assistantMessage: Message = { id: turn.assistantMessageId, role: 'assistant', parts: turn.parts, createdAt: turn.at };
+  // Counted from the parts rather than tracked alongside them, so a delegated reader's
+  // own steps count too: they are what the turn actually did.
+  const toolParts = turn.parts.filter((part) => part.type === 'tool');
+  const stats =
+    turn.durationMs === undefined
+      ? undefined
+      : { durationMs: turn.durationMs, toolCalls: toolParts.length, toolErrors: toolParts.filter((part) => part.type === 'tool' && part.status === 'error').length };
+  const assistantMessage: Message = { id: turn.assistantMessageId, role: 'assistant', parts: turn.parts, createdAt: turn.at, ...(stats === undefined ? {} : { stats }) };
 
   return {
     conversation: {
@@ -124,9 +134,18 @@ const parsePart = (raw: unknown): Result<MessagePart, ConversationDocError> => {
   return unreadable(`unknown message part type: ${String(raw['type'])}`);
 };
 
+// Absent on every message written before turns were timed, and on anything a hand edit
+// mangled: a missing or malformed line under an answer is not worth failing a read for.
+const parseStats = (raw: unknown): TurnStats | undefined => {
+  if (!isRecord(raw)) return undefined;
+  const { durationMs, toolCalls, toolErrors } = raw;
+  if (typeof durationMs !== 'number' || typeof toolCalls !== 'number' || typeof toolErrors !== 'number') return undefined;
+  return { durationMs, toolCalls, toolErrors };
+};
+
 const parseMessage = (raw: unknown): Result<Message, ConversationDocError> => {
   if (!isRecord(raw)) return unreadable('message must be an object');
-  const { id, role, parts, createdAt } = raw;
+  const { id, role, parts, createdAt, stats } = raw;
   if (typeof id !== 'string' || id.length === 0) return unreadable('message id must be a non-empty string');
   if (role !== 'user' && role !== 'assistant') return unreadable(`message role must be user or assistant, got ${String(role)}`);
   if (typeof createdAt !== 'string') return unreadable('message createdAt must be a string');
@@ -138,7 +157,7 @@ const parseMessage = (raw: unknown): Result<Message, ConversationDocError> => {
     if (!one.ok) return one;
     parsed.push(one.value);
   }
-  return ok({ id, role, parts: parsed, createdAt });
+  return ok({ id, role, parts: parsed, createdAt, ...(parseStats(stats) === undefined ? {} : { stats: parseStats(stats) }) });
 };
 
 export const parseConversation = (raw: unknown): Result<Conversation, ConversationDocError> => {

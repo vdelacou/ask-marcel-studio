@@ -65,11 +65,20 @@ export type MessagePart =
       readonly parentToolUseId?: string;
     };
 
+// What a turn cost, for the faint line under an answer. Absent on every message written
+// before it was recorded, and on user messages, which cost nothing.
+export type TurnStats = {
+  readonly durationMs: number;
+  readonly toolCalls: number;
+  readonly toolErrors: number;
+};
+
 export type Message = {
   readonly id: string;
   readonly role: 'user' | 'assistant';
   readonly parts: readonly MessagePart[];
   readonly createdAt: string;
+  readonly stats?: TurnStats;
 };
 
 export type Conversation = {

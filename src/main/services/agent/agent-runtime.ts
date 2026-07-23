@@ -105,6 +105,7 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
     controller: AbortController
   ): Promise<void> => {
     const messageId = newMessageId();
+    const startedAt = Date.parse(deps.now());
     let fold = emptyFold(messageId);
     deps.emit({ type: 'turn-start', conversationId: conversation.id, messageId });
 
@@ -174,7 +175,7 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
       // Persisted BEFORE the conversation leaves the running map: a second send that
       // arrives in this window must be refused as busy rather than read a file that is
       // missing the exchange the user just watched.
-      await persist(conversation, text, fold.parts, fold.sdkSessionId, messageId);
+      await persist(conversation, text, fold.parts, fold.sdkSessionId, messageId, startedAt);
       running.delete(conversation.id);
     }
   };
@@ -189,7 +190,8 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
     text: string,
     parts: Conversation['messages'][number]['parts'],
     sdkSessionId: string | undefined,
-    messageId: string
+    messageId: string,
+    startedAt: number
   ): Promise<void> => {
     const fresh = await deps.conversations.get(snapshot.id);
     // Deleted mid-turn: saving would resurrect a conversation the user threw away.
@@ -205,6 +207,7 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
       userMessageId: newMessageId(),
       assistantMessageId: messageId,
       at,
+      durationMs: Math.max(0, Date.parse(at) - startedAt),
     });
 
     const saved = await deps.conversations.save(conversation);

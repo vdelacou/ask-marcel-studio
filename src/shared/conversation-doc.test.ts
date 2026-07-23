@@ -400,3 +400,61 @@ describe('reading a conversation the user named themselves', () => {
     expect(parsed.ok && parsed.value.userRenamed).toBeUndefined();
   });
 });
+
+describe('what a turn cost', () => {
+  const base = newConversation('3f2504e0-4f89-41d3-9a0c-0305e82c3301' as never, 'p::m', '2026-07-24T00:00:00.000Z');
+  const turn = {
+    text: 'catch me up',
+    parts: [
+      { type: 'tool', toolUseId: 't1', name: 'Bash', input: {}, status: 'done' },
+      { type: 'tool', toolUseId: 't2', name: 'Bash', input: {}, status: 'error' },
+      { type: 'tool', toolUseId: 't3', name: 'Read', input: {}, status: 'done', parentToolUseId: 't1' },
+      { type: 'text', text: 'Here is your inbox.' },
+    ] as never,
+    userMessageId: 'u1',
+    assistantMessageId: 'a1',
+    at: '2026-07-24T00:00:14.000Z',
+  };
+
+  test('an answered turn records how long it took and how much it ran', () => {
+    const { conversation } = appendTurn(base, { ...turn, durationMs: 14_000 });
+
+    expect(conversation.messages[1]?.stats).toEqual({ durationMs: 14_000, toolCalls: 3, toolErrors: 1 });
+  });
+
+  test('a delegated reader’s own steps count, because they are what the turn did', () => {
+    const { conversation } = appendTurn(base, { ...turn, durationMs: 1 });
+
+    expect(conversation.messages[1]?.stats?.toolCalls).toBe(3);
+  });
+
+  test('a turn nobody timed carries no stats rather than a zero', () => {
+    const { conversation } = appendTurn(base, turn);
+
+    expect(conversation.messages[1]?.stats).toBeUndefined();
+  });
+
+  test('what was recorded survives being written and read back', () => {
+    const { conversation } = appendTurn(base, { ...turn, durationMs: 14_000 });
+
+    const parsed = parseConversation(JSON.parse(serialiseConversation(conversation)));
+
+    expect(parsed.ok && parsed.value.messages[1]?.stats).toEqual({ durationMs: 14_000, toolCalls: 3, toolErrors: 1 });
+  });
+
+  test('a conversation written before turns were timed still opens', () => {
+    const doc = JSON.parse(serialiseConversation(appendTurn(base, turn).conversation));
+
+    expect(parseConversation(doc).ok).toBe(true);
+  });
+
+  test('stats a hand edit mangled are dropped, not treated as a broken conversation', () => {
+    const doc = JSON.parse(serialiseConversation(appendTurn(base, { ...turn, durationMs: 5 }).conversation));
+    doc.messages[1].stats = { durationMs: 'ages', toolCalls: 3, toolErrors: 0 };
+
+    const parsed = parseConversation(doc);
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.ok && parsed.value.messages[1]?.stats).toBeUndefined();
+  });
+});
