@@ -389,3 +389,38 @@ The general form: prose near an instruction reads as color to a small model; onl
 steps with an explicit stop condition and an explicitly forbidden wrong conclusion are
 load-bearing. And an eval you cannot re-run is a hope, not a gate: the Playwright driver
 (launch, fresh conversation, ask, wait, dump) is what made three wording iterations cheap.
+
+## [gotcha] a pre-commit gate that reads the working tree does not guard the commit (2026-07-23)
+
+Seven commits landed green on this branch and a clean checkout of the tip failed typecheck on
+three separate errors: a port whose signature had moved, a store argument, and a page
+importing a module that was never staged. Every one of them passed the hook because gate 6
+ran `bun run typecheck`, which reads the WORKING TREE, and the missing halves were sitting
+unstaged in it the whole time. The gate was measuring the developer's desk, not the commit.
+
+It only surfaced because a `git worktree add --detach HEAD` was used to check the tip
+independently. Nothing in the normal loop would ever have caught it: the tree is green, the
+hook is green, and the break is invisible until someone clones.
+
+The general form: a gate must run against the artefact it is gating. `scripts/check-staged-typecheck.sh`
+now materialises the index with `git write-tree` + `git archive` into a temp dir and typechecks
+THAT, which never touches the working tree, so there is no stash to restore if it exits early.
+Rule for next time: when a commit stages a subset of the tree, verify the subset, and reach for
+a detached worktree to audit HEAD before trusting a branch.
+
+## [gotcha] Bun's node:http never fires `close` on the ServerResponse (2026-07-23)
+
+The gateway aborts its upstream call when the agent hangs up, which rides on
+`res.on('close')`. That is untestable under `bun test`. Measured with a probe on both
+runtimes: a client abort mid-response fires `req.aborted, res.close, req.close` under Node
+and only `req.aborted, req.close` under Bun. Electron is Node, so production is correct and
+the test runner simply cannot observe it.
+
+The trap is the obvious workaround. Listening on the REQUEST instead makes the test pass and
+the code wrong: on a healthy request `req.close` fires as soon as the body ends, before the
+response is written, on BOTH runtimes, so every good turn would abort itself. Verified, not
+assumed.
+
+Rule for next time: when a test only passes if you move a seam, check what the seam does on
+the happy path before moving it. An uncovered line with a comment saying why beats a covered
+line that broke production.
