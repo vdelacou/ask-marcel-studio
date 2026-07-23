@@ -93,12 +93,12 @@ Design (to confirm while implementing):
 - Switching: signing out stops the app reading the old account's data; signing in as someone
   else opens their own (empty on first sight) world. The window reloads its lists on the
   account change rather than mixing two.
-1. [ ] paths.ts takes an account key; pure, tested, every derived path under it.
-2. [ ] Account service: resolve the current key from quick context, expose it to main,
+1. [x] paths.ts takes an account key; pure, tested, every derived path under it.
+2. [x] Account service: resolve the current key from quick context, expose it to main,
        notify the renderer when it changes.
-3. [ ] Migration of the existing tree, one shot, marker, tested against a fake filesystem.
-4. [ ] Stores and services take the key; renderer reloads on account change.
-5. [ ] Verify: two accounts, two worlds, switch back and forth, nothing crosses.
+3. [x] Migration of the existing tree, one shot, marker, tested against a fake filesystem.
+4. [x] Stores and services take the key; renderer reloads on account change.
+5. [x] Verify: two accounts, two worlds, switch back and forth, nothing crosses.
 
 ## Phase 2 — Agent quality, skills, agents UI
 
@@ -111,9 +111,9 @@ Design (to confirm while implementing):
 4. [ ] Turn stats capture (R10b): Message.stats {durationMs,toolCalls,toolErrors}.
 5. [ ] Repeat-failure guard + enforcement tests (R8c, R18b): command-failures.ts ring buffer,
        bash-guard deny, runtime recording (guard-denials excluded), hook e2e tests + meta lock.
-6. [ ] CLI cheat-sheet (R8a): generator from commands.json → claude-config/cli-cheatsheet.md
+6. [x] CLI cheat-sheet (R8a): generator from commands.json → claude-config/cli-cheatsheet.md
        at launch.
-7. [ ] Prompt hardening (R8b/d, R9): Grep probe first; core.md Command discipline (numbered) +
+7. [x] Prompt hardening (R8b/d, R9): Grep probe first; core.md Command discipline (numbered) +
        toolset truth; draft skill "Identify and confirm before any work" (numbered, STOP).
 8. [ ] Skills pure layer (R13/14): serialiseSkillMd + single-line folding + round-trip tests;
        renderer skill-form.ts, slugify.ts.
@@ -125,8 +125,11 @@ Design (to confirm while implementing):
         ToolChecklist, rich Instructions, friendly name to slug.
 12. [ ] Command list redesign (R18a/c): single-column details accordion; meta split display
         (Local files / Search / Account), policyName stays meta.
-13. [ ] Tool labels + stats display (R22, R10-UI): displayToolName ask-marcel-office to
-        "Ask Marcel Command"; formatTurnStats faint line.
+13. [x] Tool labels + stats display (R22, R10-UI): "Ask Marcel Command" badge +
+        formatTurnStats faint line. DONE with the turn-stats commit.
+
+Remaining in Phase 2: 8 skills pure layer, 9 skills persistence, 10 skills UI, 11 agents
+overhaul, 12 command-list redesign.
 
 ## Phase 3 — Memory and context
 
