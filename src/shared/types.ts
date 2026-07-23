@@ -81,6 +81,9 @@ export type Conversation = {
   readonly updatedAt: string;
   // Captured from the SDK so a turn can resume after a restart. Absent on turn one.
   readonly sdkSessionId?: string;
+  // True once the user has named this conversation themselves. Their name then survives
+  // everything the app would otherwise call it.
+  readonly userRenamed?: boolean;
   readonly messages: readonly Message[];
 };
 

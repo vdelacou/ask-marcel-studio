@@ -444,3 +444,47 @@ describe('attaching files to a conversation', () => {
     expect(await store.importPaths({ id: created.value.id, paths: [] })).toEqual({ ok: true, value: [] });
   });
 });
+
+describe('naming a conversation after the fact', () => {
+  test('a generated title replaces the one derived from the first message', async () => {
+    const created = await store.create({ model: 'p::m' });
+    if (!created.ok) throw new Error('expected ok');
+
+    const named = await store.setGeneratedTitle(created.value.id, 'Hervé’s B27 budget figures');
+
+    expect(named.ok && named.value.title).toBe('Hervé’s B27 budget figures');
+  });
+
+  test('a name the user typed is never overwritten by one the app thought of', async () => {
+    const created = await store.create({ model: 'p::m' });
+    if (!created.ok) throw new Error('expected ok');
+    await store.rename({ id: created.value.id, title: 'Mine' });
+
+    await store.setGeneratedTitle(created.value.id, 'Something else entirely');
+
+    const read = await store.get(created.value.id);
+    expect(read.ok && read.value.title).toBe('Mine');
+  });
+
+  test('being named does not move a conversation up the sidebar', async () => {
+    const created = await store.create({ model: 'p::m' });
+    if (!created.ok) throw new Error('expected ok');
+    const before = created.value.updatedAt;
+    tick('2026-07-18T09:00:00.000Z');
+
+    await store.setGeneratedTitle(created.value.id, 'A better name');
+
+    const read = await store.get(created.value.id);
+    expect(read.ok && read.value.updatedAt).toBe(before);
+  });
+
+  test('a conversation deleted while the model was thinking is not resurrected', async () => {
+    const created = await store.create({ model: 'p::m' });
+    if (!created.ok) throw new Error('expected ok');
+    await store.remove(created.value.id);
+
+    const named = await store.setGeneratedTitle(created.value.id, 'Too late');
+
+    expect(named.ok).toBe(false);
+  });
+});

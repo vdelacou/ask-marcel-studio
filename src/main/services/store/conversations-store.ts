@@ -13,7 +13,7 @@
 import { basename, join } from 'node:path';
 import { copyFile, mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { conversationId, newConversationId } from '../../../shared/conversation-id.ts';
-import { byMostRecentlyUpdated, newConversation, parseConversation, serialiseConversation, toMeta } from '../../../shared/conversation-doc.ts';
+import { applyGeneratedTitle, byMostRecentlyUpdated, newConversation, parseConversation, serialiseConversation, toMeta } from '../../../shared/conversation-doc.ts';
 import { conversationFilePath, conversationsDir, importsDir, workspaceDir } from '../../../shared/paths.ts';
 import { readJsonFile, removeFile, writeJsonFileAtomic } from './json-file.ts';
 import { parseModelRef } from '../../../shared/model-ref.ts';
@@ -42,6 +42,8 @@ export type ConversationsStore = {
   readonly create: (input: ResolvedCreateInput) => Promise<Result<Conversation, StoreError>>;
   readonly get: (id: string) => Promise<Result<Conversation, StoreError>>;
   readonly rename: (input: RenameConversationInput) => Promise<Result<ConversationMeta, StoreError>>;
+  // Used by the background title job; refuses to overwrite a name the user chose.
+  readonly setGeneratedTitle: (id: string, title: string) => Promise<Result<ConversationMeta, StoreError>>;
   // Takes effect from the next message: the runtime reads the model per send.
   readonly setModel: (input: SetConversationModelInput) => Promise<Result<ConversationMeta, StoreError>>;
   readonly remove: (id: string) => Promise<Result<null, StoreError>>;
@@ -111,7 +113,23 @@ export const createConversationsStore = (deps: ConversationsStoreDeps): Conversa
     const title = input.title.trim();
     if (title.length === 0) return err({ kind: 'invalid', message: 'a conversation title cannot be blank' });
 
-    const written = await writeOne({ ...existing.value, title, updatedAt: deps.now() });
+    // Naming it themselves claims it: nothing the app generates may take it back.
+    const written = await writeOne({ ...existing.value, title, userRenamed: true, updatedAt: deps.now() });
+    if (!written.ok) return written;
+    return ok(toMeta(written.value));
+  };
+
+  // The title job's way in. It reads fresh rather than writing back a snapshot, so a
+  // rename that landed while the model was thinking still wins, and it leaves updatedAt
+  // alone so a conversation does not jump up the sidebar just for being named.
+  const setGeneratedTitle = async (id: string, title: string): Promise<Result<ConversationMeta, StoreError>> => {
+    const existing = await readOne(id);
+    if (!existing.ok) return existing;
+
+    const applied = applyGeneratedTitle(existing.value, title);
+    if (!applied.changed) return ok(toMeta(existing.value));
+
+    const written = await writeOne(applied.conversation);
     if (!written.ok) return written;
     return ok(toMeta(written.value));
   };
@@ -217,5 +235,5 @@ export const createConversationsStore = (deps: ConversationsStoreDeps): Conversa
     return ok({ name, relativePath: `imports/${name}`, size: input.bytes.byteLength });
   };
 
-  return { list, create, get: readOne, rename, setModel, remove, workspaceFor, importPaths, importBytes, save: writeOne };
+  return { list, create, get: readOne, rename, setGeneratedTitle, setModel, remove, workspaceFor, importPaths, importBytes, save: writeOne };
 };

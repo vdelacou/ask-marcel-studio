@@ -1,5 +1,14 @@
 import { describe, expect, test } from 'bun:test';
-import { appendTurn, byMostRecentlyUpdated, newConversation, parseConversation, serialiseConversation, titleFromFirstMessage, toMeta } from './conversation-doc.ts';
+import {
+  appendTurn,
+  applyGeneratedTitle,
+  byMostRecentlyUpdated,
+  newConversation,
+  parseConversation,
+  serialiseConversation,
+  titleFromFirstMessage,
+  toMeta,
+} from './conversation-doc.ts';
 import { conversationId } from './conversation-id.ts';
 import { unwrap } from './result.ts';
 import type { ConversationMeta } from './types.ts';
@@ -329,5 +338,65 @@ describe('appending a finished turn to whatever is on disk now', () => {
 
     expect(conversation.title).toBe('New conversation');
     expect(titleChanged).toBe(false);
+  });
+});
+
+describe('what a conversation is called before the app has thought about it', () => {
+  test('a skill invocation is not a title', () => {
+    expect(titleFromFirstMessage('/draft-outlook-email FG E-Commerce Optimization')).toBe('FG E-Commerce Optimization');
+  });
+
+  test('a message that was only an invocation is titled by the skill, in words', () => {
+    expect(titleFromFirstMessage('/draft-outlook-email')).toBe('Draft outlook email');
+  });
+
+  test('a message that merely mentions a slash keeps it', () => {
+    expect(titleFromFirstMessage('what does and/or mean here?')).toBe('what does and/or mean here?');
+  });
+
+  test('a path typed at the start is not mistaken for a command', () => {
+    expect(titleFromFirstMessage('/Users/vincent/report.xlsx please read this')).toBe('/Users/vincent/report.xlsx please read this');
+  });
+});
+
+describe('the title the app generates later', () => {
+  const base = { ...newConversation('3f2504e0-4f89-41d3-9a0c-0305e82c3301' as never, 'p::m', '2026-07-24T00:00:00.000Z'), title: 'the b27 email' };
+
+  test('a better title replaces the one derived from the first message', () => {
+    const applied = applyGeneratedTitle(base, 'Hervé’s B27 budget figures');
+
+    expect(applied.changed).toBe(true);
+    expect(applied.conversation.title).toBe('Hervé’s B27 budget figures');
+  });
+
+  test('a name the user typed themselves is never overwritten', () => {
+    const applied = applyGeneratedTitle({ ...base, userRenamed: true }, 'Something the model preferred');
+
+    expect(applied.changed).toBe(false);
+    expect(applied.conversation.title).toBe('the b27 email');
+  });
+
+  test('an empty answer changes nothing, rather than blanking the sidebar', () => {
+    expect(applyGeneratedTitle(base, '   ').changed).toBe(false);
+  });
+
+  test('the same title again is not a change worth writing', () => {
+    expect(applyGeneratedTitle(base, 'the b27 email').changed).toBe(false);
+  });
+});
+
+describe('reading a conversation the user named themselves', () => {
+  test('their claim on the name survives being written and read back', () => {
+    const doc = JSON.parse(serialiseConversation({ ...newConversation('3f2504e0-4f89-41d3-9a0c-0305e82c3301' as never, 'p::m', '2026-07-24T00:00:00.000Z'), userRenamed: true }));
+
+    const parsed = parseConversation(doc);
+
+    expect(parsed.ok && parsed.value.userRenamed).toBe(true);
+  });
+
+  test('a conversation written before the flag existed reads as named by the app', () => {
+    const parsed = parseConversation(JSON.parse(serialiseConversation(newConversation('3f2504e0-4f89-41d3-9a0c-0305e82c3301' as never, 'p::m', '2026-07-24T00:00:00.000Z'))));
+
+    expect(parsed.ok && parsed.value.userRenamed).toBeUndefined();
   });
 });

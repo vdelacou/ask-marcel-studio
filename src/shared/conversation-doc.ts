@@ -9,6 +9,7 @@
 import { conversationId } from './conversation-id.ts';
 import type { ConversationId } from './conversation-id.ts';
 import type { Conversation, ConversationMeta, Message, MessagePart } from './types.ts';
+import { humanizeSkillFolder } from './skill-md.ts';
 import type { Result } from './result.ts';
 import { err, ok } from './result.ts';
 
@@ -23,14 +24,31 @@ const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 // derived one, and a title the user typed may not.
 export const DEFAULT_TITLE = 'New conversation';
 
-// The title shown in the sidebar: the first user message, trimmed to fit. LLM
-// titling is later polish (docs/PLAN.md), so this is deliberately dumb.
+// What the sidebar shows until the title job answers: the first message, trimmed to fit,
+// with any leading skill invocation taken off. `/draft-outlook-email FG E-Commerce` is a
+// command plus a subject, and only the subject says what the conversation is about.
 const TITLE_LIMIT = 60;
+// The lookahead is what stops a pasted path (`/Users/vincent/report.xlsx`) being read as
+// a command: an invocation is a single word, ended by a space or by the message.
+const SLASH_PREFIX = /^\/([A-Za-z0-9-]+)(?=\s|$)\s*/;
+
 export const titleFromFirstMessage = (text: string): string => {
   const oneLine = text.replace(/\s+/g, ' ').trim();
-  if (oneLine.length === 0) return DEFAULT_TITLE;
-  if (oneLine.length <= TITLE_LIMIT) return oneLine;
-  return `${oneLine.slice(0, TITLE_LIMIT - 1).trimEnd()}…`;
+  const invocation = SLASH_PREFIX.exec(oneLine);
+  // A message that was ONLY an invocation still has to be called something, so the skill
+  // it asked for is read as words rather than left as a command.
+  const withoutCommand = invocation === null ? oneLine : oneLine.slice(invocation[0].length) || humanizeSkillFolder(invocation[1] ?? '');
+  if (withoutCommand.length === 0) return DEFAULT_TITLE;
+  if (withoutCommand.length <= TITLE_LIMIT) return withoutCommand;
+  return `${withoutCommand.slice(0, TITLE_LIMIT - 1).trimEnd()}…`;
+};
+
+// A title the user typed themselves is theirs: nothing derived and nothing generated may
+// replace it. Anything else is the app's guess, and a better guess may still arrive.
+export const applyGeneratedTitle = (conversation: Conversation, title: string): { readonly conversation: Conversation; readonly changed: boolean } => {
+  const wanted = title.trim();
+  if (wanted.length === 0 || conversation.userRenamed === true || wanted === conversation.title) return { conversation, changed: false };
+  return { conversation: { ...conversation, title: wanted }, changed: true };
 };
 
 export const newConversation = (id: ConversationId, model: string, now: string): Conversation => ({
@@ -125,7 +143,7 @@ const parseMessage = (raw: unknown): Result<Message, ConversationDocError> => {
 
 export const parseConversation = (raw: unknown): Result<Conversation, ConversationDocError> => {
   if (!isRecord(raw)) return unreadable('conversation must be an object');
-  const { id, title, model, createdAt, updatedAt, sdkSessionId, messages } = raw;
+  const { id, title, model, createdAt, updatedAt, sdkSessionId, userRenamed, messages } = raw;
   if (typeof id !== 'string') return unreadable('conversation id must be a string');
 
   // Re-cross the checkpoint: the filename is not proof of what is inside, and this
@@ -146,7 +164,18 @@ export const parseConversation = (raw: unknown): Result<Conversation, Conversati
     if (!one.ok) return one;
     parsed.push(one.value);
   }
-  return ok({ id: checked.value, title, model, createdAt, updatedAt, ...(sdkSessionId === undefined ? {} : { sdkSessionId }), messages: parsed });
+  // Absent in every conversation written before the flag existed, which reads correctly
+  // as "the app named this one".
+  return ok({
+    id: checked.value,
+    title,
+    model,
+    createdAt,
+    updatedAt,
+    ...(sdkSessionId === undefined ? {} : { sdkSessionId }),
+    ...(userRenamed === true ? { userRenamed: true } : {}),
+    messages: parsed,
+  });
 };
 
 export const toMeta = (conversation: Conversation): ConversationMeta => {
