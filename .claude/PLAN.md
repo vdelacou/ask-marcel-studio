@@ -1,19 +1,51 @@
-# PLAN: branch feat/m365-builtin-pack, current state (2026-07-23)
+# PLAN: branch feat/m365-builtin-pack, state after the 2026-07-23 evening session
 
-No task in flight. Completed on this branch today, all gates green (1355 tests, lint,
-typecheck, build), verified live in the app via .claude/skills/run-studio:
+No task in flight. The working tree is CLEAN for the first time on this branch, and
+HEAD is verified green in a detached worktree: typecheck, 1373 tests, lint, coverage.
 
-1. [x] Role→person routing + scoped-title/two-source/tenant-first rules (core.md, skill)
-2. [x] doc-reader + mail-reader replace m365-reader; delegation forced; generic CLI
-       subagents withdrawn via Task() deny rules
-3. [x] Extraction doctrine: redirect + Grep/grep/awk, no jq dependency, no read-backs
-4. [x] Subagent steps persisted as child parts (parentToolUseId), rendered nested in
-       the Agent card live and after reopen; result bodies included
-5. [x] conversation-doc loader keeps parentToolUseId (was stripping it on load)
-6. [x] tool-label: Skill reads the `skill` key; Agent tool name labels by description
-7. [x] Prompt hardening: bare `ask-marcel-office` only (no absolute paths, no npx, no
-       silencing); local disk out of bounds for readers
+## What this session did
 
-Pending, user-gated: commit slices + atelier-review-me before landing; consider a
-stronger default model than gemini-3.5-flash-lite; optional shell-guard hardening
-(block reads outside workspace/scratch) and a README line for run-studio.
+Started from "kill the mutation survivors in translate-request", which it did (31 to 0,
+score 90.28 to 100.00). Everything after came out of what that uncovered.
+
+Landed, oldest first:
+
+- f50bf22 survivor-killing tests for translate-request
+- 6e9702b one glossary block per note, note titles dropped, `*`/`+` bullets read
+- 52bd7f3 a new conversation opens on the model last used
+- 3ec554e editor mode tabs dropped, each panel states its own
+- 832d011 the note length cap removed
+- e4c016e up arrow recalls an earlier message into the composer
+- 2a9b796 notes cited by the user's name for them, never asked about the user
+- ac28844 the pre-commit typecheck now reads the STAGED tree
+- 508e340 two LESSONS entries
+- 7d6c326 tool schemas trimmed to Google's Schema proto
+- bd763e5 Gemini thought signatures carried across the Anthropic round trip
+- bd4949e every upstream call gets a deadline; openai-compatible provider
+- b9e066e main, not the renderer, picks a new conversation's model
+- 26493b9 columns grow with the window, stop at a reading width
+- b3b8a87 400 no longer reported as a bad model name
+
+## The thing worth remembering
+
+HEAD did not compile for seven commits and nobody could have noticed. The pre-commit
+gate ran `bun run typecheck` over the WORKING TREE, where the missing halves were sitting
+unstaged. Found only by `git worktree add --detach HEAD`. Fixed in ac28844
+(`scripts/check-staged-typecheck.sh`, materialises the index with write-tree + archive).
+There is still NO CI in this repo, so that hook is the only gate that exists.
+
+## Open, user-gated
+
+- [ ] jargon.md: the user's real note vanished around 14:07 and what is on disk is a
+      one-line reconstruction written by the agent for the UCR canary. Decide.
+- [ ] The self-elicitation fix (2a9b796) is prompt-only and UNPROVEN live: it needs a
+      background extraction run that would surface the user's own name.
+- [ ] flash-lite omits the Sources footer entirely on note-only answers. Pre-existing,
+      not a regression: the 14:00 run predating every prompt edit did the same.
+- [ ] Two size-gate bypasses landed (bd763e5 at 304 lines, bd4949e at 481). Gates 2-8 were
+      run by hand on both. A 300-line cap and a 369-line first test file are in real
+      tension; worth a policy rather than a judgment call each time.
+- [ ] No CI workflow at all. `.agents/skills/atelier/assets/ci.yml` is sitting untracked.
+- [ ] Cleanup: ~20 test conversations in the sidebar from the eval runs.
+- [ ] Optional: shell-guard hardening, README line for run-studio, jq vendoring if M6
+      targets Windows.
