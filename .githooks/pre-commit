@@ -10,7 +10,7 @@
 #   3. secret scan       — gitleaks protect --staged (degrades gracefully)
 #   4. tests             — bun test
 #   5. strict lint       — bun run lint:strict (0 errors AND 0 warnings)
-#   6. typecheck         — bun run typecheck
+#   6. typecheck         — the STAGED tree, not the working one (see the script's header)
 #   7. coverage          — bun run coverage (per-tier gates)
 #   8. mutation testing  — bun run mutate:staged (≥90% on staged domain/use-case files)
 #
@@ -51,8 +51,8 @@ bun test
 echo "[5/8] bun run lint:strict"
 bun run lint:strict
 
-echo "[6/8] bun run typecheck"
-bun run typecheck
+echo "[6/8] typecheck (staged tree)"
+bash scripts/check-staged-typecheck.sh
 
 echo "[7/8] bun run coverage"
 bun run coverage
