@@ -75,6 +75,10 @@ export const voiceProfileFilePath = (userData: string): string => join(claudeCon
 // the block did not carry can open the file itself.
 export const quickContextFilePath = (userData: string): string => join(claudeConfigDir(userData), 'quick-context.json');
 
+// The exact-flags cheat-sheet for the office CLI, generated at launch and read by the
+// agent under $CLAUDE_CONFIG_DIR before it guesses a flag.
+export const cliCheatsheetPath = (userData: string): string => join(claudeConfigDir(userData), 'cli-cheatsheet.md');
+
 // What settingSources: ['user'] loads. One folder per skill, each with a SKILL.md.
 export const skillsDir = (userData: string): string => join(claudeConfigDir(userData), 'skills');
 

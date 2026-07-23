@@ -16,6 +16,7 @@ import {
   signatureFilePath,
   voiceProfileFilePath,
   quickContextFilePath,
+  cliCheatsheetPath,
   accountDir,
   accountsDir,
   currentAccountPath,
@@ -178,5 +179,11 @@ describe('keeping one account’s world out of another’s', () => {
     const key = accountKeyFor({ id: 'id-1', email: 'vincent@lvmh.com' });
 
     expect(conversationsDir(accountDir(USER_DATA, key)).startsWith(accountDir(USER_DATA, key))).toBe(true);
+  });
+});
+
+describe('where the agent finds the flags it should not guess', () => {
+  test('the cheat-sheet sits in the folder the agent already reads', () => {
+    expect(cliCheatsheetPath('/data')).toBe(`${claudeConfigDir('/data')}/cli-cheatsheet.md`);
   });
 });
