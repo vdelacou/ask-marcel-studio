@@ -23,6 +23,7 @@ import { createSkillsService } from './services/skills/skills-service.ts';
 import { createAgentsStore } from './services/store/agents-store.ts';
 import { createAgentFilesStore } from './services/store/agent-files-store.ts';
 import { createBackgroundRunner } from './services/background/background-runner.ts';
+import { createFileLogger } from './services/log/file-logger.ts';
 import { createMemoryService } from './services/memory/memory-service.ts';
 import { createSqliteMemoryStore } from './services/memory/sqlite-memory-store.ts';
 import type { Embedder } from './services/memory/sqlite-memory-store.ts';
@@ -37,7 +38,7 @@ import { createTitleJob } from './services/background/title-job.ts';
 import { createSignatureService } from './services/office/signature-service.ts';
 import { parseAgentFileDoc } from '../shared/agent-files.ts';
 import { createModelTestService } from './services/models/model-test-service.ts';
-import { accountDir, backgroundWorkspaceDir, memoryDbPath, quickContextFilePath, signatureFilePath, voiceProfileFilePath } from '../shared/paths.ts';
+import { accountDir, backgroundWorkspaceDir, mainLogPath, memoryDbPath, quickContextFilePath, signatureFilePath, voiceProfileFilePath } from '../shared/paths.ts';
 import { parseStoredQuickContext } from '../shared/quick-context.ts';
 import { readJsonFile, writeJsonFileAtomic } from './services/store/json-file.ts';
 import { BUILTIN_AGENTS } from './services/agent/builtin-agents.ts';
@@ -238,11 +239,15 @@ const buildRuntime = (
   quickContext: QuickContextService;
 } => {
   const toolsRoot = app.getPath('userData');
+
   // Everything the app learns from Microsoft 365 is read and written under the signed-in
   // account's own folder. Handing the stores this instead of the top folder is the whole
   // of the separation: none of them had to learn what an account is.
   const userData = accountDir(toolsRoot, accounts.current().key);
   const now = (): string => new Date().toISOString();
+  // The app's own log. No PII by rule 27: event names, ids, error kinds, counts and
+  // durations only, never message text, prompts, command strings or titles.
+  const log = createFileLogger({ path: mainLogPath(toolsRoot), maxBytes: 5_000_000, now });
   // Providers and their keys, and the helpers, stay shared: they are the person at the
   // keyboard's tooling, not the mailbox's data.
   const settings = createSettingsStore({ userData: toolsRoot });
@@ -355,7 +360,7 @@ const buildRuntime = (
   // write. One at a time, never while the app is closing.
   const background = createBackgroundRunner({
     runJob: (job, signal) => jobs.run(job, signal),
-    onStatus: () => undefined,
+    onStatus: (status) => log.info('background-job', { kind: status.job.kind, state: status.state, ...(status.message === undefined ? {} : { note: status.message }) }),
   });
   const jobs = createBackgroundJobs({
     settings,
