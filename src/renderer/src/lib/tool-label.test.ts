@@ -75,12 +75,20 @@ describe('saying what a tool call is doing', () => {
     expect(toolLabel('Skill', { name: 'answer-from-m365' })).toBe('Using the answer-from-m365 skill');
   });
 
+  test('a skill invoked with the skill key, the shape the SDK actually sends, is named by it', () => {
+    expect(toolLabel('Skill', { skill: 'answer-from-m365', args: 'CELINE CIO meeting deck' })).toBe('Using the answer-from-m365 skill');
+  });
+
   test('a skill with neither still reads as a sentence', () => {
     expect(toolLabel('Skill', {})).toBe('Using a skill');
   });
 
   test('a delegated task uses its own description', () => {
     expect(toolLabel('Task', { description: 'Read the whole deck', subagent_type: 'm365-reader' })).toBe('Read the whole deck');
+  });
+
+  test('a delegation arriving under the Agent tool name reads the same way', () => {
+    expect(toolLabel('Agent', { description: 'Read the latest CELINE CIO Meeting deck', subagent_type: 'doc-reader' })).toBe('Read the latest CELINE CIO Meeting deck');
   });
 
   test('a delegated task with no description names the helper', () => {

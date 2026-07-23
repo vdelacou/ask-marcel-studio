@@ -83,10 +83,12 @@ export const toolLabel = (name: string, input: unknown): string => {
       return truncate(host === undefined ? 'Reading a web page' : `Reading ${host}`);
     }
     case 'Skill': {
-      const skill = field(input, 'command') ?? field(input, 'name');
+      const skill = field(input, 'skill') ?? field(input, 'command') ?? field(input, 'name');
       return truncate(skill === undefined ? 'Using a skill' : `Using the ${skill} skill`);
     }
-    case 'Task': {
+    // The SDK has named this tool both ways across versions.
+    case 'Task':
+    case 'Agent': {
       const description = field(input, 'description');
       if (description !== undefined) return truncate(description);
       const helper = field(input, 'subagent_type');
