@@ -28,6 +28,7 @@ describe('the channels main and the renderer agree on', () => {
       skillsRemove: 'skills:remove',
       skillsRead: 'skills:read',
       skillsWrite: 'skills:write',
+      skillsCreate: 'skills:create',
       skillsRestore: 'skills:restore',
       agentsList: 'agents:list',
       agentsSave: 'agents:save',

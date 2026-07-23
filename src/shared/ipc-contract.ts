@@ -39,6 +39,7 @@ export const CHANNEL = {
   skillsRemove: 'skills:remove',
   skillsRead: 'skills:read',
   skillsWrite: 'skills:write',
+  skillsCreate: 'skills:create',
   skillsRestore: 'skills:restore',
   agentsList: 'agents:list',
   agentsSave: 'agents:save',
@@ -286,6 +287,8 @@ export type StudioApi = {
     readonly remove: (name: string) => Promise<Result<null, SkillsError>>;
     readonly read: (folder: string) => Promise<Result<string, SkillsError>>;
     readonly write: (input: { readonly folder: string; readonly contents: string }) => Promise<Result<Skill, SkillsError>>;
+    // Create a new skill from a folder name and its SKILL.md text.
+    readonly create: (input: { readonly folder: string; readonly contents: string }) => Promise<Result<Skill, SkillsError>>;
     readonly restore: (folder: string) => Promise<Result<Skill, SkillsError>>;
   };
   readonly agents: {

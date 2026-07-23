@@ -66,6 +66,7 @@ const api: StudioApi = {
     remove: (name: string) => ipcRenderer.invoke(CHANNEL.skillsRemove, name),
     read: (folder: string) => ipcRenderer.invoke(CHANNEL.skillsRead, folder),
     write: (input) => ipcRenderer.invoke(CHANNEL.skillsWrite, input),
+    create: (input) => ipcRenderer.invoke(CHANNEL.skillsCreate, input),
     restore: (folder: string) => ipcRenderer.invoke(CHANNEL.skillsRestore, folder),
   },
   agents: {

@@ -151,6 +151,10 @@ export const registerIpc = (deps: IpcDeps): void => {
     const draft = input as { folder?: unknown; contents?: unknown } | undefined;
     return deps.skills.write(asString(draft?.folder), asString(draft?.contents));
   });
+  ipcMain.handle(CHANNEL.skillsCreate, (_event, input: unknown) => {
+    const draft = input as { folder?: unknown; contents?: unknown } | undefined;
+    return deps.skills.create(asString(draft?.folder), asString(draft?.contents));
+  });
   ipcMain.handle(CHANNEL.skillsRestore, (_event, folder: unknown) => deps.skills.restore(asString(folder)));
 
   // The stores validate what arrives; nothing is coerced on the way in beyond the

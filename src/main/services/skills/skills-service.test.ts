@@ -383,3 +383,41 @@ describe('editing a skill the app shipped', () => {
     expect(listed.value.map((s) => s.folder)).toEqual(['ask-marcel-office']);
   });
 });
+
+describe('writing a new skill from scratch', () => {
+  const good = '---\nname: weekly-report\ndescription: Draft the weekly report.\n---\n\n# Weekly report\n';
+
+  test('a valid skill is created and reads back', async () => {
+    const created = await service.create('weekly-report', good);
+
+    expect(created.ok && created.value.folder).toBe('weekly-report');
+    const listed = await service.list();
+    expect(listed.ok && listed.value.some((skill) => skill.folder === 'weekly-report')).toBe(true);
+  });
+
+  test('a folder name that could reach the filesystem is refused', async () => {
+    const created = await service.create('../escape', good);
+
+    expect(created.ok).toBe(false);
+    if (created.ok) throw new Error('expected err');
+    expect(created.error.kind).toBe('bad-name');
+  });
+
+  test('contents with no usable frontmatter are refused before anything is written', async () => {
+    const created = await service.create('broken', 'just some text, no frontmatter');
+
+    expect(created.ok).toBe(false);
+    const listed = await service.list();
+    expect(listed.ok && listed.value.some((skill) => skill.folder === 'broken')).toBe(false);
+  });
+
+  test('creating over a folder that already exists is refused, not an overwrite', async () => {
+    await service.create('weekly-report', good);
+
+    const again = await service.create('weekly-report', good);
+
+    expect(again.ok).toBe(false);
+    if (again.ok) throw new Error('expected err');
+    expect(again.error.kind).toBe('already-installed');
+  });
+});

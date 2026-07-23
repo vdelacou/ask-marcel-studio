@@ -45,6 +45,9 @@ export type SkillsServiceDeps = {
 export type SkillsService = {
   readonly list: () => Promise<Result<readonly Skill[], SkillsError>>;
   readonly add: (sourceDir: string) => Promise<Result<Skill, SkillsError>>;
+  // Create a brand-new skill from a folder name and its SKILL.md text, for the write-from-
+  // scratch flow. Refuses a name already taken, and validates the SKILL.md before writing.
+  readonly create: (folder: string, contents: string) => Promise<Result<Skill, SkillsError>>;
   readonly remove: (name: string) => Promise<Result<null, SkillsError>>;
   readonly seedBuiltins: () => Promise<Result<null, SkillsError>>;
   // The whole SKILL.md, for the editor.
@@ -149,6 +152,24 @@ export const createSkillsService = (deps: SkillsServiceDeps): SkillsService => {
     if (existing !== undefined) return err({ kind: 'already-installed', message: `a skill called ${parsed.value.name} is already installed` });
 
     return copyInto(sourceDir, folder.value);
+  };
+
+  const create = async (folder: string, contents: string): Promise<Result<Skill, SkillsError>> => {
+    const checked = skillFolderName(folder);
+    if (!checked.ok) return err({ kind: 'bad-name', message: checked.error.message });
+
+    const parsed = parseSkillMd(contents);
+    if (!parsed.ok) return err({ kind: 'not-a-skill', message: parsed.error.message });
+
+    const existing = await readSkill(checked.value);
+    if (existing !== undefined) return err({ kind: 'already-installed', message: `a skill in the folder ${folder} already exists` });
+
+    const written = await writeTextFileAtomic(join(skillDir(deps.userData, checked.value), 'SKILL.md'), contents);
+    if (!written.ok) return err({ kind: 'write-failed', message: written.error.message });
+
+    const saved = await readSkill(checked.value);
+    if (saved === undefined) return err({ kind: 'unreadable', message: 'the skill was created but could not be read back' });
+    return ok(saved);
   };
 
   const remove = async (name: string): Promise<Result<null, SkillsError>> => {
@@ -285,5 +306,5 @@ export const createSkillsService = (deps: SkillsServiceDeps): SkillsService => {
     return ok(restored);
   };
 
-  return { list, add, remove, seedBuiltins, read, write, restore };
+  return { list, add, create, remove, seedBuiltins, read, write, restore };
 };

@@ -279,9 +279,15 @@ const buildRuntime = (
     // Read per send, not captured: a skill added in settings applies from the next
     // message. A listing failure is an empty list, which only means `/name` is not
     // recognised that turn, never that the turn fails.
+    // A skill the user switched off is kept out of BOTH what the agent may load and the
+    // "/" suggestions, because this same list feeds slash recognition. The disabled set
+    // is read per send so a toggle in settings applies from the next message.
     listSkillFolders: async () => {
       const listed = await skills.list();
-      return listed.ok ? listed.value.map((skill) => skill.folder) : [];
+      if (!listed.ok) return [];
+      const current = await settings.get();
+      const disabled = new Set(current.ok ? (current.value.skillsPolicy?.disabledFolders ?? []) : []);
+      return listed.value.map((skill) => skill.folder).filter((folder) => !disabled.has(folder));
     },
     // Read per send too: a helper edited in settings applies from the next message. A
     // read failure falls back to the built-ins rather than failing the turn.
