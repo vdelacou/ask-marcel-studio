@@ -14,7 +14,7 @@
  */
 import { MODEL_REF_SEPARATOR } from './model-ref.ts';
 import { ALWAYS_ENABLED_CATEGORY } from './office-policy.ts';
-import type { OfficePolicy, Provider, Settings, SkillsPolicy, StoredProvider, StoredSettings } from './types.ts';
+import type { MemorySettings, OfficePolicy, Provider, Settings, SkillsPolicy, StoredProvider, StoredSettings } from './types.ts';
 import type { Result } from './result.ts';
 import { err, ok } from './result.ts';
 
@@ -79,6 +79,21 @@ const commonProviderFields = (raw: unknown): Result<{ id: string; kind: 'anthrop
   return ok({ id, kind, label, modelIds, ...(baseUrl === undefined ? {} : { baseUrl }) });
 };
 
+// The memory section, cross-checked against the providers already parsed: it must name
+// one that exists and is openai-compatible, because Anthropic has no embeddings endpoint.
+const memoryField = (raw: unknown, providers: readonly { readonly id: string; readonly kind: 'anthropic' | 'openai' }[]): Result<MemorySettings | undefined, string> => {
+  if (raw === undefined) return ok(undefined);
+  if (!isRecord(raw)) return err('memory must be an object');
+  const providerId = raw['providerId'];
+  const embeddingModelId = raw['embeddingModelId'];
+  if (typeof providerId !== 'string' || providerId.length === 0) return err('memory.providerId must be a non-empty string');
+  if (typeof embeddingModelId !== 'string' || embeddingModelId.length === 0) return err('memory.embeddingModelId must be a non-empty string');
+  const provider = providers.find((candidate) => candidate.id === providerId);
+  if (provider === undefined) return err(`memory names a provider that is not configured: ${providerId}`);
+  if (provider.kind !== 'openai') return err('memory needs an OpenAI-compatible provider, because Anthropic has no embeddings endpoint');
+  return ok({ providerId, embeddingModelId });
+};
+
 const parseStoredProvider = (raw: unknown): Result<StoredProvider, SettingsDocError> => {
   const common = commonProviderFields(raw);
   if (!common.ok) return common;
@@ -104,11 +119,14 @@ export const parseStoredSettings = (raw: unknown): Result<StoredSettings, Settin
     if (!provider.ok) return provider;
     providers.push(provider.value);
   }
+  const memory = memoryField(raw['memory'], providers);
+  if (!memory.ok) return unreadable(memory.error);
   return ok({
     providers,
     ...(defaultModel === undefined ? {} : { defaultModel }),
     ...(officePolicy.value === undefined ? {} : { officePolicy: officePolicy.value }),
     ...(skillsPolicy.value === undefined ? {} : { skillsPolicy: skillsPolicy.value }),
+    ...(memory.value === undefined ? {} : { memory: memory.value }),
   });
 };
 
@@ -147,11 +165,14 @@ export const validateSettings = (raw: unknown): Result<Settings, SettingsDocErro
     if (providers.some((p) => p.id === provider.value.id)) return invalid(`two providers share the id ${provider.value.id}`);
     providers.push(provider.value);
   }
+  const memory = memoryField(raw['memory'], providers);
+  if (!memory.ok) return invalid(memory.error);
   return ok({
     providers,
     ...(defaultModel === undefined ? {} : { defaultModel }),
     ...(officePolicy.value === undefined ? {} : { officePolicy: officePolicy.value }),
     ...(skillsPolicy.value === undefined ? {} : { skillsPolicy: skillsPolicy.value }),
+    ...(memory.value === undefined ? {} : { memory: memory.value }),
   });
 };
 

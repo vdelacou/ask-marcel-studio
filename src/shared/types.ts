@@ -43,6 +43,15 @@ export type SkillsPolicy = {
   readonly disabledFolders: readonly string[];
 };
 
+// How the searchable memory embeds and searches. `providerId` must name an
+// OpenAI-compatible provider (Anthropic has no embeddings endpoint), and
+// `embeddingModelId` is its embedding model. Absent until the user sets it up, and while
+// absent memory answers "not set up" rather than working.
+export type MemorySettings = {
+  readonly providerId: string;
+  readonly embeddingModelId: string;
+};
+
 export type Settings = {
   readonly providers: readonly Provider[];
   // The model last used, as a reference 'providerId::modelId' (model-ref.ts). Written when
@@ -51,6 +60,7 @@ export type Settings = {
   readonly defaultModel?: string;
   readonly officePolicy?: OfficePolicy;
   readonly skillsPolicy?: SkillsPolicy;
+  readonly memory?: MemorySettings;
 };
 
 export type StoredSettings = {
@@ -58,6 +68,7 @@ export type StoredSettings = {
   readonly defaultModel?: string;
   readonly officePolicy?: OfficePolicy;
   readonly skillsPolicy?: SkillsPolicy;
+  readonly memory?: MemorySettings;
 };
 
 export type MessagePart =

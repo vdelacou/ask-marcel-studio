@@ -355,3 +355,82 @@ describe('remembering which skills are switched off', () => {
     expect(validated.ok && validated.value.skillsPolicy).toEqual({ disabledFolders: ['weekly'] });
   });
 });
+
+describe('setting up the searchable memory', () => {
+  const openaiProvider = { id: 'google', kind: 'openai', label: 'Google', baseUrl: 'https://x/v1', apiKey: { enc: 'AAA' }, modelIds: ['gemini-embedding'] };
+
+  test('settings with no memory section still parse', () => {
+    expect(parseStoredSettings({ providers: [] }).ok).toBe(true);
+  });
+
+  test('memory naming a configured openai-compatible provider is kept', () => {
+    const parsed = parseStoredSettings({ providers: [openaiProvider], memory: { providerId: 'google', embeddingModelId: 'gemini-embedding' } });
+
+    expect(parsed.ok && parsed.value.memory).toEqual({ providerId: 'google', embeddingModelId: 'gemini-embedding' });
+  });
+
+  test('memory naming a provider that is not configured is refused', () => {
+    expect(parseStoredSettings({ providers: [openaiProvider], memory: { providerId: 'nope', embeddingModelId: 'm' } }).ok).toBe(false);
+  });
+
+  test('memory pointed at an anthropic provider is refused, since it has no embeddings endpoint', () => {
+    const anthropic = { id: 'lvmh', kind: 'anthropic', label: 'LVMH', apiKey: { enc: 'AAA' }, modelIds: ['deepseek'] };
+
+    const parsed = parseStoredSettings({ providers: [anthropic], memory: { providerId: 'lvmh', embeddingModelId: 'm' } });
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) throw new Error('expected err');
+    expect(parsed.error.message).toContain('OpenAI-compatible');
+  });
+
+  test('memory with no embedding model named is refused', () => {
+    expect(parseStoredSettings({ providers: [openaiProvider], memory: { providerId: 'google' } }).ok).toBe(false);
+  });
+
+  test('a validated settings object keeps its memory section through to storage', () => {
+    const validated = validateSettings({
+      providers: [{ id: 'google', kind: 'openai', label: 'Google', baseUrl: 'https://x/v1', apiKey: 'sk-key', modelIds: ['gemini-embedding'] }],
+      memory: { providerId: 'google', embeddingModelId: 'gemini-embedding' },
+    });
+
+    expect(validated.ok && validated.value.memory).toEqual({ providerId: 'google', embeddingModelId: 'gemini-embedding' });
+  });
+});
+
+describe('the precise edges of the memory section', () => {
+  const openai = { id: 'google', kind: 'openai', label: 'Google', baseUrl: 'https://x/v1', apiKey: { enc: 'AAA' }, modelIds: ['e'] };
+
+  test('a memory section that is not an object at all is refused', () => {
+    const parsed = parseStoredSettings({ providers: [openai], memory: 'nope' });
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) throw new Error('expected err');
+    expect(parsed.error.message).toContain('memory must be an object');
+  });
+
+  test('an empty provider id is refused, not treated as unset', () => {
+    expect(parseStoredSettings({ providers: [openai], memory: { providerId: '', embeddingModelId: 'e' } }).ok).toBe(false);
+  });
+
+  test('an empty embedding model id is refused', () => {
+    expect(parseStoredSettings({ providers: [openai], memory: { providerId: 'google', embeddingModelId: '' } }).ok).toBe(false);
+  });
+
+  test('a provider id that is not a string is refused', () => {
+    expect(parseStoredSettings({ providers: [openai], memory: { providerId: 42, embeddingModelId: 'e' } }).ok).toBe(false);
+  });
+
+  test('the not-configured message names the provider it could not find', () => {
+    const parsed = parseStoredSettings({ providers: [openai], memory: { providerId: 'missing-one', embeddingModelId: 'e' } });
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) throw new Error('expected err');
+    expect(parsed.error.message).toContain('missing-one');
+  });
+
+  test('settings without a memory section come back without a memory key, not with an undefined one', () => {
+    const parsed = parseStoredSettings({ providers: [openai] });
+
+    expect(parsed.ok && 'memory' in parsed.value).toBe(false);
+  });
+});
