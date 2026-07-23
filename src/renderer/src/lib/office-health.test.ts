@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { healthFromStatus } from './office-health.ts';
+import { dotLabel, healthFromStatus, loginErrorMessage, popoverViewFromStatus } from './office-health.ts';
 import type { OfficeStatus, TokenTier } from '../../../shared/office-status.ts';
 
 const tier = (over: Partial<TokenTier> = {}): TokenTier => ({ available: true, scopes: [], refresh: 'automatic', ...over });
@@ -61,5 +61,78 @@ describe('reporting whether Microsoft 365 is working', () => {
 
   test('a healthy tier alongside a broken one does not hide it', () => {
     expect(healthFromStatus(signedIn({ tiers: { elevated: tier(), ic3: tier({ available: false }) } })).health).toBe('attention');
+  });
+});
+
+describe('what the sign-in popover says', () => {
+  test('a healthy sign-in offers a refresh and a way out, and names nothing as broken', () => {
+    const view = popoverViewFromStatus(signedIn());
+
+    expect(view.action).toBe('refresh');
+    expect(view.canSignOut).toBe(true);
+    expect(view.unavailable).toEqual([]);
+  });
+
+  test('a dead elevated token says colleague details stopped working', () => {
+    const view = popoverViewFromStatus(signedIn({ tiers: { elevated: tier({ available: false }) } }));
+
+    expect(view.health).toBe('attention');
+    expect(view.unavailable).toEqual(['Look up colleague details like phone numbers, offices and managers']);
+  });
+
+  test('a degraded sign-in promises the user will not have to sign in again from scratch', () => {
+    const view = popoverViewFromStatus(signedIn({ tiers: { elevated: tier({ available: false }) } }));
+
+    expect(view.reassurance).toContain('will not need to sign in again');
+    expect(view.action).toBe('refresh');
+  });
+
+  test('both Teams tokens gone is one thing that stopped working, not two', () => {
+    const view = popoverViewFromStatus(signedIn({ tiers: { chatsvcagg: tier({ available: false }), ic3: tier({ available: false }) } }));
+
+    expect(view.unavailable).toEqual(['Read your Teams chats']);
+  });
+
+  test('an expired sign-in asks for a new one and offers no sign-out', () => {
+    const view = popoverViewFromStatus({ signedIn: false, message: 'not authenticated' });
+
+    expect(view.action).toBe('sign-in');
+    expect(view.canSignOut).toBe(false);
+    expect(view.headline).toContain('sign in again');
+  });
+
+  test('while the check is still running nothing is claimed to be broken', () => {
+    const view = popoverViewFromStatus(undefined, true);
+
+    expect(view.health).toBe('checking');
+    expect(view.unavailable).toEqual([]);
+  });
+});
+
+describe('explaining why a sign-in did not finish', () => {
+  test('a sign-in already open tells the user to finish that one', () => {
+    expect(loginErrorMessage({ kind: 'busy', message: 'a sign-in is already in progress' })).toContain('already open');
+  });
+
+  test('closing the browser window reads as try again, not as a failure to fear', () => {
+    expect(loginErrorMessage({ kind: 'login-failed', message: 'login exited with code 1' })).toContain('try again');
+  });
+
+  test('a sign-in left open too long says so in plain words', () => {
+    expect(loginErrorMessage({ kind: 'timed-out', message: 'sign-in timed out after ten minutes' })).toContain('too long');
+  });
+
+  test('a sign-in that could not even start asks for a restart', () => {
+    expect(loginErrorMessage({ kind: 'spawn-failed', message: 'ENOENT' })).toContain('Restart the app');
+  });
+});
+
+describe('what the dot says on hover', () => {
+  test('a degraded sign-in is described in words, not in the cli’s own reason string', () => {
+    expect(dotLabel('attention')).toBe('Part of your Microsoft 365 sign-in has expired');
+  });
+
+  test('every state has something to say', () => {
+    expect([dotLabel('checking'), dotLabel('healthy'), dotLabel('signed-out')].every((label) => label.length > 0)).toBe(true);
   });
 });
