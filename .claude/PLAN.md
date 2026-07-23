@@ -133,24 +133,24 @@ overhaul, 12 command-list redesign.
 
 ## Phase 3 — Memory and context
 
-1. [ ] Deps + rebuild: mem0ai, better-sqlite3, zod, @electron/rebuild, trustedDependencies,
+1. [x] Deps + rebuild: mem0ai, better-sqlite3, zod, @electron/rebuild, trustedDependencies,
        rebuild:native script, README.
-2. [ ] Spike: pin Mem0 config/API via electron-as-node scratch; exit = add, restart, search,
+2. [x] Spike: pin Mem0 config/API via electron-as-node scratch; exit = add, restart, search,
        history round-trip config. Decide built-in store vs hand-rolled sqlite vector table.
-3. [ ] MemoryStore port + fake (shared, 100%).
-4. [ ] Settings.memory schema (OpenAI-compatible provider required).
-5. [ ] Mem0 adapter: mem0-config.ts (pure), mem0-store.ts (FromApi seam), mem0-io.ts (only
+3. [x] MemoryStore port + fake (shared, 100%).
+4. [x] Settings.memory schema (OpenAI-compatible provider required).
+5. [x] Mem0 adapter: mem0-config.ts (pure), mem0-store.ts (FromApi seam), mem0-io.ts (only
        native importer, lazy, Result), wiring, coverage entry.
-6. [ ] CRUD service + IPC: memory:list/add/update/delete/clearAll/history + preload.
-7. [ ] MCP tools + preamble (R20): memory-tools-core.ts, memory-mcp.ts (marcel-memory server),
+6. [x] CRUD service + IPC: memory:list/add/update/delete/clearAll/history + preload.
+7. [x] MCP tools + preamble (R20): memory-tools-core.ts, memory-mcp.ts (marcel-memory server),
        runtime mcpServers, core.md "Your memory".
-8. [ ] Global context + injection switch (R1): agent-files 'global-context', context-blocks.ts,
+8. [x] Global context + injection switch (R1): agent-files 'global-context', context-blocks.ts,
        glossary to contextBlocks, core.md edit, About-you settings field.
-9. [ ] Extraction accept writes to Mem0 + migration (source tags, marker, dedupe).
-10. [ ] Removal map: delete memory-glossary.ts (+tests, needs Vincent's rule-24 sign-off);
+9. [x] Extraction accept writes to Mem0 + migration (source tags, marker, dedupe).
+10. [x] Removal map: delete memory-glossary.ts (+tests, needs Vincent's rule-24 sign-off);
         hold memory:read/write + note files one release.
-11. [ ] Memory page UI + user-menu Memory item; "What it remembers" leaves Settings.
-12. [ ] Eval harness scripts/eval-memory.ts (manual rule-32 gate).
+11. [x] Memory page UI + user-menu Memory item; "What it remembers" leaves Settings.
+12. [x] Eval harness scripts/eval-memory.ts (manual rule-32 gate).
 
 ## Phase 4 — Ops, branding, packaging, update
 
