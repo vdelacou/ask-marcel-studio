@@ -16,13 +16,18 @@ export type OfficeCategoryRow = {
 // One granted permission, already said in words by the page shell (lib/office-scopes).
 export type OfficeScopeRow = { readonly scope: string; readonly label: string };
 
-// A discriminated view, resolved by the page shell from the office status Result.
+// A discriminated view, resolved by the page shell from the office status Result. A
+// signed-in user can still be missing a token tier, which costs named abilities without
+// costing the sign-in: `unavailable` is what stopped working, empty when all is well.
 export type OfficeView =
-  { readonly kind: 'loading' } | { readonly kind: 'signed-in'; readonly summary: string; readonly scopes: readonly OfficeScopeRow[] } | { readonly kind: 'signed-out' };
+  | { readonly kind: 'loading' }
+  | { readonly kind: 'signed-in'; readonly summary: string; readonly scopes: readonly OfficeScopeRow[]; readonly unavailable: readonly string[] }
+  | { readonly kind: 'signed-out' };
 
 export type OfficePanelProps = {
   view: OfficeView;
   isLoggingIn: boolean;
+  isSigningOut: boolean;
   error?: string;
   isScopesOpen: boolean;
   categories: readonly OfficeCategoryRow[];
@@ -33,6 +38,7 @@ export type OfficePanelProps = {
   onExpandCategory: (name: string) => void;
   onExpandCommand: (name: string) => void;
   onLogin: () => void;
+  onSignOut: () => void;
 };
 
 const statusLine = (view: OfficeView): string => {
@@ -43,12 +49,18 @@ const statusLine = (view: OfficeView): string => {
 
 const buttonLabel = (view: OfficeView, isLoggingIn: boolean): string => {
   if (isLoggingIn) return 'Signing in…';
-  return view.kind === 'signed-in' ? 'Reconnect' : 'Sign in';
+  return view.kind === 'signed-in' ? 'Refresh sign-in' : 'Sign in';
+};
+
+const statusTone = (view: OfficeView): string => {
+  if (view.kind !== 'signed-in') return 'text-ink-muted';
+  return view.unavailable.length > 0 ? 'text-warning' : 'text-success';
 };
 
 export const OfficePanel: FC<OfficePanelProps> = ({
   view,
   isLoggingIn,
+  isSigningOut,
   error,
   isScopesOpen,
   categories,
@@ -59,19 +71,38 @@ export const OfficePanel: FC<OfficePanelProps> = ({
   onExpandCategory,
   onExpandCommand,
   onLogin,
+  onSignOut,
 }) => (
   <section className="flex flex-col gap-y-4">
     <header className="flex items-baseline justify-between gap-x-4">
       <div className="flex flex-col gap-y-1">
         <h2 className="text-lg font-semibold tracking-tight text-ink">Microsoft 365</h2>
-        <p className={`text-sm ${view.kind === 'signed-in' ? 'text-success' : 'text-ink-muted'}`}>{statusLine(view)}</p>
+        <p className={`text-sm ${statusTone(view)}`}>{statusLine(view)}</p>
       </div>
       {view.kind !== 'loading' && (
-        <Button variant={view.kind === 'signed-in' ? 'secondary' : 'primary'} onClick={onLogin} disabled={isLoggingIn}>
-          {buttonLabel(view, isLoggingIn)}
-        </Button>
+        <div className="flex shrink-0 items-center gap-x-2">
+          <Button variant={view.kind === 'signed-in' ? 'secondary' : 'primary'} onClick={onLogin} disabled={isLoggingIn || isSigningOut}>
+            {buttonLabel(view, isLoggingIn)}
+          </Button>
+          {view.kind === 'signed-in' && (
+            <Button variant="secondary" onClick={onSignOut} disabled={isLoggingIn || isSigningOut}>
+              {isSigningOut ? 'Signing out…' : 'Sign out'}
+            </Button>
+          )}
+        </div>
       )}
     </header>
+
+    {view.kind === 'signed-in' && view.unavailable.length > 0 && (
+      <div className="flex flex-col gap-y-1 rounded-panel border border-border-subtle bg-surface-raised p-3">
+        <p className="text-sm text-ink">Part of your sign-in has expired. Until you refresh it, Marcel cannot:</p>
+        <ul className="flex list-disc flex-col gap-y-0.5 pl-5 text-sm text-ink-muted">
+          {view.unavailable.map((entry) => (
+            <li key={entry}>{entry}</li>
+          ))}
+        </ul>
+      </div>
+    )}
 
     {view.kind === 'signed-in' && (
       <div className="flex flex-col gap-y-2">

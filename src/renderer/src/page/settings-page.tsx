@@ -27,6 +27,7 @@ import type { SettingsNavGroup } from '../components/organisms/settings-nav/inde
 import type { ProviderDraft } from '../components/molecules/provider-form/index.tsx';
 import { draftsToSettings, emptyDraft, settingsToDrafts } from '../lib/provider-draft.ts';
 import { scopeRows, scopesSummary } from '../lib/office-scopes.ts';
+import { loginErrorMessage, popoverViewFromStatus } from '../lib/office-health.ts';
 import { categoryRows } from '../lib/office-categories.ts';
 import { toggleCategory } from '../../../shared/office-policy.ts';
 import type { OfficeCategory } from '../../../shared/office-catalog.ts';
@@ -97,6 +98,7 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
   const [officeView, setOfficeView] = useState<OfficeView>({ kind: 'loading' });
   const [isScopesOpen, setIsScopesOpen] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const [officeError, setOfficeError] = useState<string | undefined>(undefined);
   const [officeCatalog, setOfficeCatalog] = useState<readonly OfficeCategory[]>([]);
   const [pendingNotes, setPendingNotes] = useState(0);
@@ -113,7 +115,11 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
         setOfficeView({ kind: 'signed-out' });
         return;
       }
-      setOfficeView(status.value.signedIn ? { kind: 'signed-in', summary: scopesSummary(status.value.scopes), scopes: scopeRows(status.value.scopes) } : { kind: 'signed-out' });
+      setOfficeView(
+        status.value.signedIn
+          ? { kind: 'signed-in', summary: scopesSummary(status.value.scopes), scopes: scopeRows(status.value.scopes), unavailable: popoverViewFromStatus(status.value).unavailable }
+          : { kind: 'signed-out' }
+      );
     })();
   }, []);
 
@@ -154,12 +160,26 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
     setOfficeError(undefined);
     setIsLoggingIn(true);
     void (async (): Promise<void> => {
-      const done = await studio.office.login();
+      // force: the elevated token carries no refresh token, so only a full re-capture
+      // brings back the abilities the degraded note lists.
+      const done = await studio.office.login({ force: true });
       setIsLoggingIn(false);
       if (!done.ok) {
-        setOfficeError(done.error.message);
+        setOfficeError(loginErrorMessage(done.error));
         return;
       }
+      loadOffice();
+      onOfficeChanged?.();
+    })();
+  }, [loadOffice, onOfficeChanged]);
+
+  const onSignOut = useCallback((): void => {
+    setOfficeError(undefined);
+    setIsSigningOut(true);
+    void (async (): Promise<void> => {
+      const done = await studio.office.logout();
+      setIsSigningOut(false);
+      if (!done.ok) setOfficeError(loginErrorMessage(done.error));
       loadOffice();
       onOfficeChanged?.();
     })();
@@ -402,6 +422,7 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
         <OfficePanel
           view={officeView}
           isLoggingIn={isLoggingIn}
+          isSigningOut={isSigningOut}
           error={officeError}
           isScopesOpen={isScopesOpen}
           categories={categoryRows(officeCatalog, officePolicy)}
@@ -417,6 +438,7 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
           }}
           onExpandCommand={(name) => setExpandedCommand((current) => (current === name ? undefined : name))}
           onLogin={onLogin}
+          onSignOut={onSignOut}
         />
       )}
     </SettingsLayout>
