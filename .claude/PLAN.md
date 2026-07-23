@@ -1,14 +1,20 @@
 # Current run: 22-requirement improvement plan (approved 2026-07-23)
 
 Full plan: `~/.claude/plans/i-will-give-a-precious-dusk.md`. Four phases, slice-per-commit
-(≤10 files / ≤300 prod lines, all 8 gates green per commit). No commits or pushes without
-Vincent's say-so (rule 25).
+(≤10 files / ≤300 prod lines, all 8 gates green per commit).
 
-## Phase 1 — UI foundation and auth — CODE COMPLETE, NOT COMMITTED
+## STATUS: ALL FOUR PHASES COMPLETE AND COMMITTED (2026-07-24)
 
-All seven slices are in the working tree, all gates green (1447 tests, lint, typecheck,
-coverage, mutation 96.46 on staged shared files), and verified in the built app with
-Playwright probes. Commits await Vincent's go-ahead (rule 25); proposed split at the bottom.
+Every requirement R1-R23 landed. Latest work: R11 file logger + transcript sweep, R4 icons,
+R21c/d update check + version, R21a electron-builder. A real x64 DMG built and verified
+(release/Ask Marcel Studio-0.1.0.dmg, 295 MB: correct name, icon, and all extraResources).
+1810 tests green. Deferred by decision (need Vincent's sign-off, not blockers):
+- Delete memory-glossary.ts + tests (rule 24 needs his ok; plan holds it one release anyway).
+- scripts/eval-memory.ts optional manual eval harness (rule 32 gate, real key).
+
+## Phase 1 — UI foundation and auth — COMPLETE
+
+All seven slices committed, gates green, verified in the built app with Playwright probes.
 
 1. [x] Primitives + drag fix (R5): IconButton, Popover, Menu, ConfirmDialog, PanelIcon;
        no-drag on SettingsOverlay + MemoryConfirmDialog roots.
