@@ -34,18 +34,41 @@ unstaged. Found only by `git worktree add --detach HEAD`. Fixed in ac28844
 (`scripts/check-staged-typecheck.sh`, materialises the index with write-tree + archive).
 There is still NO CI in this repo, so that hook is the only gate that exists.
 
-## Open, user-gated
+## A wrong claim, corrected
 
-- [ ] jargon.md: the user's real note vanished around 14:07 and what is on disk is a
-      one-line reconstruction written by the agent for the UCR canary. Decide.
-- [ ] The self-elicitation fix (2a9b796) is prompt-only and UNPROVEN live: it needs a
-      background extraction run that would surface the user's own name.
+Earlier in this session the agent reported that the user's `jargon.md` had been lost. That
+was WRONG and nothing was ever lost. Notes live at `claude-config/memory/` (paths.ts:62)
+while the queue and state live at `userData/memory/` (paths.ts:68). Only the second was
+looked at, and the absence of notes there was read as data loss. The real notes were intact
+throughout, and the UCR canary had been quoting them all along. The reconstruction written
+into `userData/memory/jargon.md` was a stray the app never reads; it has been moved out.
+
+Rule for next time: two directories named `memory` under one userData is a trap. Read
+paths.ts before concluding anything about a file's absence.
+
+## Closed this session
+
+- Size gate no longer counts test files (64752bf). Replayed: the two commits that needed a
+  bypass come to 102 and 112 production lines.
+- `IS\&T` fixed in jargon.md and team.md, 8 occurrences. Cause found: Milkdown's serialiser
+  escapes `&` when it could open an HTML entity, and markdown-editor.tsx passes its output
+  straight through. It will come back on the next save through the rich editor.
+- Four eval conversations moved out of the store; the six that remain are the user's.
+- Self-elicitation: extraction ran on a fresh transcript naming the user as a forwarder
+  (extractedMessageCount 2 at 12:03:44Z) and queued NOTHING, which is the wanted outcome.
+  Honest limit: an empty queue cannot distinguish "recognised the user and dropped them"
+  from "the identity lookup failed and it fell closed". Both are the fix working as
+  designed, but they are different paths and nothing logs which one ran.
+
+## Open
+
+- [ ] The `\&` escaping returns on every save through the rich editor. A durable fix means
+      either configuring Milkdown's serialiser or unescaping on the way out of
+      markdown-editor.tsx; the latter is a one-line change with a real edge case.
 - [ ] flash-lite omits the Sources footer entirely on note-only answers. Pre-existing,
       not a regression: the 14:00 run predating every prompt edit did the same.
-- [ ] Two size-gate bypasses landed (bd763e5 at 304 lines, bd4949e at 481). Gates 2-8 were
-      run by hand on both. A 300-line cap and a 369-line first test file are in real
-      tension; worth a policy rather than a judgment call each time.
-- [ ] No CI workflow at all. `.agents/skills/atelier/assets/ci.yml` is sitting untracked.
-- [ ] Cleanup: ~20 test conversations in the sidebar from the eval runs.
+- [ ] No CI, decided deliberately for now: the hook reads the staged tree, which was the
+      hole that mattered. Nothing catches a `--no-verify` commit or a clone where
+      core.hooksPath was never set. `.agents/skills/atelier/assets/ci.yml` sits untracked.
 - [ ] Optional: shell-guard hardening, README line for run-studio, jq vendoring if M6
       targets Windows.

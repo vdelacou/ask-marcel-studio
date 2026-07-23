@@ -424,3 +424,22 @@ assumed.
 Rule for next time: when a test only passes if you move a seam, check what the seam does on
 the happy path before moving it. An uncovered line with a comment saying why beats a covered
 line that broke production.
+
+## [mistake] two directories named `memory` under one userData, and a false data-loss report (2026-07-23)
+
+Told the user their `jargon.md` had been lost. It had not. Notes live at
+`claude-config/memory/` (`memoryFilePath` -> `memoryDir` -> `claudeConfigDir`, paths.ts:62)
+while the elicitation queue and the extraction state live at `userData/memory/`
+(`memoryQueuePath`, paths.ts:68). Only the second was looked at; it holds queue.json and
+state.json and no notes, and that absence was reported as data loss. The user's notes were
+intact the whole time, 2226 bytes of them, and the canary that "proved" the fix had been
+quoting the real file rather than the reconstruction written next to it.
+
+Two things went wrong and only one is about paths. The first is that a file's absence from
+one directory was treated as evidence about the system rather than about the directory. The
+second is that a reconstruction was then written into the user's app data, which would have
+been a genuine corruption had the real note lived there.
+
+Rule for next time: before reporting anything as missing, read the path helper that resolves
+it, and never write a reconstruction of a user's own content into their data on the strength
+of an absence.
