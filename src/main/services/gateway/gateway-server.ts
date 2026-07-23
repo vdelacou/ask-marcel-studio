@@ -16,22 +16,39 @@
  */
 import { createServer } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
-import { createOpenAI } from '@ai-sdk/openai';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { generateText, jsonSchema, streamText, tool } from 'ai';
 import type { ModelMessage, ToolSet } from 'ai';
 import type { IncomingMessage, Server, ServerResponse } from 'node:http';
 import { encodeSse } from '../../../shared/gateway/anthropic-sse.ts';
 import { emptyStream, translatePart } from '../../../shared/gateway/translate-stream.ts';
+import { sanitiseToolSchema } from '../../../shared/gateway/sanitise-tool-schema.ts';
+import { noSignatures, rememberSignature, signAssistantTurns } from '../../../shared/gateway/thought-signatures.ts';
+import type { ThoughtSignatures } from '../../../shared/gateway/thought-signatures.ts';
 import { translateRequest } from '../../../shared/gateway/translate-request.ts';
 import type { TranslatedRequest } from '../../../shared/gateway/translate-request.ts';
 import { parseModelRef } from '../../../shared/model-ref.ts';
 import { formatError } from '../../../shared/utilities/format-error.ts';
 import type { Provider } from '../../../shared/types.ts';
 
+// The gateway is reached only by an openai-kind provider (session-env points the agent here
+// for those alone), and only that kind carries the baseUrl an upstream call needs.
+type OpenAiProvider = Extract<Provider, { readonly kind: 'openai' }>;
+
+// Exactly what the SDK's own FetchFunction is. Named here so a test can build a stand-in
+// against it without reaching into an SDK internal for the type.
+export type FetchLike = typeof globalThis.fetch;
+
 export type GatewayDeps = {
   // Looked up per request rather than captured once: the user can change a key in
   // settings while the gateway is up, and the next turn must use the new one.
   readonly findProvider: (providerId: string) => Promise<Provider | undefined>;
+  // The adapter's test seam. Production leaves it out and the SDK uses global fetch; a test
+  // passes its own and reads what actually went upstream, which is the only way to prove the
+  // url, the auth header and the tool schemas without a network call.
+  readonly fetch?: FetchLike;
+  // Overridden only by a test, which cannot wait two minutes to prove a stall is caught.
+  readonly silenceMs?: number;
 };
 
 export type Gateway = {
@@ -73,63 +90,123 @@ const sendError = (res: ServerResponse, status: number, type: string, message: s
 // Declared with ai's own tool() and NO execute: the agent runs its own tools, so the
 // gateway passes the schema through only, and hands whatever the model asks for back
 // to the agent as a tool_use block.
+//
+// Sanitised on the way past, because the schema is no longer going somewhere that ignores
+// what it does not recognise. Gemini refuses an unknown JSON Schema keyword outright and
+// fails the whole request, and every turn in this app carries tools.
 const toolsFor = (request: TranslatedRequest): ToolSet => {
   const tools: ToolSet = {};
   for (const spec of request.tools) {
-    tools[spec.name] = tool({ description: spec.description, inputSchema: jsonSchema(spec.inputSchema as Parameters<typeof jsonSchema>[0]) });
+    tools[spec.name] = tool({ description: spec.description, inputSchema: jsonSchema(sanitiseToolSchema(spec.inputSchema) as Parameters<typeof jsonSchema>[0]) });
   }
   return tools;
+};
+
+// How long the upstream may say nothing: between two parts of a stream, or in total for a
+// single-shot answer, which has no parts to wait between. A long answer is legitimate and
+// keeps resetting this; what it catches is silence. Without it a provider that accepts the
+// connection and then stalls holds the turn open forever, and the user's only way out is
+// killing the app.
+const UPSTREAM_SILENCE_MS = 120_000;
+
+// The agent hanging up has to reach the upstream. Without this, pressing Stop abandons the
+// response while the provider carries on generating, and charging for it.
+const abortOnHangup = (res: ServerResponse): AbortController => {
+  const controller = new AbortController();
+  res.on('close', () => controller.abort());
+  return controller;
+};
+
+// Restarted by every part that arrives, so the deadline is on silence rather than on the
+// length of the answer.
+const silenceWatchdog = (giveUp: () => void, ms: number): { readonly heard: () => void; readonly stop: () => void } => {
+  let timer = setTimeout(giveUp, ms);
+  const stop = (): void => {
+    clearTimeout(timer);
+  };
+  return {
+    heard: () => {
+      stop();
+      timer = setTimeout(giveUp, ms);
+    },
+    stop,
+  };
 };
 
 export const createGateway = (deps: GatewayDeps): Gateway => {
   const apiKey = crypto.randomUUID();
   let server: Server | undefined;
   let baseUrl: string | undefined;
+  // Gemini's thought signatures, which reach this process on the upstream answer and are
+  // dropped by the Anthropic wire on the way to the agent. Bounded inside the module, and
+  // gone when the app is: a resumed conversation falls back to the documented dummy rather
+  // than to a failed turn.
+  let signatures: ThoughtSignatures = noSignatures;
 
-  const resolve = async (modelRef: string): Promise<{ provider: Provider; modelId: string } | undefined> => {
+  const resolve = async (modelRef: string): Promise<{ provider: OpenAiProvider; modelId: string } | undefined> => {
     const parsed = parseModelRef(modelRef);
     if (!parsed.ok) return undefined;
     const provider = await deps.findProvider(parsed.value.providerId);
-    return provider === undefined ? undefined : { provider, modelId: parsed.value.modelId };
+    // An anthropic provider has no business here and carries no baseUrl. Left through, it
+    // would reach the upstream client with none, which silently defaults to OpenAI's own
+    // address and posts the user's key to a company they never configured.
+    if (provider === undefined || provider.kind !== 'openai') return undefined;
+    return { provider, modelId: parsed.value.modelId };
   };
 
   // Built with explicit optional properties rather than conditional spreads: ai's
   // Prompt is a union ({prompt, messages?: never} | {messages, prompt?: never}), and a
   // spread-built object types as a union that matches neither branch.
   const callOptions = (
-    provider: Provider,
+    provider: OpenAiProvider,
     modelId: string,
-    request: TranslatedRequest
+    request: TranslatedRequest,
+    abortSignal: AbortSignal
   ): {
-    model: ReturnType<ReturnType<typeof createOpenAI>['chat']>;
+    model: ReturnType<ReturnType<typeof createOpenAICompatible>['chatModel']>;
     messages: ModelMessage[];
     allowSystemInMessages: true;
     system: string | undefined;
     tools: ToolSet | undefined;
     maxOutputTokens: number | undefined;
+    abortSignal: AbortSignal;
   } => ({
-    model: createOpenAI({ baseURL: provider.baseUrl, apiKey: provider.apiKey }).chat(modelId),
-    messages: request.messages as ModelMessage[],
+    // openai-compatible, not @ai-sdk/openai, because the strict one is built for OpenAI
+    // itself: it requires `index` on every streaming tool_call delta, and Google does not
+    // send one, so each Gemini tool call failed chunk validation and vanished with no error
+    // at all. This provider makes that field optional and carries Gemini's thought
+    // signatures, at the cost of nothing for the endpoints that were already working.
+    model: createOpenAICompatible({ name: provider.id, baseURL: provider.baseUrl, apiKey: provider.apiKey, ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }) }).chatModel(
+      modelId
+    ),
+    messages: signAssistantTurns(request.messages, signatures, provider.baseUrl) as ModelMessage[],
     // ai defaults this to false, and the SDK really does send system-role messages
     // inside the array. Without it every real turn is rejected before it leaves here.
     allowSystemInMessages: true,
     system: request.system,
     tools: request.tools.length === 0 ? undefined : toolsFor(request),
     maxOutputTokens: request.maxOutputTokens,
+    abortSignal,
   });
 
-  const callUpstream = (provider: Provider, modelId: string, request: TranslatedRequest): ReturnType<typeof streamText> =>
-    streamText({ ...callOptions(provider, modelId, request), toolChoice: request.toolChoice });
+  const callUpstream = (provider: OpenAiProvider, modelId: string, request: TranslatedRequest, abortSignal: AbortSignal): ReturnType<typeof streamText> =>
+    streamText({ ...callOptions(provider, modelId, request, abortSignal), toolChoice: request.toolChoice });
 
-  const streamBack = async (res: ServerResponse, provider: Provider, modelId: string, request: TranslatedRequest): Promise<void> => {
+  const streamBack = async (res: ServerResponse, provider: OpenAiProvider, modelId: string, request: TranslatedRequest): Promise<void> => {
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
 
     const messageId = `msg_${crypto.randomUUID()}`;
     let state = emptyStream(messageId, modelId);
     res.write(encodeSse({ type: 'message_start', message: { id: messageId, model: modelId, usage: { input_tokens: 0, output_tokens: 0 } } }));
 
+    const aborter = abortOnHangup(res);
+    const watchdog = silenceWatchdog(() => aborter.abort(), deps.silenceMs ?? UPSTREAM_SILENCE_MS);
     try {
-      for await (const part of callUpstream(provider, modelId, request).stream) {
+      for await (const part of callUpstream(provider, modelId, request, aborter.signal).stream) {
+        watchdog.heard();
+        // Read before translating: the signature rides on the `tool-call` part, which the
+        // translator drops as a duplicate of the input deltas it already relayed.
+        signatures = rememberSignature(signatures, part);
         const step = translatePart(state, part);
         state = step.state;
         for (const event of step.events) res.write(encodeSse(event));
@@ -139,11 +216,16 @@ export const createGateway = (deps: GatewayDeps): Gateway => {
       // A dropped connection would look to the agent like an empty answer.
       res.write(encodeSse({ type: 'error', error: { type: 'api_error', message: formatError(e) } }));
     }
+    watchdog.stop();
     res.end();
   };
 
-  const answerOnce = async (res: ServerResponse, provider: Provider, modelId: string, request: TranslatedRequest): Promise<void> => {
-    const result = await generateText(callOptions(provider, modelId, request));
+  const answerOnce = async (res: ServerResponse, provider: OpenAiProvider, modelId: string, request: TranslatedRequest): Promise<void> => {
+    const aborter = abortOnHangup(res);
+    // No parts to wait between, so the same budget is the whole answer's.
+    const watchdog = silenceWatchdog(() => aborter.abort(), deps.silenceMs ?? UPSTREAM_SILENCE_MS);
+    const result = await generateText(callOptions(provider, modelId, request, aborter.signal)).finally(watchdog.stop);
+    for (const call of result.toolCalls) signatures = rememberSignature(signatures, call);
 
     const content = [
       ...(result.text.length === 0 ? [] : [{ type: 'text', text: result.text }]),
