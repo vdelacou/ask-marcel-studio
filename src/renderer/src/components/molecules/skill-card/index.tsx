@@ -10,11 +10,13 @@ export type SkillCardProps = {
   // A built-in the user has changed: it no longer follows app updates, and the editor
   // offers to put the original back.
   isModified: boolean;
+  // Off when the user has switched it off in its detail view.
+  isActive: boolean;
   onEdit: () => void;
   onRemove: () => void;
 };
 
-export const SkillCard: FC<SkillCardProps> = ({ title, folder, description, isBuiltIn, isModified, onEdit, onRemove }) => (
+export const SkillCard: FC<SkillCardProps> = ({ title, folder, description, isBuiltIn, isModified, isActive, onEdit, onRemove }) => (
   <article className="flex items-start gap-x-3 rounded-panel border border-border-subtle bg-surface-raised p-3">
     <div className="flex min-w-0 flex-1 flex-col gap-y-1">
       <div className="flex items-center gap-x-2">
@@ -22,6 +24,7 @@ export const SkillCard: FC<SkillCardProps> = ({ title, folder, description, isBu
         <span className="shrink-0 font-mono text-[11px] text-ink-faint">/{folder}</span>
         {isBuiltIn && <span className="shrink-0 rounded-full border border-border-subtle px-2 py-0.5 text-[10px] uppercase tracking-wide text-ink-muted">built in</span>}
         {isModified && <span className="shrink-0 rounded-full border border-accent px-2 py-0.5 text-[10px] uppercase tracking-wide text-accent">edited</span>}
+        {!isActive && <span className="shrink-0 rounded-full border border-border-subtle px-2 py-0.5 text-[10px] uppercase tracking-wide text-ink-faint">off</span>}
       </div>
       <p className="line-clamp-3 text-xs text-ink-muted">{description}</p>
     </div>

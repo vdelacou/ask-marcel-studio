@@ -1,14 +1,20 @@
 import type { FC, TextareaHTMLAttributes } from 'react';
 
-// A multi-line field. `mono` for anything the user is editing as source (markdown,
-// HTML) rather than as prose.
+// A multi-line field. `mono` for anything edited as source (markdown, HTML); `size`
+// picks the resting height: compact for a wrapping description, default for a body.
 export type TextAreaProps = {
   mono?: boolean;
+  size?: 'compact' | 'default';
 } & TextareaHTMLAttributes<HTMLTextAreaElement>;
 
-export const TextArea: FC<TextAreaProps> = ({ mono = false, ...props }) => (
+const heights: Record<'compact' | 'default', string> = {
+  compact: 'min-h-20',
+  default: 'min-h-48',
+};
+
+export const TextArea: FC<TextAreaProps> = ({ mono = false, size = 'default', ...props }) => (
   <textarea
-    className={`min-h-48 w-full resize-y rounded-md border border-border-subtle bg-surface px-2.5 py-2 text-sm text-ink placeholder:text-ink-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${
+    className={`${heights[size]} w-full resize-y rounded-md border border-border-subtle bg-surface px-2.5 py-2 text-sm text-ink placeholder:text-ink-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${
       mono ? 'font-mono text-xs' : ''
     }`}
     {...props}

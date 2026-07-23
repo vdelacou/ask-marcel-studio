@@ -11,7 +11,7 @@ import type { FC } from 'react';
 import { ProvidersPanel } from '../components/organisms/providers-panel/index.tsx';
 import type { PanelNotice } from '../components/organisms/providers-panel/index.tsx';
 import { SkillsPanel } from '../components/organisms/skills-panel/index.tsx';
-import { SkillEditor } from '../components/organisms/skill-editor/index.tsx';
+import { SkillDetail } from '../components/organisms/skill-detail/index.tsx';
 import { AgentsPanel } from '../components/organisms/agents-panel/index.tsx';
 import { AgentEditor } from '../components/organisms/agent-editor/index.tsx';
 import { SignaturePanel } from '../components/organisms/signature-panel/index.tsx';
@@ -39,6 +39,7 @@ import { useSkills } from '../hooks/use-skills.ts';
 import { useAgents } from '../hooks/use-agents.ts';
 import { useAgentFile } from '../hooks/use-agent-file.ts';
 import { MarkdownEditor } from '../render/markdown-editor.tsx';
+import { renderMarkdown } from '../render/markdown.tsx';
 
 // The left-menu structure. Models and Skills configure the agent; Microsoft 365 is a
 // connected app. Each id matches a section rendered on the right.
@@ -86,6 +87,7 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
   // saving a provider does not wipe the memory of it.
   const [defaultModel, setDefaultModel] = useState<string | undefined>(undefined);
   const [notice, setNotice] = useState<PanelNotice | undefined>(undefined);
+  const [skillAddMenuOpen, setSkillAddMenuOpen] = useState(false);
   const skills = useSkills();
   const agents = useAgents();
   const signature = useAgentFile('signature');
@@ -284,32 +286,75 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
   const skillNotice = skills.notice === undefined ? {} : { notice: skills.notice };
   const agentError = agents.error === undefined ? {} : { error: agents.error };
 
+  // A built-in's body is read-only (rendered), an own skill's is the editor. Computed
+  // here so the JSX below is not a ternary inside a spread inside a ternary.
+  const skillEditing = skills.editing;
+  const skillBodyEditor =
+    skillEditing === undefined
+      ? {}
+      : {
+          bodyEditor: (
+            <DocumentEditor
+              mode="rich"
+              richNode={<MarkdownEditor key={skillEditing.skill?.folder ?? 'new-skill'} defaultValue={skillEditing.stored.body} onChange={skills.setBody} />}
+              markdownValue={skillEditing.form.body}
+              isSaving={skills.isSaving}
+              isDirty={
+                skillEditing.form.body !== skillEditing.stored.body ||
+                skillEditing.form.name !== skillEditing.stored.name ||
+                skillEditing.form.displayName !== skillEditing.stored.displayName ||
+                skillEditing.form.description !== skillEditing.stored.description
+              }
+              {...skillNotice}
+              onChangeMarkdown={skills.setBody}
+              onSave={skills.save}
+              onCancel={skills.closeEditor}
+            />
+          ),
+        };
+  const skillBody = skillEditing?.skill?.isBuiltIn === true ? { bodyRendered: renderMarkdown(skillEditing.form.body) } : skillBodyEditor;
+
   // Built as values rather than nested inside the JSX: a section that is a list until
   // you open one of its rows is two screens, and reading that as a ternary inside a
   // conditional is worse than naming it.
   const skillsSection =
     skills.editing === undefined ? (
-      <SkillsPanel skills={skills.skills} error={skills.error} isAdding={skills.isAdding} onAdd={skills.add} onEdit={skills.edit} onRemove={skills.remove} />
+      <SkillsPanel
+        skills={skills.skills.map((skill) => ({ ...skill, isActive: !skills.disabledFolders.has(skill.folder) }))}
+        error={skills.error}
+        isImporting={skills.isImporting}
+        isAddMenuOpen={skillAddMenuOpen}
+        onToggleAddMenu={() => setSkillAddMenuOpen((open) => !open)}
+        onCreate={() => {
+          setSkillAddMenuOpen(false);
+          skills.startCreate();
+        }}
+        onImport={() => {
+          setSkillAddMenuOpen(false);
+          skills.importFolder();
+        }}
+        onEdit={skills.edit}
+        onRemove={skills.remove}
+      />
     ) : (
-      <SkillEditor
-        name={skills.editing.skill.name}
-        isBuiltIn={skills.editing.skill.isBuiltIn}
-        isModified={skills.editing.skill.isModified}
+      <SkillDetail
+        title={skills.editing.form.displayName.length > 0 ? skills.editing.form.displayName : skills.editing.form.name || 'New skill'}
+        folder={skills.editing.skill?.folder ?? 'chosen from the name'}
+        isBuiltIn={skills.editing.skill?.isBuiltIn ?? false}
+        isModified={skills.editing.skill?.isModified ?? false}
+        isActive={skills.editing.skill === undefined || !skills.disabledFolders.has(skills.editing.skill.folder)}
+        name={skills.editing.form.name}
+        displayName={skills.editing.form.displayName}
+        description={skills.editing.form.description}
+        extras={skills.editing.form.extras}
         onBack={skills.closeEditor}
+        onToggleActive={() => skills.editing?.skill !== undefined && skills.toggleActive(skills.editing.skill.folder)}
+        onChangeName={(name) => skills.setField({ name })}
+        onChangeDisplayName={(displayName) => skills.setField({ displayName })}
+        onChangeDescription={(description) => skills.setField({ description })}
         onRestore={skills.restore}
-      >
-        <DocumentEditor
-          mode="rich"
-          richNode={<MarkdownEditor key={`${skills.editing.skill.folder}-${skills.editing.stored}`} defaultValue={skills.editing.draft} onChange={skills.setDraft} />}
-          markdownValue={skills.editing.draft}
-          isSaving={skills.isSaving}
-          isDirty={skills.editing.draft !== skills.editing.stored}
-          {...skillNotice}
-          onChangeMarkdown={skills.setDraft}
-          onSave={skills.save}
-          onCancel={skills.closeEditor}
-        />
-      </SkillEditor>
+        {...skillBody}
+      />
     );
 
   const agentsSection =
