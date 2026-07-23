@@ -34,62 +34,38 @@ KQL or free text. Keywords, not sentences (`Q3 budget 2025`, `from:alice subject
 - **Narrow `search-all-files`.** It aggregates every hit into one response (no pagination);
   a broad one-word query buries you and can crash the text output, add a `filetype:` or a
   second keyword, or re-run with `--output json`. Past ~5000 hits results truncate silently.
-- Large `search-all-files` output goes to a file with a shell redirect (`> out.json`), never
-  `--output-path` (it rejects the flag).
+- Large search output goes to a file with a shell redirect (`> hits.txt`), never
+  `--output-path` (searches reject the flag). Extract fields with the Grep tool or
+  `grep -B2 -A6 'name: <file>'` over the default text layout; never Read the redirected
+  file whole back into the conversation, and treat `jq` as optional, not every machine
+  has it.
 
-## Read an email in full
+## Read an email in full: delegate to `mail-reader`
 
-Start from any `message-id` (a mail hit's `id` is a message-id; the hit also carries
-`conversationId`).
+Never open a thread inline. Hand the `mail-reader` agent (Agent tool) the `conversationId`,
+or any one `message-id` on the thread (a mail hit's `id` is a message-id), plus the question
+and the tenant time zone. It lists the thread, reads the newest message with its quoted
+history, converts the attachments by type, fetches content-bearing inline images, and
+resolves SharePoint links to `driveId` + `itemId`. It returns structure, key claims with
+message/attachment locations and pinpoint quotes, anomalies (including any unsent draft on
+the thread, which the draft skill must revise rather than duplicate), leads, and what it
+could not open. Chase its leads from the main conversation: a resolved link is a document
+read (below), an older mail its quotes name is a new search.
 
-1. **List the thread:**
-   ```bash
-   ask-marcel-office list-conversation-messages --conversation-id '<id>' --select id,subject,from,receivedDateTime,hasAttachments,isDraft
-   ```
-   A subject edit mid-thread breaks the chain: if quoted history names older mails not
-   listed, search the original subject or the quoted senders. An `isDraft: true` row from the
-   user is an existing unsent draft (the draft skill revises that one, never a second).
-2. **Read the newest with its quoted history:**
-   ```bash
-   ask-marcel-office convert-mail-to-markdown --message-id '<newest id>' --keep-quoted true
-   ```
-   One call usually returns the whole thread (replies quote history); default quote-stripping
-   handles localized From/date headers. Inline images render as `[inline image: …]`
-   placeholders, never `--inline-images true`. When one is content-bearing, fetch it:
-   `get-mail-attachment --message-id '<id>' --attachment-id '<attId>' --output-path img.png`,
-   then Read it.
-3. **Attachments** (`hasAttachments` true): `list-mail-attachments`, then convert by size and
-   type, or `get-mail-attachment ... --output-path att.<ext>` for large/raw files. A big or
-   many-part attachment is a good candidate to hand to the `m365-reader` subagent.
-4. **SharePoint links in the body:** `extract-sharepoint-links-in-mail --message-id '<id>'`
-   → each returns `driveId` + `itemId` to read as a document. A link that returns
-   `accessDenied` while siblings open is a per-file permission gap, name it inaccessible.
+## Read a document in full: delegate to `doc-reader`
 
-## Read a document in full
+First get the file's ids from a search hit: `--item-id` is the top-level `id` (same indent
+as `name`); `--drive-id` is `parentReference.driveId`. Ignore `parentReference.id` (the
+folder), `listItem.id`, and `sharepointIds`, the wrong id 404s. A sharing URL needs no
+resolving on your side; the reader handles it.
 
-Take the right two ids from a search hit: `--item-id` is the top-level `id` (same indent as
-`name`); `--drive-id` is `parentReference.driveId`. Ignore `parentReference.id` (the folder),
-`listItem.id`, and `sharepointIds`, the wrong id 404s. A sharing URL resolves via
-`resolve-drive-share-link --url '<url>'` → driveId + itemId + tenantId; if that tenantId is
-not the user's, thread `--tenant-id` through every download/convert for that file.
-
-Read by type:
-- **PDF / CSV / text:** `download-drive-item-content --drive-id … --item-id … --output-path
-  file.<ext>`, then Read it. A PDF over ~10 pages needs Read's `pages` parameter (e.g.
-  `pages: "1-15"`), at most 20 pages per call, read a longer one in chunks.
-- **Word / Excel / OpenDocument:** `download-drive-item-as-markdown --drive-id … --item-id …
-  --include-metadata true` (surfaces comments, tracked changes, hidden text). Leave images as
-  `[image: …]` placeholders, never `--inline-images true`. A scrambled Word/ODF conversion
-  (scanned pages, layout to soup): fall back to `download-drive-item-as-pdf` and Read the PDF.
-- **PowerPoint / layout-critical:** `download-drive-item-as-pdf … --output-path deck.pdf`,
-  then Read the PDF.
-- **Big / many-sheet Excel:** go sheet by sheet, `list-excel-worksheets`, then
-  `get-excel-used-range --worksheet-id '<name>' --full true`. Converted sheets keep formula
-  errors (`#REF!`, `#N/A`) verbatim; when a summary cell shows one, recompute from the detail
-  rows and say you did. Count rows/categories with a script (`grep -c`, `awk`), never by eye.
-
-An oversized document (long deck, many-sheet workbook, zip of scans) is exactly what the
-`m365-reader` subagent is for: hand it the ids and the question, keep the summary.
+Never download or convert a document inline. Hand the `doc-reader` agent (Agent tool) the
+two ids, or the sharing URL, or a local path, plus the question and the tenant time zone,
+one agent per document, in parallel when several matter. It reads by type (deck text first,
+sheet by sheet for Excel, the Read tool for PDFs and scans, zips unpacked) and returns
+structure, key figures with page/sheet/cell locations and pinpoint quotes, anomalies
+(recomputed formula errors, totals that do not reconcile), leads, and what it could not
+open. Cite from its quotes and locations; chase its leads from the main conversation.
 
 ## People, the commands (do not guess names)
 
@@ -106,14 +82,41 @@ An oversized document (long deck, many-sheet workbook, zip of scans) is exactly 
   department`); then `get-user --id '<guid>' --select displayName,jobTitle,department,mail,mobilePhone,businessPhones,officeLocation,userPrincipalName`
   for the full profile. Omitting `--select` silently drops `department`.
 - A candidate id that is **not a GUID** is an external contact, re-query by its `mail`.
-- Full profile fields ride the **elevated token**, which expires independently and cannot
-  refresh headlessly. If a lookup fails or returns nothing quickly, treat it as an expired
-  elevated token: tell the user to click Login in Settings; do not wait or retry into a hang.
+- Only the full-profile path, `get-user` with a GUID / UPN / email, rides the **elevated
+  token**, which expires independently and cannot refresh headlessly; preflight it with
+  `scopes-check` (no Graph call, the `elevated` block reports `available`). Name-search
+  `get-user`, `list-relevant-people`, `get-user-manager`, and `list-user-direct-reports` run
+  on the basic token and keep working when it is cold: walk the org tree with those first,
+  they already carry title, department, and mail. Only when the missing fields (phones,
+  office) actually matter, tell the user to click Login in Settings; do not wait or retry
+  into a hang, and never run `login` yourself.
 - Directory fields (`jobTitle`, `officeLocation`, `department`) can lag reality by months,
   present them as directory values; if the user contradicts one, believe the user.
 - Reporting lines are often a matrix (a solid-line and a dotted-line manager). When the
   directory `manager` is empty (common for senior staff), the real line usually lives in an
   org-chart deck on SharePoint, search for it, and say which line is solid vs dotted.
+- **Role titles are org-local.** "Who is the CIO of X" can have no literal CIO: the IT chief
+  may be titled "Chief Transformation Officer", "IS&T Director", or "Directeur du Système
+  d'Information". The person entity of federated search matches names and company, not job
+  titles, so a literal-title query surfaces name lookalikes and misses the real holder; and
+  a roster whose "<role>" row is empty means the literal title is unused there, never that
+  the function is vacant. Resolve the holder in this order, and do not answer before step 3:
+  1. `microsoft-search-query` on the role plus the org for leads: decks, rosters, and
+     especially a "<role> Office" support person (a "CIO Office Manager" hit is gold, her
+     manager usually IS the holder). Collect every candidate leader named for that org.
+  2. `get-user` every candidate you might name. A candidate whose directory department or
+     company sits in a parent division or a region is not that org's own leadership: keep
+     them out, or state their scope explicitly.
+  3. Walk `get-user-manager` from the strongest candidates and from the "<role> Office"
+     person until the chain leaves the function. The holder is the last person inside it:
+     the CTO / CISO / infrastructure leads report to them, and they report to the org's
+     head. Two or three of these one-call walks decide what no deck can. Crown the parent,
+     never the child: the holder is the person those leads report TO, not the most
+     senior-sounding title below them (a CTO who reports to a Chief Transformation Officer
+     is not the IT chief; their boss is).
+  Answer with the holder's actual directory title and its scope, noting when nobody holds
+  the literal one. A meeting attendee list mixes divisions and regions and is not an org
+  chart; where it conflicts with the directory, the directory wins.
 
 ## Call-shape gotchas
 
@@ -125,7 +128,9 @@ An oversized document (long deck, many-sheet workbook, zip of scans) is exactly 
   consistent). List with a date filter + `--orderby "receivedDateTime desc"`, then read the
   fields off the rows yourself.
 - `microsoft-search-query` takes only `--query` (KQL); there is no `--entity-types`, filter
-  client-side on `resource.@odata.type`. For mail, `hitId` is the `messageId`.
+  client-side on `resource.@odata.type`. For mail, `hitId` is the `messageId`. It returns six
+  fixed 25-hit containers (no `--top`, no `--select`) and routinely exceeds 100 KB, so
+  shell-redirect it to a file and extract with a script.
 - Teams chat and OneNote are limited: OneNote search is title-substring only, Teams chat
   content is not searchable, To Do / Planner need their direct commands (not federated search).
 - Scratch files: write to absolute paths (`/tmp/…`); the shell does NOT keep its working
@@ -139,4 +144,4 @@ resolve every person on the thread. End with the Sources footer from the core pr
 page / sheet / cell and the short phrase you used wherever a claim rests on a specific figure.
 
 ---
-*Verified against ask-marcel-office v2.2.0 (2026-07-20).*
+*Verified against ask-marcel-office v2.2.0 (2026-07-23).*
