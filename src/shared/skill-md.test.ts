@@ -176,3 +176,39 @@ describe('what a skill is called in front of a person', () => {
     expect(humanizeSkillFolder('draft--outlook-email-')).toBe('Draft outlook email');
   });
 });
+
+describe('the frontmatter reader’s own edges', () => {
+  test('a value that is a single quote character is kept, not stripped to nothing', () => {
+    const parsed = parseSkillMd(['---', 'name: mine', "description: '", '---', 'B.'].join('\n'));
+
+    expect(parsed.ok && parsed.value.description).toBe("'");
+  });
+
+  test('a value quoted on one side only keeps both characters', () => {
+    const parsed = parseSkillMd(['---', 'name: mine', 'description: "half', '---', 'B.'].join('\n'));
+
+    expect(parsed.ok && parsed.value.description).toBe('"half');
+  });
+
+  test('a byte-order mark before the opening fence does not stop it being read', () => {
+    const parsed = parseSkillMd(['﻿---', 'name: mine', 'description: x.', '---', 'B.'].join('\n'));
+
+    expect(parsed.ok).toBe(true);
+  });
+
+  test('a fence that is not the first non-blank line is not frontmatter', () => {
+    const parsed = parseSkillMd(['Some prose.', '---', 'name: mine', '---'].join('\n'));
+
+    expect(parsed.ok).toBe(false);
+  });
+
+  test('a rule further down the body is not mistaken for the closing fence', () => {
+    const parsed = parseSkillMd(['---', 'name: mine', 'description: x.', '---', '', 'text', '---', 'more'].join('\n'));
+
+    expect(parsed.ok && parsed.value.name).toBe('mine');
+  });
+
+  test('an empty folder name humanises to nothing rather than a stray space', () => {
+    expect(humanizeSkillFolder('')).toBe('');
+  });
+});

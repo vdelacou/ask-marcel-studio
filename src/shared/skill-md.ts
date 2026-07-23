@@ -28,14 +28,14 @@ export type SkillMdError = {
   readonly message: string;
 };
 
-const FENCE = '---';
+export const FENCE = '---';
 
 const notASkill = (message: string): Result<never, SkillMdError> => err({ kind: 'not-a-skill', message });
 
 // Values may be quoted. Strip only a MATCHING pair, so a description that merely
 // contains a quote keeps it.
-const QUOTES = ['"', "'"] as const;
-const unquote = (value: string): string => {
+export const QUOTES = ['"', "'"] as const;
+export const unquote = (value: string): string => {
   if (value.length < 2) return value;
   const first = value.slice(0, 1);
   const isQuote = QUOTES.some((q) => q === first);
