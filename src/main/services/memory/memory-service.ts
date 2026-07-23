@@ -14,7 +14,7 @@ import type { MemoryFileName } from '../../../shared/memory-file-name.ts';
 import { EMPTY_MEMORY_QUEUE, addCandidates, findCandidate, parseMemoryQueue, removeCandidate, serialiseMemoryQueue } from '../../../shared/memory-queue-doc.ts';
 import type { MemoryCandidate } from '../../../shared/memory-queue-doc.ts';
 import { EMPTY_MEMORY_STATE, markExtracted, needsExtraction, parseMemoryState, readSoFar, serialiseMemoryState } from '../../../shared/memory-state-doc.ts';
-import { buildGlossaryBlocks, isNoteTooLong, NOTE_LIMIT } from '../../../shared/memory-glossary.ts';
+import { buildGlossaryBlocks } from '../../../shared/memory-glossary.ts';
 import type { RawCandidate } from '../../../shared/memory-extract.ts';
 import { memoryFilePath, memoryQueuePath, memoryStatePath } from '../../../shared/paths.ts';
 import { readJsonFile, readTextFile, writeTextFileAtomic } from '../store/json-file.ts';
@@ -85,11 +85,6 @@ export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
     const checked = memoryFileName(name);
     if (!checked.ok) return err({ kind: 'malformed-id', message: checked.error.message });
     if (typeof contents !== 'string') return err({ kind: 'invalid', message: 'that is not text' });
-    // Refused rather than trimmed: everything in these notes is read before every
-    // message, so a note that saved and was quietly cut would be text the user believes
-    // the agent has and it does not.
-    if (isNoteTooLong(contents)) return err({ kind: 'invalid', message: `A note has to stay under ${String(NOTE_LIMIT)} characters, because it is read before every message.` });
-
     const written = await writeTextFileAtomic(memoryFilePath(deps.userData, checked.value), contents);
     if (!written.ok) return err({ kind: 'write-failed', message: written.error.message });
     return ok(null);
@@ -112,15 +107,6 @@ export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
 
       const current = parseMemoryDoc(await readNote(candidate.kind));
       const merged = serialiseMemoryDoc(mergeMemoryEntries(current, [{ term: candidate.term, detail }]));
-      // The same limit the panel enforces. Accepting is the other door into these
-      // notes, and a note filled past the cap through this one would be text nobody
-      // asked to hide but nothing would read.
-      if (isNoteTooLong(merged)) {
-        return err({
-          kind: 'invalid',
-          message: `That note is full. Shorten it in Settings first: it has to stay under ${String(NOTE_LIMIT)} characters, because it is read before every message.`,
-        });
-      }
       const written = await writeTextFileAtomic(memoryFilePath(deps.userData, candidate.kind), merged);
       if (!written.ok) return err({ kind: 'write-failed', message: written.error.message });
     }

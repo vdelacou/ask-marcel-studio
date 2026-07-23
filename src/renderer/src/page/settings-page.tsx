@@ -34,7 +34,6 @@ import type { OfficePolicy } from '../../../shared/types.ts';
 import { AGENT_TOOL_OPTIONS } from '../../../shared/agents-doc.ts';
 import { useModelTest } from '../hooks/use-model-test.ts';
 import { rowForTest } from '../lib/model-test-view.ts';
-import { canSaveNote, memoryRoomNotice } from '../lib/memory-room.ts';
 import { useSkills } from '../hooks/use-skills.ts';
 import { useAgents } from '../hooks/use-agents.ts';
 import { useAgentFile } from '../hooks/use-agent-file.ts';
@@ -353,8 +352,6 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
             emptyHint="Nothing yet. Marcel adds to this as it notices words you use, and always asks first."
             isSaving={memorySaving}
             isDirty={memoryText !== memoryStored}
-            canSave={canSaveNote(memoryText)}
-            {...(memoryRoomNotice(memoryText) === undefined ? {} : { notice: memoryRoomNotice(memoryText) })}
             onChangeMarkdown={setMemoryText}
             onSave={saveMemory}
             onCancel={() => setMemoryText(memoryStored)}

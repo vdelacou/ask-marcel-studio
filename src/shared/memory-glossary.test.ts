@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { buildGlossaryBlocks, isNoteTooLong, NOTE_LIMIT, roomLeftInNote } from './memory-glossary.ts';
+import { buildGlossaryBlocks } from './memory-glossary.ts';
 import type { GlossaryFiles } from './memory-glossary.ts';
 
 const files = (over: Partial<GlossaryFiles> = {}): GlossaryFiles => ({ jargon: '', team: '', people: '', ...over });
@@ -52,31 +52,13 @@ describe('telling the agent what the user’s words mean', () => {
   test('a note keeps its own line breaks, because the entries are lines', () => {
     expect(buildGlossaryBlocks(files({ jargon: '- **A**: first\n- **B**: second' }))).toEqual(['## Words this user’s organisation uses\n- **A**: first\n- **B**: second']);
   });
-});
 
-describe('the cap on a note, and why it is where it is', () => {
-  test('three notes filled to the limit are still passed whole', () => {
-    // The invariant the whole design rests on: what the panel lets you save is what the
-    // agent reads. Splitting the block into three is what retired the second cap; if
-    // this ever fails, the note limit grew and nothing caught it.
-    const full = 'x'.repeat(NOTE_LIMIT);
+  test('a note far past what used to be the cap is passed whole, because there is no cap any more', () => {
+    const long = `- **PAD**: ${'x'.repeat(20_000)}`;
 
-    const blocks = buildGlossaryBlocks({ jargon: full, team: full, people: full });
+    const blocks = buildGlossaryBlocks(files({ jargon: long }));
 
-    expect(blocks.every((block) => block.includes(full))).toBe(true);
-  });
-
-  test('a note at exactly the limit is allowed, one character more is not', () => {
-    expect(isNoteTooLong('x'.repeat(NOTE_LIMIT))).toBe(false);
-    expect(isNoteTooLong('x'.repeat(NOTE_LIMIT + 1))).toBe(true);
-  });
-
-  test('an empty note has the whole limit left, and a full one has none', () => {
-    expect(roomLeftInNote('')).toBe(NOTE_LIMIT);
-    expect(roomLeftInNote('x'.repeat(NOTE_LIMIT))).toBe(0);
-  });
-
-  test('past the limit the room left goes negative, so the panel can say by how much', () => {
-    expect(roomLeftInNote('x'.repeat(NOTE_LIMIT + 12))).toBe(-12);
+    expect(blocks[0]).toContain(long);
+    expect(blocks[0]).not.toContain('Cut short');
   });
 });
