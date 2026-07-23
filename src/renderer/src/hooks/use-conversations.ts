@@ -32,6 +32,10 @@ export type ConversationsController = {
   readonly editingId?: string;
   readonly draftTitle: string;
   readonly confirmingDeleteId?: string;
+  // The title of the conversation waiting on a delete confirmation, so the dialog can
+  // name what it is about to remove.
+  readonly deletingTitle?: string;
+  readonly menuOpenId?: string;
   readonly create: () => void;
   readonly select: (id: string) => void;
   // Applies from the next message; the turn in flight keeps the model it started with.
@@ -43,6 +47,7 @@ export type ConversationsController = {
   readonly startDelete: (id: string) => void;
   readonly confirmDelete: () => void;
   readonly cancelDelete: () => void;
+  readonly toggleRowMenu: (id: string) => void;
   readonly dismissError: () => void;
 };
 
@@ -60,6 +65,7 @@ export const useConversations = (hasModel: string | undefined, onDeleted?: (id: 
   const [editingId, setEditingId] = useState<string>();
   const [draftTitle, setDraftTitle] = useState('');
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string>();
+  const [menuOpenId, setMenuOpenId] = useState<string>();
   // Same read-then-write guard app.tsx documents: StrictMode double-invokes the
   // effect, and two empty-list reads would both create a conversation.
   const booting = useRef(false);
@@ -120,7 +126,10 @@ export const useConversations = (hasModel: string | undefined, onDeleted?: (id: 
     })();
   }, []);
 
+  const toggleRowMenu = useCallback((id: string): void => setMenuOpenId((open) => (open === id ? undefined : id)), []);
+
   const startRename = useCallback((id: string, currentTitle: string): void => {
+    setMenuOpenId(undefined);
     setConfirmingDeleteId(undefined);
     setEditingId(id);
     setDraftTitle(currentTitle);
@@ -141,6 +150,7 @@ export const useConversations = (hasModel: string | undefined, onDeleted?: (id: 
   }, [editingId, draftTitle]);
 
   const startDelete = useCallback((id: string): void => {
+    setMenuOpenId(undefined);
     setEditingId(undefined);
     setConfirmingDeleteId(id);
   }, []);
@@ -160,6 +170,8 @@ export const useConversations = (hasModel: string | undefined, onDeleted?: (id: 
 
   const dismissError = useCallback((): void => setError(undefined), []);
 
+  const deletingTitle = view.conversations.find((c) => c.id === confirmingDeleteId)?.title;
+
   return {
     view,
     activity,
@@ -167,6 +179,8 @@ export const useConversations = (hasModel: string | undefined, onDeleted?: (id: 
     ...(editingId === undefined ? {} : { editingId }),
     draftTitle,
     ...(confirmingDeleteId === undefined ? {} : { confirmingDeleteId }),
+    ...(deletingTitle === undefined ? {} : { deletingTitle }),
+    ...(menuOpenId === undefined ? {} : { menuOpenId }),
     create,
     select,
     setModel,
@@ -177,6 +191,7 @@ export const useConversations = (hasModel: string | undefined, onDeleted?: (id: 
     startDelete,
     confirmDelete,
     cancelDelete,
+    toggleRowMenu,
     dismissError,
   };
 };
