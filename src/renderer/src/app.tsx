@@ -30,6 +30,8 @@ import { useChatViews } from './hooks/use-chat-views.ts';
 import { useOfficeHealth } from './hooks/use-office-health.ts';
 import { useSidebarLayout } from './hooks/use-sidebar-layout.ts';
 import { useUserIdentity } from './hooks/use-user-identity.ts';
+import { useMemoryStore } from './hooks/use-memory-store.ts';
+import { MemoryPage } from './components/organisms/memory-page/index.tsx';
 import { IconButton } from './components/atoms/icon-button/index.tsx';
 import { PanelIcon } from './components/atoms/panel-icon/index.tsx';
 import { useMemory } from './hooks/use-memory.ts';
@@ -81,6 +83,7 @@ export const App: FC = () => {
   const conversations = useConversations(boot.step === 'ready' ? boot.defaultModel : undefined, evict);
   const list = conversations.view;
   const { create } = conversations;
+  const backToChat = useCallback((): void => setView('chat'), []);
   const activeId = list.activeId;
 
   const hydrateActive = useCallback((): void => {
@@ -105,6 +108,9 @@ export const App: FC = () => {
   const memory = useMemory({ composerEmpty, settingsOpen });
   const [officeOpen, setOfficeOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  // Which surface fills the main column: the conversation, or the full Memory page.
+  const [view, setView] = useState<'chat' | 'memory'>('chat');
+  const memoryStore = useMemoryStore();
   const [settingsSection, setSettingsSection] = useState<string | undefined>(undefined);
 
   const openSettings = useCallback((): void => {
@@ -246,18 +252,28 @@ export const App: FC = () => {
       onStartResize={sidebarLayout.startResize}
       onCollapse={sidebarLayout.toggleCollapse}
       onToggleOfficeStatus={() => setOfficeOpen((open) => !open)}
-      onNew={create}
-      onSelect={conversations.select}
+      onNew={() => {
+        setView('chat');
+        create();
+      }}
+      onSelect={(id) => {
+        setView('chat');
+        conversations.select(id);
+      }}
       {...(identity.context === undefined || identity.context.firstName.length === 0 ? {} : { userName: identity.context.firstName })}
       {...(userMenuOpen
         ? {
             userMenu: (
               <Popover placement="up-start" dismissLabel="Close menu" onDismiss={() => setUserMenuOpen(false)}>
                 <Menu
-                  items={[{ id: 'settings', label: 'Settings' }]}
-                  onPick={() => {
+                  items={[
+                    { id: 'memory', label: 'Memory' },
+                    { id: 'settings', label: 'Settings' },
+                  ]}
+                  onPick={(id) => {
                     setUserMenuOpen(false);
-                    openSettings();
+                    if (id === 'memory') return setView('memory');
+                    return openSettings();
                   }}
                 />
               </Popover>
@@ -293,7 +309,26 @@ export const App: FC = () => {
       >
         {boot.step === 'no-provider' && <NoProviderNotice onOpenSettings={openSettings} />}
         {boot.step === 'failed' && <NoProviderNotice onOpenSettings={openSettings} />}
-        {isReady && activeId !== undefined && (
+        {view === 'memory' && (
+          <MemoryPage
+            rows={memoryStore.items.map((item) => ({ id: item.id, text: item.text, source: item.source }))}
+            {...(memoryStore.notice === undefined ? {} : { notice: memoryStore.notice })}
+            isLoading={memoryStore.isLoading}
+            {...(memoryStore.editingId === undefined ? {} : { editingId: memoryStore.editingId })}
+            draft={memoryStore.draft}
+            newText={memoryStore.newText}
+            onBack={backToChat}
+            onStartEdit={memoryStore.startEdit}
+            onChangeDraft={memoryStore.changeDraft}
+            onSaveEdit={memoryStore.saveEdit}
+            onCancelEdit={memoryStore.cancelEdit}
+            onRemove={memoryStore.remove}
+            onChangeNew={memoryStore.changeNew}
+            onAddNew={memoryStore.addNew}
+            onClearAll={memoryStore.askClear}
+          />
+        )}
+        {view === 'chat' && isReady && activeId !== undefined && (
           // Keyed so the composer draft resets between conversations. The transcript no
           // longer lives in this component, so remounting costs nothing.
           <ChatPage
@@ -309,7 +344,7 @@ export const App: FC = () => {
             {...(conversationHeader === undefined ? {} : { header: conversationHeader })}
           />
         )}
-        {isReady && activeId === undefined && <EmptyConversations onNew={create} />}
+        {view === 'chat' && isReady && activeId === undefined && <EmptyConversations onNew={create} />}
       </AppFrame>
       {settingsOpen && (
         <SettingsOverlay onClose={closeSettings}>
@@ -343,6 +378,15 @@ export const App: FC = () => {
           confirmLabel="Delete"
           onConfirm={conversations.confirmDelete}
           onCancel={conversations.cancelDelete}
+        />
+      )}
+      {memoryStore.isConfirmingClear && (
+        <ConfirmDialog
+          title="Forget everything?"
+          body="Marcel will forget every fact on this page. This can't be undone."
+          confirmLabel="Forget everything"
+          onConfirm={memoryStore.confirmClear}
+          onCancel={memoryStore.cancelClear}
         />
       )}
       {conversations.error !== undefined && <Toast message={conversations.error} onDismiss={conversations.dismissError} />}
