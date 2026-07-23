@@ -2,6 +2,7 @@
   "name": "ask-marcel-studio",
   "version": "0.1.0",
   "description": "A radically simplified desktop AI studio: models, skills, and one agent-only conversation panel with Microsoft 365 always in reach.",
+  "author": "Vincent Delacourt <vincent.delacourt@adama-development.com>",
   "license": "MIT",
   "type": "module",
   "main": "./out/main/index.js",

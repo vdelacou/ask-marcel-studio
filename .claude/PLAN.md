@@ -100,17 +100,17 @@ Design (to confirm while implementing):
 4. [x] Stores and services take the key; renderer reloads on account change.
 5. [x] Verify: two accounts, two worlds, switch back and forth, nothing crosses.
 
-## Phase 2 — Agent quality, skills, agents UI
+## Phase 2 — Agent quality, skills, agents UI — COMPLETE
 
-1. [ ] Skill display names (R6): displayName frontmatter + humanize fallback; popover inserts
+1. [x] Skill display names (R6): displayName frontmatter + humanize fallback; popover inserts
        FOLDER token. DoD: "/" list shows friendly names; insert matches rewriteSlashSkill.
-2. [ ] Titles groundwork (R7): userRenamed flag, slash-stripped interim title,
-       title-generation.ts (prompt + sanitizer), setGeneratedTitle.
-3. [ ] Title job wiring: conversation-title background job on conversation's model,
-       onFirstTurnSaved trigger, {type:'title'} emit; fix stale m365-reader.ts coverage entry.
-4. [ ] Turn stats capture (R10b): Message.stats {durationMs,toolCalls,toolErrors}.
-5. [ ] Repeat-failure guard + enforcement tests (R8c, R18b): command-failures.ts ring buffer,
-       bash-guard deny, runtime recording (guard-denials excluded), hook e2e tests + meta lock.
+2. [x] Titles groundwork (R7): userRenamed flag, slash-stripped interim title,
+       title-generation.ts (prompt + sanitizer), setGeneratedTitle. Landed 991157f.
+3. [x] Title job wiring: conversation-title background job on conversation's model,
+       onFirstTurnSaved trigger, {type:'title'} emit. Landed f89ec92.
+4. [x] Turn stats capture (R10b): Message.stats {durationMs,toolCalls,toolErrors}. Landed 6018f7d.
+5. [x] Repeat-failure guard + enforcement tests (R8c, R18b): command-failures.ts ring buffer,
+       bash-guard deny, runtime recording (guard-denials excluded), hook e2e. Landed de2ba01.
 6. [x] CLI cheat-sheet (R8a): generator from commands.json → claude-config/cli-cheatsheet.md
        at launch.
 7. [x] Prompt hardening (R8b/d, R9): Grep probe first; core.md Command discipline (numbered) +
@@ -128,8 +128,7 @@ Design (to confirm while implementing):
 13. [x] Tool labels + stats display (R22, R10-UI): "Ask Marcel Command" badge +
         formatTurnStats faint line. DONE with the turn-stats commit.
 
-Remaining in Phase 2: 8 skills pure layer, 9 skills persistence, 10 skills UI, 11 agents
-overhaul, 12 command-list redesign.
+Phase 2 complete: all 13 slices landed and committed.
 
 ## Phase 3 — Memory and context
 
@@ -152,7 +151,7 @@ overhaul, 12 command-list redesign.
 11. [x] Memory page UI + user-menu Memory item; "What it remembers" leaves Settings.
 12. [x] Eval harness scripts/eval-memory.ts (manual rule-32 gate).
 
-## Phase 4 — Ops, branding, packaging, update
+## Phase 4 — Ops, branding, packaging, update — COMPLETE
 
 1. [x] File logger (R11a): log-line.ts + file-logger.ts (5MB, one rotation, silent-on-error);
        inject runner/runtime/office. No PII: events, ids, kinds, counts only; 200-char clamp.

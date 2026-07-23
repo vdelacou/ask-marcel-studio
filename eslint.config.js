@@ -247,12 +247,13 @@ export default [
     },
   },
   // Non-source paths must not be linted: Stryker copies the tree into .stryker-tmp/
-  // during a run, reports/ is output, vendor/ holds fetched third-party runtimes (an
-  // embedded CPython ships bundled JS that trips no-undef), and the config files
-  // themselves would trip no-undef on `process` (they run under Node semantics, not the
-  // **/*.ts globals block). scripts/ IS linted — the gate scripts stay under the full
-  // rule set, with only no-console turned off for them above.
+  // during a run, reports/ is output, out/ and release/ are build and packaging output
+  // (release/ holds the whole packaged app, node_modules and all, and linting it hangs the
+  // gate), vendor/ holds fetched third-party runtimes (an embedded CPython ships bundled JS
+  // that trips no-undef), and the config files themselves would trip no-undef on `process`
+  // (they run under Node semantics, not the **/*.ts globals block). scripts/ IS linted — the
+  // gate scripts stay under the full rule set, with only no-console turned off for them above.
   {
-    ignores: ['eslint.config.js', 'electron.vite.config.ts', '.stryker-tmp/**', 'reports/**', 'out/**', 'dist/**', 'docs/**', '.claude/**', '.agents/**', 'vendor/**'],
+    ignores: ['eslint.config.js', 'electron.vite.config.ts', '.stryker-tmp/**', 'reports/**', 'out/**', 'dist/**', 'release/**', 'docs/**', '.claude/**', '.agents/**', 'vendor/**'],
   },
 ];
