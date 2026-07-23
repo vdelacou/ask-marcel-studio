@@ -15,10 +15,12 @@
  * main process).
  */
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { chmod, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { officeShimScripts } from '../../../shared/office-shim.ts';
-import { binDir } from '../../../shared/paths.ts';
+import { binDir, claudeConfigDir, cliCheatsheetPath } from '../../../shared/paths.ts';
+import { generateCliCheatsheet } from '../../../shared/cli-cheatsheet.ts';
 import { formatError } from '../../../shared/utilities/format-error.ts';
 import type { OfficeRun, OfficeRunOutcome } from './office-service.ts';
 
@@ -37,6 +39,21 @@ export const writeOfficeShim = async (userData: string, location: OfficeCliLocat
   // Executable, so `ask-marcel-office` resolves and runs off the agent's PATH.
   await chmod(unixPath, 0o755);
   await writeFile(join(dir, 'ask-marcel-office.cmd'), scripts.windows, 'utf8');
+};
+
+// Generated fresh every launch from the CLI's own catalog, so a CLI upgrade that renames
+// a flag rewrites the sheet. Silent on failure like the shim: a missing sheet means the
+// agent falls back to `--help`, not a broken launch.
+export const writeCliCheatsheet = async (userData: string, catalogPath: string): Promise<void> => {
+  try {
+    const sheet = generateCliCheatsheet(JSON.parse(readFileSync(catalogPath, 'utf8')));
+    if (!sheet.ok) return;
+    await mkdir(claudeConfigDir(userData), { recursive: true });
+    await writeFile(cliCheatsheetPath(userData), sheet.value, 'utf8');
+  } catch {
+    // A catalog that will not read or a folder that will not write: the agent manages
+    // with --help, and this is retried next launch.
+  }
 };
 
 export const createOfficeRun =

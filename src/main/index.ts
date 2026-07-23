@@ -46,7 +46,7 @@ import { createAccountService } from './services/account/account-service.ts';
 import type { AccountService } from './services/account/account-service.ts';
 import { createAccountFs } from './services/account/account-io.ts';
 import type { QuickContextService, StoredQuickContext } from './services/office/quick-context-service.ts';
-import { createOfficeRun, writeOfficeShim } from './services/office/office-io.ts';
+import { createOfficeRun, writeCliCheatsheet, writeOfficeShim } from './services/office/office-io.ts';
 import { createOfficeCatalog } from './services/office/office-catalog-io.ts';
 import { writeToolShims } from './services/shims/tool-shims-io.ts';
 import { createPythonService } from './services/python/python-service.ts';
@@ -295,6 +295,9 @@ const buildRuntime = (
   // updates, so a stale shim would exec a binary that is gone. Not awaited, like the
   // skills seed: it lands long before the first turn could call ask-marcel-office.
   void writeOfficeShim(toolsRoot, location);
+  // The exact-flags cheat-sheet, regenerated every launch so a CLI upgrade updates it.
+  // Under the account folder, where the agent's CLAUDE_CONFIG_DIR points.
+  void writeCliCheatsheet(userData, officeCatalogPath());
   // Same reasoning for node/npm/npx: rewritten every launch, lands well before a turn.
   void writeToolShims(toolsRoot, toolCliLocation());
   // Build the per-user Python venv in the background so python3 resolves offline.
