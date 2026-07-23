@@ -128,3 +128,29 @@ describe('refusing what cannot be undone', () => {
     expect(allows('sh -c "sh -c \\"sh -c rm\\""')).toBe(true);
   });
 });
+
+describe('refusing to let a command fail the same way a third time', () => {
+  const base = { workspaceDir: '/w', disabledOfficeCategories: [], officeCommandCategories: new Map<string, string>() };
+
+  test('a command that already failed twice is refused, and told to change approach', () => {
+    const verdict = evaluateBashCommand('ask-marcel-office list-mail --folder inbox', { ...base, repeatedlyFailedCommands: ['ask-marcel-office list-mail --folder inbox'] });
+
+    expect(verdict.allow).toBe(false);
+    if (verdict.allow) throw new Error('expected deny');
+    expect(verdict.reason).toContain('already failed twice');
+  });
+
+  test('the same command spelled with different spacing is still refused', () => {
+    const verdict = evaluateBashCommand('ask-marcel-office   list-mail   --folder inbox', { ...base, repeatedlyFailedCommands: ['ask-marcel-office list-mail --folder inbox'] });
+
+    expect(verdict.allow).toBe(false);
+  });
+
+  test('a command that has not been failing is allowed', () => {
+    expect(evaluateBashCommand('ask-marcel-office list-mail-messages --top 5', { ...base, repeatedlyFailedCommands: ['something --else'] }).allow).toBe(true);
+  });
+
+  test('a caller that tracks no failures blocks nothing new', () => {
+    expect(evaluateBashCommand('echo hello', base).allow).toBe(true);
+  });
+});

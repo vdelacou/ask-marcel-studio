@@ -31,6 +31,10 @@ export type BashGuardPolicy = {
   readonly disabledOfficeCategories: readonly string[];
   // Microsoft 365 command name to its category, from the CLI's own catalog.
   readonly officeCommandCategories: ReadonlyMap<string, string>;
+  // Commands that have already failed twice unchanged in this conversation. An identical
+  // third attempt is refused, because repeating it produces the same error a third time.
+  // Absent for a caller that does not track failures (the background jobs).
+  readonly repeatedlyFailedCommands?: readonly string[];
 };
 
 export type BashGuardVerdict = { readonly allow: true } | { readonly allow: false; readonly reason: string };
@@ -224,7 +228,16 @@ const opaqueVerdict = (command: string, segments: readonly Segment[]): BashGuard
 
 const MAX_SHELL_DEPTH = 3;
 
+const normaliseCommand = (command: string): string => command.replace(/\s+/g, ' ').trim();
+
 const evaluate = (command: string, policy: BashGuardPolicy, depth: number): BashGuardVerdict => {
+  // Checked before anything else and only at the top level (depth 0), because it is the
+  // command the model actually ran that has been failing, not a fragment inside it.
+  if (depth === 0 && policy.repeatedlyFailedCommands?.includes(normaliseCommand(command)) === true) {
+    return deny(
+      'this exact command has already failed twice in this conversation. Do not run it again unchanged: re-read the error, check the flags (cli-cheatsheet.md, --help, or `ask-marcel-office docs <command>`), and take a different approach.'
+    );
+  }
   const segments = splitSegments(command);
   const opaque = opaqueVerdict(command, segments);
   if (!opaque.allow) return opaque;
