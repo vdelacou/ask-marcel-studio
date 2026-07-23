@@ -2,7 +2,9 @@ import type { FC } from 'react';
 import { Button } from '../../atoms/button/index.tsx';
 
 export type SkillCardProps = {
-  name: string;
+  // What a person calls it, and under it the handle they type after a slash.
+  title: string;
+  folder: string;
   description: string;
   isBuiltIn: boolean;
   // A built-in the user has changed: it no longer follows app updates, and the editor
@@ -12,11 +14,12 @@ export type SkillCardProps = {
   onRemove: () => void;
 };
 
-export const SkillCard: FC<SkillCardProps> = ({ name, description, isBuiltIn, isModified, onEdit, onRemove }) => (
+export const SkillCard: FC<SkillCardProps> = ({ title, folder, description, isBuiltIn, isModified, onEdit, onRemove }) => (
   <article className="flex items-start gap-x-3 rounded-panel border border-border-subtle bg-surface-raised p-3">
     <div className="flex min-w-0 flex-1 flex-col gap-y-1">
       <div className="flex items-center gap-x-2">
-        <h3 className="truncate font-mono text-sm font-medium text-ink">{name}</h3>
+        <h3 className="truncate text-sm font-medium text-ink">{title}</h3>
+        <span className="shrink-0 font-mono text-[11px] text-ink-faint">/{folder}</span>
         {isBuiltIn && <span className="shrink-0 rounded-full border border-border-subtle px-2 py-0.5 text-[10px] uppercase tracking-wide text-ink-muted">built in</span>}
         {isModified && <span className="shrink-0 rounded-full border border-accent px-2 py-0.5 text-[10px] uppercase tracking-wide text-accent">edited</span>}
       </div>

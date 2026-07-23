@@ -3,9 +3,9 @@ import { filterSkills, insertSkill, slashQuery, stepActive } from './slash-sugge
 import type { SkillSuggestion } from './slash-suggest.ts';
 
 const SKILLS: readonly SkillSuggestion[] = [
-  { name: 'answer-from-m365', description: 'Search mail, files and people' },
-  { name: 'draft-outlook-email', description: 'Prepare an unsent reply or new message' },
-  { name: 'weekly-report', description: 'Summarise the week from your calendar' },
+  { folder: 'answer-from-m365', displayName: 'answer-from-m365', description: 'Search mail, files and people' },
+  { folder: 'draft-outlook-email', displayName: 'draft-outlook-email', description: 'Prepare an unsent reply or new message' },
+  { folder: 'weekly-report', displayName: 'weekly-report', description: 'Summarise the week from your calendar' },
 ];
 
 describe('deciding when the skill menu is open', () => {
@@ -41,24 +41,24 @@ describe('deciding when the skill menu is open', () => {
 
 describe('choosing which skills to offer', () => {
   test('an empty query offers all of them, in their own order', () => {
-    expect(filterSkills(SKILLS, '').map((s) => s.name)).toEqual(['answer-from-m365', 'draft-outlook-email', 'weekly-report']);
+    expect(filterSkills(SKILLS, '').map((s) => s.folder)).toEqual(['answer-from-m365', 'draft-outlook-email', 'weekly-report']);
   });
 
   test('what was typed matches the start of a name first', () => {
-    expect(filterSkills(SKILLS, 'dra').map((s) => s.name)).toEqual(['draft-outlook-email']);
+    expect(filterSkills(SKILLS, 'dra').map((s) => s.folder)).toEqual(['draft-outlook-email']);
   });
 
   test('a word from the description finds a skill whose name was half-remembered', () => {
-    expect(filterSkills(SKILLS, 'calendar').map((s) => s.name)).toEqual(['weekly-report']);
+    expect(filterSkills(SKILLS, 'calendar').map((s) => s.folder)).toEqual(['weekly-report']);
   });
 
   test('name matches come before description matches', () => {
     // 'report' starts weekly-report's name and appears in no other name.
-    expect(filterSkills(SKILLS, 'report')[0]?.name).toBe('weekly-report');
+    expect(filterSkills(SKILLS, 'report')[0]?.folder).toBe('weekly-report');
   });
 
   test('matching ignores capitals', () => {
-    expect(filterSkills(SKILLS, 'DRAFT').map((s) => s.name)).toEqual(['draft-outlook-email']);
+    expect(filterSkills(SKILLS, 'DRAFT').map((s) => s.folder)).toEqual(['draft-outlook-email']);
   });
 
   test('a skill is never offered twice', () => {
@@ -96,5 +96,33 @@ describe('moving the highlight with the arrow keys', () => {
 describe('picking a skill', () => {
   test('picking leaves the composer ready for the rest of the message', () => {
     expect(insertSkill('draft-outlook-email')).toBe('/draft-outlook-email ');
+  });
+});
+
+describe('offering skills by the name a person would use', () => {
+  const skills = [
+    { folder: 'answer-from-m365', displayName: 'Answer from Microsoft 365', description: 'Reads mail, files and the directory.' },
+    { folder: 'draft-outlook-email', displayName: 'Draft an Outlook email', description: 'Prepares an unsent draft.' },
+  ];
+
+  test('typing the start of a folder finds it, which is what the slash is for', () => {
+    expect(filterSkills(skills, 'ans').map((skill) => skill.folder)).toEqual(['answer-from-m365']);
+  });
+
+  test('typing the words a person would use finds it too', () => {
+    expect(filterSkills(skills, 'draft an').map((skill) => skill.folder)).toEqual(['draft-outlook-email']);
+  });
+
+  test('picking one types the folder, because that is what an invocation matches', () => {
+    expect(insertSkill('answer-from-m365')).toBe('/answer-from-m365 ');
+  });
+
+  test('what is typed still wins over what is merely mentioned', () => {
+    const both = [
+      { folder: 'notes', displayName: 'Notes', description: 'nothing' },
+      { folder: 'other', displayName: 'Other', description: 'about notes' },
+    ];
+
+    expect(filterSkills(both, 'notes').map((skill) => skill.folder)).toEqual(['notes', 'other']);
   });
 });

@@ -8,7 +8,10 @@
  * Pure: no react, no electron, so `bun test` runs it.
  */
 
-export type SkillSuggestion = { readonly name: string; readonly description: string };
+// `folder` is what a slash invocation matches, and what gets inserted; `displayName` is
+// what the list shows. They were the same string once, which is why the list read like a
+// directory listing.
+export type SkillSuggestion = { readonly folder: string; readonly displayName: string; readonly description: string };
 
 // A slash word being typed at the start of the message, or nothing. The regex is the
 // whole rule: no leading text, no whitespace yet.
@@ -21,11 +24,14 @@ export const slashQuery = (draft: string): string | undefined => {
 
 export const filterSkills = (skills: readonly SkillSuggestion[], query: string): readonly SkillSuggestion[] => {
   const needle = query.toLowerCase();
-  const byName = skills.filter((skill) => skill.name.toLowerCase().startsWith(needle));
-  // Someone who half-remembers a skill searches by what it does, so the description is
-  // matched too. Name matches still come first: that is what was being typed.
-  const byText = skills.filter((skill) => !byName.includes(skill) && `${skill.name} ${skill.description}`.toLowerCase().includes(needle));
-  return [...byName, ...byText];
+  // The folder is what is being typed, so it leads. The words people would use for the
+  // same skill come next, then anything whose description mentions it.
+  const byFolder = skills.filter((skill) => skill.folder.toLowerCase().startsWith(needle));
+  const byName = skills.filter((skill) => !byFolder.includes(skill) && skill.displayName.toLowerCase().startsWith(needle));
+  const rest = skills.filter(
+    (skill) => !byFolder.includes(skill) && !byName.includes(skill) && `${skill.folder} ${skill.displayName} ${skill.description}`.toLowerCase().includes(needle)
+  );
+  return [...byFolder, ...byName, ...rest];
 };
 
 // Moves the highlight, wrapping at both ends. An empty list has nothing to move to.
@@ -34,6 +40,7 @@ export const stepActive = (count: number, current: number, delta: 1 | -1): numbe
   return (current + delta + count) % count;
 };
 
-// The trailing space matters: the list closes as soon as the name is complete, so
-// picking one leaves the composer ready for the rest of the message.
-export const insertSkill = (name: string): string => `/${name} `;
+// The FOLDER, not the display name: it is what a slash invocation is matched against, so
+// inserting anything else would type something the agent does not recognise. The trailing
+// space matters too: the list closes as soon as the name is complete.
+export const insertSkill = (folder: string): string => `/${folder} `;

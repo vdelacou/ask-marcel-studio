@@ -115,13 +115,13 @@ export const ChatPage: FC<ChatPageProps> = ({ conversationId, view, model, onHyd
     void (async (): Promise<void> => {
       const listed = await studio.skills.list();
       // A failure here only means the "/" menu is empty, never that the page fails.
-      if (listed.ok) setSkills(listed.value.map((skill) => ({ name: skill.folder, description: skill.description })));
+      if (listed.ok) setSkills(listed.value.map((skill) => ({ folder: skill.folder, displayName: skill.displayName, description: skill.description })));
     })();
   }, []);
 
   const query = slashQuery(draft);
   const suggestions: readonly SuggestItem[] =
-    query === undefined || suggestionsDismissed ? [] : filterSkills(skills, query).map((skill) => ({ id: skill.name, title: `/${skill.name}`, subtitle: skill.description }));
+    query === undefined || suggestionsDismissed ? [] : filterSkills(skills, query).map((skill) => ({ id: skill.folder, title: skill.displayName, subtitle: skill.description }));
 
   // What they have already sent, oldest first, as they typed it. The transcript keeps the
   // attached-files paragraph the composer appended on the way out, and that paragraph is

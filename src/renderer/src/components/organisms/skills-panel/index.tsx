@@ -2,7 +2,7 @@ import type { FC } from 'react';
 import { Button } from '../../atoms/button/index.tsx';
 import { SkillCard } from '../../molecules/skill-card/index.tsx';
 
-export type SkillRow = { folder: string; name: string; description: string; isBuiltIn: boolean; isModified: boolean };
+export type SkillRow = { folder: string; displayName: string; description: string; isBuiltIn: boolean; isModified: boolean };
 
 export type SkillsPanelProps = {
   skills: readonly SkillRow[];
@@ -28,7 +28,8 @@ export const SkillsPanel: FC<SkillsPanelProps> = ({ skills, error, isAdding, onA
     {skills.map((skill) => (
       <SkillCard
         key={skill.folder}
-        name={skill.name}
+        title={skill.displayName}
+        folder={skill.folder}
         description={skill.description}
         isBuiltIn={skill.isBuiltIn}
         isModified={skill.isModified}
