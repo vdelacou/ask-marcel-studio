@@ -1,5 +1,9 @@
 import type { FC, ReactNode } from 'react';
 import { ConversationItem } from '../../molecules/conversation-item/index.tsx';
+import { Popover } from '../../molecules/popover/index.tsx';
+import { Menu } from '../../molecules/menu/index.tsx';
+import { IconButton } from '../../atoms/icon-button/index.tsx';
+import { PanelIcon } from '../../atoms/panel-icon/index.tsx';
 
 export type SidebarConversation = { id: string; title: string; activity?: 'running' | 'unseen' };
 
@@ -11,24 +15,36 @@ export type SidebarProps = {
   activeId?: string;
   editingId?: string;
   draftTitle: string;
-  confirmingDeleteId?: string;
+  // The row whose actions menu is open, if any.
+  menuOpenId?: string;
   isSettingsActive: boolean;
   // The Microsoft 365 dot beside Settings. The popover is built by the app shell and
   // rendered here when it is open, so the sidebar stays free of any refresh wiring.
   officeHealth: 'checking' | 'healthy' | 'attention' | 'signed-out';
   officeLabel: string;
   officePopover?: ReactNode;
+  // The user's own first name once Microsoft 365 has told the app what it is. Until then
+  // the button says Settings, which is what it used to say and what it still does.
+  userName?: string;
+  userMenu?: ReactNode;
+  // How wide the user has dragged it. An inline style, which is allowed here and only
+  // here: a pixel value cannot be a utility class, and the seal is about the app not
+  // knowing Tailwind, not about the design system refusing a number.
+  width: number;
+  onStartResize: (clientX: number) => void;
+  onCollapse: () => void;
   onToggleOfficeStatus: () => void;
   onNew: () => void;
   onSelect: (id: string) => void;
-  onOpenSettings: () => void;
+  // Opens the user menu when the app knows who the user is, and settings directly when
+  // it does not (the button is still labelled Settings then).
+  onPressUser: () => void;
+  onToggleRowMenu: (id: string) => void;
   onStartRename: (id: string, title: string) => void;
   onDraftChange: (title: string) => void;
   onCommitRename: () => void;
   onCancelRename: () => void;
   onStartDelete: (id: string) => void;
-  onConfirmDelete: () => void;
-  onCancelDelete: () => void;
 };
 
 const PlusIcon: FC = () => (
@@ -61,33 +77,40 @@ export const Sidebar: FC<SidebarProps> = ({
   activeId,
   editingId,
   draftTitle,
-  confirmingDeleteId,
+  menuOpenId,
   isSettingsActive,
   officeHealth,
   officeLabel,
   officePopover,
+  userName,
+  userMenu,
+  width,
+  onStartResize,
+  onCollapse,
   onToggleOfficeStatus,
   onNew,
   onSelect,
-  onOpenSettings,
+  onPressUser,
+  onToggleRowMenu,
   onStartRename,
   onDraftChange,
   onCommitRename,
   onCancelRename,
   onStartDelete,
-  onConfirmDelete,
-  onCancelDelete,
 }) => (
-  <aside className="flex w-60 shrink-0 flex-col border-r border-border-subtle bg-surface shadow-[4px_0_16px_-8px_rgba(0,0,0,0.08)]">
-    <div className="px-2 pb-1 pt-2">
+  <aside style={{ width }} className="relative flex shrink-0 flex-col border-r border-border-subtle bg-surface shadow-[4px_0_16px_-8px_rgba(0,0,0,0.08)]">
+    <div className="flex items-center gap-x-1 px-2 pb-1 pt-2">
       <button type="button" onClick={onNew} className={`${menuItem} font-medium text-ink hover:bg-surface-raised`}>
         <PlusIcon />
         New conversation
       </button>
+      <IconButton label="Hide the sidebar" onClick={onCollapse} size="md">
+        <PanelIcon />
+      </IconButton>
     </div>
 
     <div className="flex flex-1 flex-col overflow-y-auto px-2 pb-2">
-      <p className="px-2 pb-1 pt-3 text-xs font-medium text-ink-muted">Recents</p>
+      <p className="px-2 pb-1 pt-3 text-xs font-medium text-ink-faint">Recents</p>
       <ul className="flex flex-col gap-y-0.5">
         {conversations.map((conversation) => (
           <ConversationItem
@@ -96,16 +119,27 @@ export const Sidebar: FC<SidebarProps> = ({
             {...(conversation.activity === undefined ? {} : { activity: conversation.activity })}
             isActive={!isSettingsActive && conversation.id === activeId}
             isEditing={conversation.id === editingId}
-            isConfirmingDelete={conversation.id === confirmingDeleteId}
             draftTitle={draftTitle}
+            {...(conversation.id === menuOpenId
+              ? {
+                  menu: (
+                    <Popover placement="down-end" dismissLabel="Close menu" onDismiss={() => onToggleRowMenu(conversation.id)}>
+                      <Menu
+                        items={[
+                          { id: 'rename', label: 'Rename' },
+                          { id: 'delete', label: 'Delete', tone: 'danger' },
+                        ]}
+                        onPick={(action) => (action === 'rename' ? onStartRename(conversation.id, conversation.title) : onStartDelete(conversation.id))}
+                      />
+                    </Popover>
+                  ),
+                }
+              : {})}
             onSelect={() => onSelect(conversation.id)}
-            onStartRename={() => onStartRename(conversation.id, conversation.title)}
+            onToggleMenu={() => onToggleRowMenu(conversation.id)}
             onDraftChange={onDraftChange}
             onCommitRename={onCommitRename}
             onCancelRename={onCancelRename}
-            onStartDelete={() => onStartDelete(conversation.id)}
-            onConfirmDelete={onConfirmDelete}
-            onCancelDelete={onCancelDelete}
           />
         ))}
       </ul>
@@ -113,15 +147,25 @@ export const Sidebar: FC<SidebarProps> = ({
 
     <div className="relative border-t border-border-subtle p-2">
       {officePopover}
-      <div className="flex items-center gap-x-1">
+      <div className="relative flex items-center gap-x-1">
+        {userMenu}
         <button
           type="button"
-          onClick={onOpenSettings}
+          onClick={onPressUser}
           aria-current={isSettingsActive ? 'page' : undefined}
           className={`${menuItem} ${isSettingsActive ? 'bg-surface-raised font-medium text-ink' : 'text-ink-muted hover:bg-surface-raised hover:text-ink'}`}
         >
-          <GearIcon />
-          Settings
+          {userName === undefined ? (
+            <GearIcon />
+          ) : (
+            <span
+              aria-hidden="true"
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-raised text-[10px] font-semibold uppercase text-ink-muted"
+            >
+              {userName.slice(0, 1)}
+            </span>
+          )}
+          <span className="truncate">{userName ?? 'Settings'}</span>
         </button>
         <button
           type="button"
@@ -134,6 +178,15 @@ export const Sidebar: FC<SidebarProps> = ({
         </button>
       </div>
     </div>
+
+    {/* The drag handle. Pointer-only by design: the collapse button beside "New
+        conversation" is the keyboard path to the same outcome. */}
+    <div
+      role="presentation"
+      onPointerDown={(event) => onStartResize(event.clientX)}
+      onDoubleClick={onCollapse}
+      className="absolute inset-y-0 -right-1 z-10 w-2 cursor-col-resize transition hover:bg-accent/20"
+    />
   </aside>
 );
 
