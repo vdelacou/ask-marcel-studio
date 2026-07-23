@@ -1,5 +1,6 @@
 ---
 name: draft-outlook-email
+displayName: Draft an Outlook email
 description: Prepare an UNSENT Outlook draft, a reply, a forward, or a new mail, grounded in the user's own Microsoft 365 via the ask-marcel-office CLI. Use when the user asks to reply to a thread, forward something, or write, prepare, or draft an email. Triggers include "reply to X saying…", "draft a reply to that thread", "forward this to Z", "prepare an email to Y", and drafting a reply to the oldest email still waiting on the user. The draft ALWAYS stays unsent in Outlook Drafts, the CLI can never send, and the user reviews and sends in Outlook. Do NOT use this skill to answer a question or read content (that is answer-from-m365); use it only when the deliverable is a draft.
 ---
 

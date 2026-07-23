@@ -1,5 +1,6 @@
 ---
 name: answer-from-m365
+displayName: Answer from Microsoft 365
 description: Answer a question from the user's own Microsoft 365 by retrieving live content with the read-only ask-marcel-office CLI, Outlook mail, OneDrive and SharePoint files, the people directory, calendar, To Do and Planner, OneNote. Use for ANY factual question about their work content, even when they name no tool or source and even when they assume you cannot see their data. Triggers include asking the status of something, "catch me up on my inbox", finding or summarizing the latest document about a topic, who someone is and their number or manager, whether we heard back on something, what is on the calendar or plate, what the user committed to this week, and who reports to whom. Do NOT use it to draft or send mail (that is the draft-outlook-email skill), to schedule, or to change anything, this skill only reads.
 ---
 

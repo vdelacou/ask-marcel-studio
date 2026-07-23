@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { parseSkillMd } from './skill-md.ts';
+import { humanizeSkillFolder, parseSkillMd } from './skill-md.ts';
 
 const skill = (body: string): string => body.replace(/^\n/, '');
 
@@ -142,5 +142,37 @@ describe('refusing a folder that is not a skill', () => {
     expect(parsed.ok).toBe(false);
     if (parsed.ok) return;
     expect(parsed.error.message).toBe('SKILL.md needs a name in its frontmatter');
+  });
+});
+
+describe('what a skill is called in front of a person', () => {
+  test('a skill may say the name people should see, separate from the one they type', () => {
+    const parsed = parseSkillMd('---\nname: answer-from-m365\ndisplayName: Answer from Microsoft 365\ndescription: Reads mail.\n---\nBody');
+
+    expect(parsed.ok && parsed.value.displayName).toBe('Answer from Microsoft 365');
+  });
+
+  test('a skill that says nothing has no display name, so the folder speaks for it', () => {
+    const parsed = parseSkillMd('---\nname: answer-from-m365\ndescription: Reads mail.\n---\nBody');
+
+    expect(parsed.ok && parsed.value.displayName).toBeUndefined();
+  });
+
+  test('an empty display name counts as none, rather than as a blank title', () => {
+    const parsed = parseSkillMd('---\nname: mine\ndisplayName:\ndescription: Does a thing.\n---\nBody');
+
+    expect(parsed.ok && parsed.value.displayName).toBeUndefined();
+  });
+
+  test('a folder name becomes words, capitalised once, not once per word', () => {
+    expect(humanizeSkillFolder('answer-from-m365')).toBe('Answer from m365');
+  });
+
+  test('a one word folder is just that word, capitalised', () => {
+    expect(humanizeSkillFolder('research')).toBe('Research');
+  });
+
+  test('a folder with doubled or trailing dashes does not grow empty words', () => {
+    expect(humanizeSkillFolder('draft--outlook-email-')).toBe('Draft outlook email');
   });
 });

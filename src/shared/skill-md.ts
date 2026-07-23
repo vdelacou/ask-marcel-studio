@@ -17,6 +17,10 @@ import { err, ok } from './result.ts';
 export type SkillFrontmatter = {
   readonly name: string;
   readonly description: string;
+  // What a person should see. The folder name is a handle typed after a slash; this is
+  // the same skill said in words, and it is optional because a skill written for another
+  // tool will not carry one.
+  readonly displayName?: string;
 };
 
 export type SkillMdError = {
@@ -64,12 +68,22 @@ export const parseSkillMd = (contents: string): Result<SkillFrontmatter, SkillMd
 
   let name: string | undefined;
   let description: string | undefined;
+  let displayName: string | undefined;
   for (const line of lines.slice(start + 1, end)) {
     name = name ?? readValue(line, 'name');
     description = description ?? readValue(line, 'description');
+    displayName = displayName ?? readValue(line, 'displayName');
   }
 
   if (name === undefined || name.length === 0) return notASkill('SKILL.md needs a name in its frontmatter');
   if (description === undefined || description.length === 0) return notASkill('SKILL.md needs a description in its frontmatter');
-  return ok({ name, description });
+  return ok({ name, description, ...(displayName === undefined || displayName.length === 0 ? {} : { displayName }) });
+};
+
+// What to call a skill that never said. `answer-from-m365` is a handle, not a name: this
+// turns it into something a person reads without thinking about folders.
+export const humanizeSkillFolder = (folder: string): string => {
+  const words = folder.split('-').filter((word) => word.length > 0);
+  const first = words[0] ?? '';
+  return [first.slice(0, 1).toUpperCase() + first.slice(1), ...words.slice(1)].join(' ');
 };

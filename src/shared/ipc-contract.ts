@@ -118,6 +118,9 @@ export type Skill = {
   readonly folder: string;
   // The name from its frontmatter, which is what the agent sees.
   readonly name: string;
+  // The same skill said in words, for the settings list and the "/" menu. Resolved in
+  // main: its own displayName if it has one, otherwise its folder read as words.
+  readonly displayName: string;
   readonly description: string;
   // Shipped with the app: removing it is refused rather than silently undone on the
   // next start.

@@ -15,7 +15,7 @@
 import { createHash } from 'node:crypto';
 import { cp, mkdir, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { parseSkillMd } from '../../../shared/skill-md.ts';
+import { humanizeSkillFolder, parseSkillMd } from '../../../shared/skill-md.ts';
 import { skillFolderName } from '../../../shared/skill-name.ts';
 import type { SkillFolderName } from '../../../shared/skill-name.ts';
 import { skillDir, skillsDir } from '../../../shared/paths.ts';
@@ -84,7 +84,14 @@ export const createSkillsService = (deps: SkillsServiceDeps): SkillsService => {
     // Modified means "differs from what the app last wrote here". A built-in nobody
     // has a record for is not modified: it predates the bookkeeping.
     const isModified = isBuiltIn && hasSeedRecord(record, checked.value) && !isSeededContent(record, checked.value, sha256(text.value));
-    return { folder: checked.value, name: parsed.value.name, description: parsed.value.description, isBuiltIn, isModified };
+    return {
+      folder: checked.value,
+      name: parsed.value.name,
+      displayName: parsed.value.displayName ?? humanizeSkillFolder(checked.value),
+      description: parsed.value.description,
+      isBuiltIn,
+      isModified,
+    };
   };
 
   const list = async (): Promise<Result<readonly Skill[], SkillsError>> => {
