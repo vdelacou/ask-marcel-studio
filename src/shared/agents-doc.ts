@@ -33,6 +33,13 @@ export type AgentToolName = (typeof AGENT_TOOL_OPTIONS)[number];
 // worse than no tool.
 export const WITHDRAWN_TOOLS = ['WebSearch'] as const;
 
+// The bundled CLI ships its own generic subagents. This app's only sanctioned
+// delegations are the shipped readers; a generic agent re-opens the undisciplined
+// read paths the readers exist to close, so each is denied as a Task() rule.
+export const WITHDRAWN_AGENT_TYPES = ['claude', 'claude-code-guide', 'Explore', 'general-purpose', 'Plan', 'statusline-setup'] as const;
+
+export const withdrawnTaskRules = (): readonly string[] => WITHDRAWN_AGENT_TYPES.map((agent) => `Task(${agent})`);
+
 export type SubAgent = {
   // Becomes the key the SDK routes on, so it has to be a plain identifier.
   readonly name: string;

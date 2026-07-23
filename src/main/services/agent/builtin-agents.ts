@@ -7,7 +7,8 @@
  *
  * `import type` only for the SDK, so the bun runner still covers this.
  */
-import { m365Reader } from './m365-reader.ts';
+import { docReader } from './doc-reader.ts';
+import { mailReader } from './mail-reader.ts';
 import { AGENT_TOOL_OPTIONS } from '../../../shared/agents-doc.ts';
 import type { AgentToolName, SubAgent } from '../../../shared/agents-doc.ts';
 
@@ -18,9 +19,15 @@ const knownTools = (tools: readonly string[] | undefined): readonly AgentToolNam
 
 export const BUILTIN_AGENTS: readonly SubAgent[] = [
   {
-    name: 'm365-reader',
-    description: m365Reader.description,
-    prompt: m365Reader.prompt,
-    tools: knownTools(m365Reader.tools),
+    name: 'doc-reader',
+    description: docReader.description,
+    prompt: docReader.prompt,
+    tools: knownTools(docReader.tools),
+  },
+  {
+    name: 'mail-reader',
+    description: mailReader.description,
+    prompt: mailReader.prompt,
+    tools: knownTools(mailReader.tools),
   },
 ];
