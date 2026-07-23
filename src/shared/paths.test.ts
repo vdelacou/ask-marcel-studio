@@ -19,6 +19,7 @@ import {
   cliCheatsheetPath,
   memoryDbPath,
   memoryMigratedMarkerPath,
+  mainLogPath,
   accountDir,
   accountsDir,
   currentAccountPath,
@@ -198,5 +199,11 @@ describe('where the searchable memory keeps its database', () => {
 
   test('the once-only migration marker sits beside the app bookkeeping', () => {
     expect(memoryMigratedMarkerPath('/data')).toBe('/data/memory/migrated.json');
+  });
+});
+
+describe('where the app keeps its own log', () => {
+  test('the log is app-level, so it sits at the top of the data folder', () => {
+    expect(mainLogPath('/data')).toBe('/data/logs/main.log');
   });
 });

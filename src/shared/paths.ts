@@ -113,6 +113,10 @@ export const memoryMigratedMarkerPath = (userData: string): string => join(userD
 // conversations and are deleted with them.
 export const backgroundWorkspaceDir = (userData: string): string => join(userData, 'background-workspace');
 
+// The app's own log, NDJSON, one rotation. Under userData at the top level (not per
+// account): it records app-level events, ids and error kinds, never anyone's data.
+export const mainLogPath = (userData: string): string => join(userData, 'logs', 'main.log');
+
 // Prepended to the agent's PATH so `ask-marcel-office` resolves to our shim (M4).
 export const binDir = (userData: string): string => join(userData, 'bin');
 
