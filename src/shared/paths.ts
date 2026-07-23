@@ -70,6 +70,10 @@ export const signatureFilePath = (userData: string): string => join(claudeConfig
 // $CLAUDE_CONFIG_DIR/voice-profile.md.
 export const voiceProfileFilePath = (userData: string): string => join(claudeConfigDir(userData), 'voice-profile.md');
 
+// What the user writes about themselves: who they are, what matters to them. Read into
+// every system prompt, editable in Settings under About you.
+export const globalContextFilePath = (userData: string): string => join(claudeConfigDir(userData), 'global-context.md');
+
 // Who the user is, fetched once from `my-quick-context` and re-read on every turn.
 // Under claude-config on purpose: nothing in it is secret, and a skill that wants an id
 // the block did not carry can open the file itself.

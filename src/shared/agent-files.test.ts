@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { AGENT_FILE_MAX_BYTES, agentFilePath, parseAgentFileDoc, validateAgentFileText } from './agent-files.ts';
-import { signatureFilePath, voiceProfileFilePath } from './paths.ts';
+import { claudeConfigDir, signatureFilePath, voiceProfileFilePath } from './paths.ts';
 import { unwrap } from './result.ts';
 
 describe('naming which document is being read or written', () => {
@@ -59,5 +59,21 @@ describe('checking what is about to be stored', () => {
     expect(refused.ok).toBe(false);
     if (refused.ok) return;
     expect(refused.error.message).toContain('256 KB');
+  });
+});
+
+describe('the file the user writes about themselves', () => {
+  test('global-context is a document the app stores', () => {
+    const parsed = parseAgentFileDoc('global-context');
+
+    expect(parsed.ok && parsed.value).toBe('global-context');
+  });
+
+  test('it lives in the agent config folder, so the agent reads it by a fixed path', () => {
+    expect(agentFilePath('/data', 'global-context')).toBe(`${claudeConfigDir('/data')}/global-context.md`);
+  });
+
+  test('something that is not one of the three documents is still refused', () => {
+    expect(parseAgentFileDoc('secrets').ok).toBe(false);
   });
 });

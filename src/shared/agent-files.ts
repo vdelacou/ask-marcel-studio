@@ -7,16 +7,16 @@
  * nothing in either is secret, and sealing them would only make them unreadable to the
  * agent that exists to use them.
  *
- * The document id is a whitelist, never a path. It crosses IPC as an untrusted string
- * and ends up in a join(), so the only two values it may take are named here.
+// The document id is a whitelist, never a path. It crosses IPC as an untrusted string
+ * and ends up in a join(), so only the named values are allowed.
  *
  * Pure: zero electron imports, so `bun test` covers the checkpoint.
  */
-import { signatureFilePath, voiceProfileFilePath } from './paths.ts';
+import { globalContextFilePath, signatureFilePath, voiceProfileFilePath } from './paths.ts';
 import type { Result } from './result.ts';
 import { err, ok } from './result.ts';
 
-export type AgentFileDoc = 'signature' | 'voice-profile';
+export type AgentFileDoc = 'signature' | 'voice-profile' | 'global-context';
 
 //   invalid      what arrived cannot be stored (not a document, not text, too big)
 //   unreadable   the file on disk could not be read
@@ -32,7 +32,7 @@ export type AgentFileError =
 // disk or a prompt.
 export const AGENT_FILE_MAX_BYTES = 262_144;
 
-const DOCS: readonly AgentFileDoc[] = ['signature', 'voice-profile'];
+const DOCS: readonly AgentFileDoc[] = ['signature', 'voice-profile', 'global-context'];
 
 export const parseAgentFileDoc = (raw: unknown): Result<AgentFileDoc, AgentFileError> => {
   const matched = DOCS.find((doc) => doc === raw);
@@ -48,4 +48,10 @@ export const validateAgentFileText = (raw: unknown): Result<string, AgentFileErr
   return ok(raw);
 };
 
-export const agentFilePath = (userData: string, doc: AgentFileDoc): string => (doc === 'signature' ? signatureFilePath(userData) : voiceProfileFilePath(userData));
+// The three files, each by its fixed path. global-context is what the user writes about
+// themselves ("who I am, what matters to me"), read into every system prompt.
+export const agentFilePath = (userData: string, doc: AgentFileDoc): string => {
+  if (doc === 'signature') return signatureFilePath(userData);
+  if (doc === 'voice-profile') return voiceProfileFilePath(userData);
+  return globalContextFilePath(userData);
+};
