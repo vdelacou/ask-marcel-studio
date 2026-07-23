@@ -46,12 +46,14 @@ export type ConversationsController = {
   readonly dismissError: () => void;
 };
 
-// defaultModel is undefined until settings resolve (or while no provider exists). The
-// list still loads in that window; only auto-creating a first conversation waits for a
-// model, so the sidebar never mints a conversation pinned to a model that is not there.
+// hasModel says whether any model is configured yet; it is undefined until settings
+// resolve, or while no provider exists. The list still loads in that window; only creating
+// a conversation waits, so the sidebar never mints one before there is anything to answer
+// it. WHICH model it opens on is not decided here: main resolves that from the last model
+// used, because this value dates from boot and would miss a switch made since.
 // onDeleted lets the app drop the deleted conversation's held transcript; the hook
 // itself knows nothing about transcripts.
-export const useConversations = (defaultModel: string | undefined, onDeleted?: (id: string) => void): ConversationsController => {
+export const useConversations = (hasModel: string | undefined, onDeleted?: (id: string) => void): ConversationsController => {
   const [view, setView] = useState<ConversationListView>(emptyConversationList);
   const [activity, setActivity] = useState<ActivityMap>(emptyActivity);
   const [error, setError] = useState<string>();
@@ -74,14 +76,14 @@ export const useConversations = (defaultModel: string | undefined, onDeleted?: (
       const listed = await studio.conversations.list();
       if (!listed.ok) return setError(listed.error.message);
       if (listed.value.length > 0) return setView(loadConversations(listed.value));
-      if (defaultModel === undefined) return setView(emptyConversationList);
-      const created = await studio.conversations.create({ model: defaultModel });
+      if (hasModel === undefined) return setView(emptyConversationList);
+      const created = await studio.conversations.create({});
       if (!created.ok) return setError(created.error.message);
       return setView(loadConversations([toMeta(created.value)]));
     })().finally(() => {
       booting.current = false;
     });
-  }, [defaultModel]);
+  }, [hasModel]);
 
   useEffect(boot, [boot]);
 
@@ -96,13 +98,13 @@ export const useConversations = (defaultModel: string | undefined, onDeleted?: (
   }, []);
 
   const create = useCallback((): void => {
-    if (defaultModel === undefined) return;
+    if (hasModel === undefined) return;
     void (async (): Promise<void> => {
-      const created = await studio.conversations.create({ model: defaultModel });
+      const created = await studio.conversations.create({});
       if (!created.ok) return setError(created.error.message);
       return setView((v) => addConversation(v, toMeta(created.value)));
     })();
-  }, [defaultModel]);
+  }, [hasModel]);
 
   // Opening a conversation is reading it, so its "new reply" mark goes away.
   const select = useCallback((id: string): void => {

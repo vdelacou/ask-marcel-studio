@@ -51,7 +51,7 @@ export const ProvidersPanel: FC<ProvidersPanelProps> = ({
     <header className="flex items-baseline justify-between">
       <div className="flex flex-col gap-y-1">
         <h2 className="text-lg font-semibold tracking-tight text-ink">Models</h2>
-        <p className="text-sm text-ink-muted">Add an Anthropic or OpenAI-compatible provider. Which model a conversation uses is chosen in the conversation itself.</p>
+        <p className="text-sm text-ink-muted">Add an Anthropic or OpenAI-compatible provider.</p>
       </div>
       <div className="shrink-0">
         <Button variant="secondary" onClick={onAddDraft}>

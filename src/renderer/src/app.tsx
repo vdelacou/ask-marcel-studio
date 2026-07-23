@@ -27,7 +27,7 @@ import { useOfficeHealth } from './hooks/use-office-health.ts';
 import { useMemory } from './hooks/use-memory.ts';
 import { modelOptions } from './lib/model-options.ts';
 import type { ModelOption } from './lib/model-options.ts';
-import { formatModelRef } from '../../shared/model-ref.ts';
+import { modelForNewConversation } from '../../shared/model-ref.ts';
 
 type Boot =
   | { readonly step: 'loading' }
@@ -50,10 +50,11 @@ export const App: FC = () => {
     void (async (): Promise<void> => {
       const settings = await studio.settings.get();
       if (!settings.ok) return setBoot({ step: 'failed', message: settings.error.message });
-      const first = settings.value.providers[0];
-      const firstModel = first?.modelIds[0];
-      if (first === undefined || firstModel === undefined) return setBoot({ step: 'no-provider' });
-      const defaultModel = settings.value.defaultModel ?? formatModelRef({ providerId: first.id, modelId: firstModel });
+      // The same rule main applies when it actually opens one, rather than a second copy of
+      // it here: this only decides whether there is a model at all, since main resolves
+      // which one at creation time from the last one used.
+      const defaultModel = modelForNewConversation(settings.value.providers, settings.value.defaultModel);
+      if (defaultModel === undefined) return setBoot({ step: 'no-provider' });
       return setBoot({ step: 'ready', defaultModel, models: modelOptions(settings.value.providers) });
     })().finally(() => {
       bootstrapping.current = false;
