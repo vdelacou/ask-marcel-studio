@@ -10,6 +10,26 @@ The CLI's only write is an UNSENT draft (reply, forward, or new mail). It cannot
 cannot delete a draft (the user removes one in Outlook). Read anything you need to ground the
 draft with the read procedure (answer-from-m365); this skill is the write.
 
+## Identify and confirm before any work
+
+The archive shows this skill opening the wrong email when the invocation carried only a
+subject line. These steps are numbered because they have an explicit stop:
+
+1. Classify the invocation. If the user named the exact thread or message AND the intent is
+   clear (reply / forward / new, and to whom), go straight to the drafting procedure below.
+2. If it is topic-only or ambiguous (a subject, a person, "the pricing thing"), run AT MOST
+   two cheap identification searches: `search-mail-messages` on the key nouns, and
+   `find-person` if only a name is given. Take snippets only. Do not read a full thread yet.
+3. STOP. Do not go further. Tell the user what you found: the candidate thread as sender +
+   subject + date (at most three candidates), and your reading of the intent (reply, forward,
+   or new mail). Ask which thread and which intent. Do NOT read the thread in full, do NOT
+   search further, do NOT fetch signature or voice, and do NOT create any draft before the
+   user answers.
+4. Forbidden conclusion: never pick a thread yourself because it is the newest or the closest
+   match. Two plausible threads always means asking, never guessing.
+5. Only once the user has confirmed the thread and the intent, continue with the procedure
+   below (research → situation → proposal → draft).
+
 ## Explain, propose, then draft
 
 Dictated vs composed turns on who wrote the *words*, not who set the intent. Text the user

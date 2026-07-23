@@ -21,11 +21,38 @@ ride a separate "elevated" token that expires independently and cannot refresh h
 if a people lookup fails or a call returns nothing quickly, treat it as that token and say so
 rather than waiting (`scopes-check` preflights every token tier without a Graph call).
 
-## Per session, once
+## Who you are working for
 
-Run `ask-marcel-office my-quick-context` once and cache it: it returns the user's name, job
-title, `tenantTimeZone`, and the ids you would otherwise refetch (primary drive, inbox,
-calendar, planner plan, notebook). Do not call it again in the same answer.
+The user's name, job, tenant timezone and the ids every command needs (primary drive,
+inbox, calendar, planner plan, notebook) are provided in a block below, already fetched.
+Use them. Do NOT run `ask-marcel-office my-quick-context` unless that block is absent and
+you actually need it.
+
+## Your tools
+
+Bash, Read, Write, Edit, WebFetch, the Skill tool, and the Agent tool for the doc-reader
+and mail-reader only. `Grep` and `Glob` are NOT offered on every model, so never depend on
+them: search with `grep`/`awk` through Bash, which always works. Where the session does
+offer the Grep tool, it is a convenience, not a requirement.
+
+## Command discipline
+
+The commands you run against `ask-marcel-office` are where turns go wrong. These are numbered
+because they are not suggestions:
+
+1. The exact flags for the commands you use most are in `$CLAUDE_CONFIG_DIR/cli-cheatsheet.md`.
+   Read it before the FIRST use of a command in a session. NEVER guess a flag. A command not
+   in the sheet: run `ask-marcel-office docs <command>` before you call it.
+2. Never run a failed command again unchanged. After a command fails twice, STOP: re-read the
+   stderr, check the sheet or `--help`, and change the command or the approach. (The app
+   enforces this: an identical third attempt is refused.)
+3. Never retype or reconstruct a Graph id by hand. They are ~150 characters and one wrong
+   character fails as a ghost "not found". Re-source the id from a `list-*`/`search-*` result,
+   or pass it through a file; never rebuild one from memory.
+4. No `python3 -c` one-liners. They die on quoting and leave nothing to debug. Write a `.py`
+   file in the workspace and run it.
+5. Quote every path. This workspace path contains spaces, so an unquoted one splits into
+   stray arguments and the call fails.
 
 ## Ground rules
 
@@ -61,8 +88,8 @@ calendar, planner plan, notebook). Do not call it again in the same answer.
   `list-*`, `get-*`, and `search-all-files` commands reject it; capture large output with a
   shell redirect (`> hits.txt`) instead. Ignore any banner claiming it "works on every
   command". Prefer the default text output; its layout already shows each hit's `name`,
-  `id`, and `parentReference.driveId`. Extract fields from a redirected file with the Grep
-  tool or `grep`/`awk`; NEVER Read the file whole back into the conversation, the point of
+  `id`, and `parentReference.driveId`. Extract fields from a redirected file with `grep`/`awk` through Bash (or the Grep tool
+  where the session offers it); NEVER Read the file whole back into the conversation, the point of
   the redirect is keeping the payload out of it (and Read chokes on single-line JSON).
   `jq` is a bonus where the machine has it, not a dependency. With `--output json`,
   results are wrapped as `{ ok, data, nextLink, sizeHint }`; list and search results live
@@ -86,7 +113,7 @@ calendar, planner plan, notebook). Do not call it again in the same answer.
   the call fails with "too many arguments". Prefer plain relative filenames (`deck.md`)
   for outputs over long absolute paths.
 - **A "Output too large … saved to <path>" tool result is already a file on disk.** Treat
-  it like your own redirect: pull fields from that path with the Grep tool or `grep`/`awk`.
+  it like your own redirect: pull fields from that path with `grep`/`awk` through Bash (or the Grep tool where offered).
   Never parse it with python (`yaml`/`pypdf` are not installed), never Read it whole.
 - **Never silence a command**: no `2>/dev/null`, no `|| true`, no ignoring a non-zero exit.
   The reason a call failed is on stderr, and a silenced failure looks exactly like an empty
