@@ -17,6 +17,7 @@ import type { SkillsService } from '../services/skills/skills-service.ts';
 import { parseModelTestTarget } from '../../shared/model-test.ts';
 import type { ModelTestService } from '../services/models/model-test-service.ts';
 import type { OfficeService } from '../services/office/office-service.ts';
+import type { QuickContextService } from '../services/office/quick-context-service.ts';
 import type { OfficeCatalog } from '../services/office/office-catalog-io.ts';
 import type { ConversationsStore } from '../services/store/conversations-store.ts';
 import type { SettingsStore } from '../services/store/settings-store.ts';
@@ -34,6 +35,7 @@ export type IpcDeps = {
   readonly skills: SkillsService;
   readonly modelTest: ModelTestService;
   readonly office: OfficeService;
+  readonly quickContext: QuickContextService;
   readonly officeCatalog: OfficeCatalog;
   readonly agentsStore: AgentsStore;
   readonly agentFiles: AgentFilesStore;
@@ -122,7 +124,16 @@ export const registerIpc = (deps: IpcDeps): void => {
   ipcMain.handle(CHANNEL.officeStatus, () => deps.office.status());
   // Only a literal true forces a full re-capture; anything else crossing IPC is an
   // ordinary sign-in.
-  ipcMain.handle(CHANNEL.officeLogin, (_event, input: unknown) => deps.office.login((input as { force?: unknown } | undefined)?.force === true));
+  ipcMain.handle(CHANNEL.officeLogin, async (_event, input: unknown) => {
+    const done = await deps.office.login((input as { force?: unknown } | undefined)?.force === true);
+    // A sign-in is the one moment the user's context can change (a first sign-in, a
+    // different account). Not awaited: the UI should not wait nine Graph calls to be
+    // told the sign-in worked.
+    if (done.ok) void deps.quickContext.refresh(true);
+    return done;
+  });
+  ipcMain.handle(CHANNEL.officeLogout, () => deps.office.logout());
+  ipcMain.handle(CHANNEL.officeQuickContext, () => Promise.resolve(deps.quickContext.current()));
   ipcMain.handle(CHANNEL.officeCommands, () => Promise.resolve(deps.officeCatalog.categories()));
 
   ipcMain.handle(CHANNEL.skillsList, () => deps.skills.list());

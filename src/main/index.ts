@@ -32,12 +32,16 @@ import { createVoiceProfileJob } from './services/background/voice-profile-job.t
 import { createSignatureService } from './services/office/signature-service.ts';
 import { parseAgentFileDoc } from '../shared/agent-files.ts';
 import { createModelTestService } from './services/models/model-test-service.ts';
-import { backgroundWorkspaceDir, signatureFilePath, voiceProfileFilePath } from '../shared/paths.ts';
+import { backgroundWorkspaceDir, quickContextFilePath, signatureFilePath, voiceProfileFilePath } from '../shared/paths.ts';
+import { parseStoredQuickContext } from '../shared/quick-context.ts';
+import { readJsonFile, writeJsonFileAtomic } from './services/store/json-file.ts';
 import { BUILTIN_AGENTS } from './services/agent/builtin-agents.ts';
 import { EMPTY_AGENTS_DOC, mergeAgents, toSdkAgents } from '../shared/agents-doc.ts';
 import { err, ok } from '../shared/result.ts';
 import { createGateway } from './services/gateway/gateway-server.ts';
 import { createOfficeService } from './services/office/office-service.ts';
+import { createQuickContextService } from './services/office/quick-context-service.ts';
+import type { QuickContextService, StoredQuickContext } from './services/office/quick-context-service.ts';
 import { createOfficeRun, writeOfficeShim } from './services/office/office-io.ts';
 import { createOfficeCatalog } from './services/office/office-catalog-io.ts';
 import { writeToolShims } from './services/shims/tool-shims-io.ts';
@@ -201,7 +205,16 @@ const hasContent = async (path: string): Promise<boolean> => {
 const buildRuntime = (
   emit: (event: UIEvent) => void,
   emitMemory: (event: MemoryEvent) => void
-): { agent: AgentRuntime; skills: SkillsService; gateway: Gateway; background: BackgroundRunner; idle: IdleWatcher; memory: MemoryService; conversations: ConversationsStore } => {
+): {
+  agent: AgentRuntime;
+  skills: SkillsService;
+  gateway: Gateway;
+  background: BackgroundRunner;
+  idle: IdleWatcher;
+  memory: MemoryService;
+  conversations: ConversationsStore;
+  quickContext: QuickContextService;
+} => {
   const userData = app.getPath('userData');
   const now = (): string => new Date().toISOString();
   const settings = createSettingsStore({ userData });
@@ -219,8 +232,27 @@ const buildRuntime = (
   const agentsStore = createAgentsStore({ userData, builtins: BUILTIN_AGENTS });
   const agentFiles = createAgentFilesStore({ userData });
   const memory = createMemoryService({ userData, now, newId: () => crypto.randomUUID(), emit: emitMemory });
+
+  const location = officeCliLocation();
+  const officeRun = createOfficeRun(location, process.env);
+  const office = createOfficeService(officeRun);
+  // Built before the agent, which reads its block on every send.
+  const quickContext = createQuickContextService({
+    run: officeRun,
+    now: () => new Date(),
+    read: async () => {
+      const read = await readJsonFile(quickContextFilePath(userData));
+      return read.ok ? parseStoredQuickContext(read.value) : undefined;
+    },
+    write: async (stored: StoredQuickContext) => {
+      await writeJsonFileAtomic(quickContextFilePath(userData), JSON.stringify(stored, null, 2));
+    },
+  });
+
   const agent = createAgentRuntime({
     settings,
+    // Who the user is, read per send so a sign-in mid-session reaches the next turn.
+    quickContextBlock: () => quickContext.block(),
     glossary: () => memory.glossaryBlocks(),
     conversations,
     gateway,
@@ -245,9 +277,6 @@ const buildRuntime = (
     },
   });
 
-  const location = officeCliLocation();
-  const officeRun = createOfficeRun(location, process.env);
-  const office = createOfficeService(officeRun);
   // Rewritten every launch: process.execPath and the cli.js path both move across
   // updates, so a stale shim would exec a binary that is gone. Not awaited, like the
   // skills seed: it lands long before the first turn could call ask-marcel-office.
@@ -303,6 +332,7 @@ const buildRuntime = (
     agent,
     skills,
     office,
+    quickContext,
     officeCatalog,
     agentsStore,
     agentFiles,
@@ -326,7 +356,7 @@ const buildRuntime = (
     clearTimer: (handle) => clearTimeout(handle as NodeJS.Timeout),
   });
 
-  return { agent, skills, gateway, background, idle, memory, conversations };
+  return { agent, skills, gateway, background, idle, memory, conversations, quickContext };
 };
 
 void app.whenReady().then(() => {
@@ -344,6 +374,7 @@ void app.whenReady().then(() => {
     idle,
     memory,
     conversations,
+    quickContext: quickContextRuntime,
   } = buildRuntime(
     (event) => {
       // The idle watcher sees the same stream the renderer does: a turn ending is
@@ -360,6 +391,10 @@ void app.whenReady().then(() => {
   // user deleted by hand comes back. Not awaited: a skill lands before the first
   // message can possibly be sent, and blocking startup on a copy would be worse.
   void skills.seedBuiltins();
+  // Who the user is: read what was stored, then fetch again only if it has gone stale.
+  // Not awaited, and silent on failure: the window opens either way, and the block is
+  // simply absent from the prompt until it lands.
+  void quickContextRuntime.load().then(() => quickContextRuntime.refresh(false));
 
   // Not awaited, and nothing surfaces: the signature is a cheap CLI fetch and the voice
   // profile costs a few tokens once. Both skip themselves when there is nothing to do.

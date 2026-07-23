@@ -56,6 +56,10 @@ export type AgentRuntimeDeps = {
   // The user's own vocabulary, read per send. Small local files, and a glossary edited
   // in settings should apply from the next message like everything else.
   readonly glossary: () => Promise<readonly string[]>;
+  // Who the user is: name, job, tenant timezone and the ids every command needs. Fetched
+  // by the app rather than by the agent, so a new conversation does not pay nine Graph
+  // calls to learn it again. Empty until the first successful fetch.
+  readonly quickContextBlock: () => string;
 };
 
 export type AgentRuntime = {
@@ -117,7 +121,11 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
           // every turn regardless of setting sources or cwd. The helpers are passed
           // programmatically for the same reason: settingSources: ['user'] loads no
           // agent files, so there is nowhere on disk for them to come from.
-          systemPrompt: { type: 'preset', preset: 'claude_code', append: [deps.corePrompt, ...glossary].join('\n\n') },
+          systemPrompt: {
+            type: 'preset',
+            preset: 'claude_code',
+            append: [deps.corePrompt, deps.quickContextBlock(), ...glossary].filter((block) => block.length > 0).join('\n\n'),
+          },
           agents,
           // The main agent otherwise gets the whole Claude Code toolset, helper
           // checkboxes notwithstanding. `disallowedTools` takes the withdrawn ones out

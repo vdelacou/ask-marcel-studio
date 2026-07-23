@@ -101,3 +101,34 @@ describe('forcing a full re-capture of the tokens', () => {
     expect(calls[0]).toEqual(['login']);
   });
 });
+
+describe('signing out', () => {
+  test('signing out drops the cached tokens', async () => {
+    const calls: string[][] = [];
+    const run: OfficeRun = (args) => {
+      calls.push([...args]);
+      return Promise.resolve(ran({ code: 0 }));
+    };
+
+    const result = await createOfficeService(run).logout();
+
+    expect(result.ok).toBe(true);
+    expect(calls[0]).toEqual(['logout']);
+  });
+
+  test('signing out when nothing was cached still leaves the user signed out', async () => {
+    const run: OfficeRun = async () => ran({ code: 1, stderr: 'no cached token' });
+
+    expect((await createOfficeService(run).logout()).ok).toBe(true);
+  });
+
+  test('a cli that cannot be launched at all is reported, because nothing was dropped', async () => {
+    const run: OfficeRun = async () => ({ ran: false, message: 'spawn ENOENT' });
+
+    const result = await createOfficeService(run).logout();
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected err');
+    expect(result.error.kind).toBe('spawn-failed');
+  });
+});

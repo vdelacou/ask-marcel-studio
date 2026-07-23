@@ -26,6 +26,9 @@ export type OfficeService = {
   // force re-captures every token, not just the ones that expired. It is the only way
   // to renew the elevated token, which carries no refresh token of its own.
   readonly login: (force: boolean) => Promise<Result<null, OfficeError>>;
+  // Drops every cached token. The agent is never allowed to run this (the shell guard
+  // denies it), so signing out is the user's decision alone.
+  readonly logout: () => Promise<Result<null, OfficeError>>;
 };
 
 // scopes-check decodes a local token, so it is fast; login opens a browser the user
@@ -60,5 +63,13 @@ export const createOfficeService = (run: OfficeRun): OfficeService => {
     return flight;
   };
 
-  return { status, login };
+  const logout = async (): Promise<Result<null, OfficeError>> => {
+    const outcome = await run(['logout'], STATUS_TIMEOUT_MS);
+    if (!outcome.ran) return err({ kind: 'spawn-failed', message: outcome.message });
+    // A logout that reports failure because nothing was cached still leaves the user
+    // signed out, which is what they asked for, so only a launch failure is an error.
+    return ok(null);
+  };
+
+  return { status, login, logout };
 };

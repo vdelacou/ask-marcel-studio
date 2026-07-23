@@ -17,6 +17,7 @@ import type { AgentView, SubAgent } from './agents-doc.ts';
 import type { ModelTestTarget, ModelTestVerdict } from './model-test.ts';
 import type { OfficeCategory } from './office-catalog.ts';
 import type { OfficeStatus } from './office-status.ts';
+import type { QuickContext } from './quick-context.ts';
 import type { Result } from './result.ts';
 
 export const CHANNEL = {
@@ -49,7 +50,9 @@ export const CHANNEL = {
   modelsTest: 'models:test',
   officeStatus: 'office:status',
   officeLogin: 'office:login',
+  officeLogout: 'office:logout',
   officeCommands: 'office:commands',
+  officeQuickContext: 'office:quickContext',
   memoryPending: 'memory:pending',
   memoryResolve: 'memory:resolve',
   memoryRead: 'memory:read',
@@ -315,9 +318,15 @@ export type StudioApi = {
     // Opens the interactive browser sign-in. Single-flight in main. `force` re-captures
     // every token, which is the only way to renew the one that cannot refresh itself.
     readonly login: (options?: { readonly force?: boolean }) => Promise<Result<null, OfficeError>>;
+    // Drops the cached tokens. Only the user can ask for this; the agent's shell guard
+    // denies the command outright.
+    readonly logout: () => Promise<Result<null, OfficeError>>;
     // What the bundled CLI can do, grouped by category, for the settings toggles. No
     // Result: a catalog that could not be read is an empty list, which the panel shows
     // as "nothing to configure" rather than as a failure.
     readonly commands: () => Promise<readonly OfficeCategory[]>;
+    // Who the user is, as the app last fetched it. Undefined until a first successful
+    // fetch: no Result, because "not known yet" is an answer, not a failure.
+    readonly quickContext: () => Promise<QuickContext | undefined>;
   };
 };
