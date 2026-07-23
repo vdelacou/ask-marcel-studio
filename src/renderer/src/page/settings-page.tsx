@@ -19,7 +19,6 @@ import { VoicePanel } from '../components/organisms/voice-panel/index.tsx';
 import { MemoryPanel } from '../components/organisms/memory-panel/index.tsx';
 import type { MemoryNoteId } from '../components/organisms/memory-panel/index.tsx';
 import { DocumentEditor } from '../components/organisms/document-editor/index.tsx';
-import type { EditorMode } from '../components/organisms/document-editor/index.tsx';
 import { OfficePanel } from '../components/organisms/office-panel/index.tsx';
 import type { OfficeView } from '../components/organisms/office-panel/index.tsx';
 import { SettingsLayout } from '../components/organisms/settings-layout/index.tsx';
@@ -40,8 +39,6 @@ import { useSkills } from '../hooks/use-skills.ts';
 import { useAgents } from '../hooks/use-agents.ts';
 import { useAgentFile } from '../hooks/use-agent-file.ts';
 import { MarkdownEditor } from '../render/markdown-editor.tsx';
-import { renderMarkdown } from '../render/markdown.tsx';
-import { MarkdownView } from '../components/atoms/markdown-view/index.tsx';
 
 // The left-menu structure. Models and Skills configure the agent; Microsoft 365 is a
 // connected app. Each id matches a section rendered on the right.
@@ -83,21 +80,18 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
   const [section, setSection] = useState(initialSection ?? 'models');
   const [drafts, setDrafts] = useState<readonly ProviderDraft[]>([]);
   const [expandedRowId, setExpandedRowId] = useState<string | undefined>(undefined);
-  // Read and written back untouched. There is no control for it any more: a
-  // conversation carries its own model, and the picker sits above the conversation.
-  // Kept so that saving a provider does not silently drop a choice made earlier.
+  // The model last used, which main writes whenever a conversation's model is switched and
+  // reads to open the next new conversation. There is no control for it on this screen: it
+  // is a record of what happened, not a preference. Read and written back untouched so that
+  // saving a provider does not wipe the memory of it.
   const [defaultModel, setDefaultModel] = useState<string | undefined>(undefined);
   const [notice, setNotice] = useState<PanelNotice | undefined>(undefined);
   const skills = useSkills();
   const agents = useAgents();
   const signature = useAgentFile('signature');
   const voice = useAgentFile('voice-profile');
-  const [skillMode, setSkillMode] = useState<EditorMode>('view');
-  const [voiceMode, setVoiceMode] = useState<EditorMode>('view');
-  const [promptMode, setPromptMode] = useState<EditorMode>('markdown');
   const [isEditingSignature, setIsEditingSignature] = useState(false);
   const [memoryNote, setMemoryNote] = useState<MemoryNoteId>('jargon');
-  const [memoryMode, setMemoryMode] = useState<EditorMode>('view');
   const [memoryText, setMemoryText] = useState('');
   const [memoryStored, setMemoryStored] = useState('');
   const [memorySaving, setMemorySaving] = useState(false);
@@ -286,14 +280,12 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
         onRestore={skills.restore}
       >
         <DocumentEditor
-          mode={skillMode}
-          viewNode={<MarkdownView>{renderMarkdown(skills.editing.draft)}</MarkdownView>}
+          mode="rich"
           richNode={<MarkdownEditor key={`${skills.editing.skill.folder}-${skills.editing.stored}`} defaultValue={skills.editing.draft} onChange={skills.setDraft} />}
           markdownValue={skills.editing.draft}
           isSaving={skills.isSaving}
           isDirty={skills.editing.draft !== skills.editing.stored}
           {...skillNotice}
-          onSelectMode={setSkillMode}
           onChangeMarkdown={skills.setDraft}
           onSave={skills.save}
           onCancel={skills.closeEditor}
@@ -321,12 +313,10 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
         onRestore={agents.restore}
       >
         <DocumentEditor
-          mode={promptMode}
-          viewNode={<MarkdownView>{renderMarkdown(agents.editing.prompt)}</MarkdownView>}
+          mode="markdown"
           markdownValue={agents.editing.prompt}
           isSaving={agents.isSaving}
           isDirty
-          onSelectMode={setPromptMode}
           onChangeMarkdown={agents.changePrompt}
           onSave={agents.save}
           onCancel={agents.closeEditor}
@@ -357,8 +347,7 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
       {section === 'memory' && (
         <MemoryPanel note={memoryNote} pendingCount={pendingNotes} onSelectNote={setMemoryNote}>
           <DocumentEditor
-            mode={memoryMode}
-            viewNode={<MarkdownView>{renderMarkdown(memoryText)}</MarkdownView>}
+            mode="rich"
             richNode={<MarkdownEditor key={`${memoryNote}-${memoryStored}`} defaultValue={memoryText} onChange={setMemoryText} />}
             markdownValue={memoryText}
             emptyHint="Nothing yet. Marcel adds to this as it notices words you use, and always asks first."
@@ -366,7 +355,6 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
             isDirty={memoryText !== memoryStored}
             canSave={canSaveNote(memoryText)}
             {...(memoryRoomNotice(memoryText) === undefined ? {} : { notice: memoryRoomNotice(memoryText) })}
-            onSelectMode={setMemoryMode}
             onChangeMarkdown={setMemoryText}
             onSave={saveMemory}
             onCancel={() => setMemoryText(memoryStored)}
@@ -399,15 +387,13 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
       {section === 'voice' && (
         <VoicePanel isRegenerating={voice.isRegenerating} canRegenerate={voice.canRegenerate} onRegenerate={voice.regenerate}>
           <DocumentEditor
-            mode={voiceMode}
-            viewNode={<MarkdownView>{renderMarkdown(voice.draft)}</MarkdownView>}
+            mode="rich"
             richNode={<MarkdownEditor key={voice.stored} defaultValue={voice.draft} onChange={voice.setDraft} />}
             markdownValue={voice.draft}
             emptyHint="Nothing yet. Marcel writes one from your sent mail the first time it can, or you can write your own."
             isSaving={voice.isSaving}
             isDirty={voice.isDirty}
             {...(voice.notice === undefined ? {} : { notice: voice.notice })}
-            onSelectMode={setVoiceMode}
             onChangeMarkdown={voice.setDraft}
             onSave={voice.save}
             onCancel={voice.cancel}

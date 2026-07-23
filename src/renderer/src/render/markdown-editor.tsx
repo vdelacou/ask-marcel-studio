@@ -29,12 +29,18 @@ export const MarkdownEditor: FC<MarkdownEditorProps> = ({ defaultValue, onChange
   // loses the cursor mid-sentence.
   const latest = useRef(onChange);
   latest.current = onChange;
+  // The starting text, captured once per mount. Held in a ref rather than read straight
+  // from the prop because the prop is the LIVE document: the panels feed every keystroke
+  // back in, so an effect depending on it destroyed and rebuilt the editor on every
+  // letter, throwing away the DOM node holding the cursor. A ref is not a reactive value,
+  // so the effect below can honestly depend on nothing and run once.
+  const initial = useRef(defaultValue);
 
   useEffect(() => {
     const root = host.current;
     if (root === null) return undefined;
 
-    const crepe = new Crepe({ root, defaultValue });
+    const crepe = new Crepe({ root, defaultValue: initial.current });
     crepe.on((listener) => {
       listener.markdownUpdated((_context, markdown) => latest.current(markdown));
     });
@@ -42,10 +48,9 @@ export const MarkdownEditor: FC<MarkdownEditorProps> = ({ defaultValue, onChange
     return () => {
       void crepe.destroy();
     };
-    // defaultValue is deliberately absent from the dependencies: the editor owns its
-    // content once it starts, and the parent remounts it by key when it has to start
-    // again from something new.
-  }, [defaultValue]);
+    // Nothing: the editor owns its content once it starts, and the parent remounts it by
+    // key when it has to start again from something new.
+  }, []);
 
   return <div ref={host} />;
 };
