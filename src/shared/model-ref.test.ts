@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { formatModelRef, modelRefIsConfigured, parseModelRef } from './model-ref.ts';
+import { formatModelRef, modelForNewConversation, modelRefIsConfigured, parseModelRef } from './model-ref.ts';
 
 describe('addressing a model that belongs to a configured provider', () => {
   test('a reference naming an Anthropic provider and one of its models resolves to both parts', () => {
@@ -111,5 +111,33 @@ describe('checking a reference against what is set up', () => {
 
   test('nothing configured accepts nothing', () => {
     expect(modelRefIsConfigured([], 'anthropic::claude-fable-5')).toBe(false);
+  });
+});
+
+describe('picking the model a new conversation opens on', () => {
+  const providers = [
+    { id: 'anthropic', modelIds: ['claude-fable-5', 'claude-haiku-4-5'] },
+    { id: 'google', modelIds: ['gemini-3.6-flash'] },
+  ];
+
+  test('the model last used is the one the next conversation opens on', () => {
+    expect(modelForNewConversation(providers, 'google::gemini-3.6-flash')).toBe('google::gemini-3.6-flash');
+  });
+
+  test('having used none yet, the first model configured is the one', () => {
+    expect(modelForNewConversation(providers, undefined)).toBe('anthropic::claude-fable-5');
+  });
+
+  test('a model last used before its provider was removed gives way to the first still configured', () => {
+    expect(modelForNewConversation(providers, 'deleted::some-model')).toBe('anthropic::claude-fable-5');
+  });
+
+  test('a provider whose models were all deleted is passed over rather than yielding nothing', () => {
+    expect(modelForNewConversation([{ id: 'empty', modelIds: [] }, ...providers], undefined)).toBe('anthropic::claude-fable-5');
+  });
+
+  test('nothing configured means there is no conversation to open', () => {
+    expect(modelForNewConversation([], undefined)).toBeUndefined();
+    expect(modelForNewConversation([{ id: 'empty', modelIds: [] }], 'empty::gone')).toBeUndefined();
   });
 });

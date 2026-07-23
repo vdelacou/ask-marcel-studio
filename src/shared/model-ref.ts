@@ -57,3 +57,22 @@ export const modelRefIsConfigured = (providers: readonly ConfiguredProvider[], r
   if (provider === undefined) return false;
   return provider.modelIds.includes(parsed.value.modelId);
 };
+
+// Which model a new conversation opens on: the one last used, as long as it still exists.
+//
+// There is no setting for this. The app remembers the last model chosen and opens the next
+// conversation on it, so switching model in a conversation quietly sets the direction for
+// the ones after it. `remembered` is therefore only ever a record of what happened, never a
+// preference the user maintained, which is why it is allowed to go stale: a provider removed
+// in settings simply moves the answer on to the first model still configured rather than
+// leaving a new conversation pinned to a model that would fail on its first turn.
+//
+// Undefined means nothing is configured at all, so there is no conversation to open.
+export const modelForNewConversation = (providers: readonly ConfiguredProvider[], remembered: string | undefined): string | undefined => {
+  if (remembered !== undefined && modelRefIsConfigured(providers, remembered)) return remembered;
+  // Every reference the user has configured, in the order they arranged their providers;
+  // the first is the answer, and undefined when there is none. Built as a flat list rather
+  // than found-then-indexed because a provider carrying no models then contributes nothing
+  // and is passed over for free, with no guard that no test could ever tell apart.
+  return providers.flatMap((provider) => provider.modelIds.map((modelId) => formatModelRef({ providerId: provider.id, modelId })))[0];
+};

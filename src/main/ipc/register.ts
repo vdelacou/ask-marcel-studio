@@ -11,7 +11,7 @@
  */
 import { dialog, ipcMain } from 'electron';
 import { CHANNEL } from '../../shared/ipc-contract.ts';
-import { modelRefIsConfigured } from '../../shared/model-ref.ts';
+import { modelForNewConversation, modelRefIsConfigured } from '../../shared/model-ref.ts';
 import type { AgentRuntime } from '../services/agent/agent-runtime.ts';
 import type { SkillsService } from '../services/skills/skills-service.ts';
 import { parseModelTestTarget } from '../../shared/model-test.ts';
@@ -50,7 +50,20 @@ export const registerIpc = (deps: IpcDeps): void => {
   ipcMain.handle(CHANNEL.settingsSave, (_event, candidate: unknown) => deps.settings.save(candidate));
 
   ipcMain.handle(CHANNEL.conversationsList, () => deps.conversations.list());
-  ipcMain.handle(CHANNEL.conversationsCreate, (_event, input: unknown) => deps.conversations.create({ model: asString((input as { model?: unknown } | undefined)?.model) }));
+  // The model is resolved HERE, not sent by the renderer, because "the model last used" is
+  // written by a different click (setModel) than the one that reads it. A renderer holding
+  // the value from boot would open a new conversation on the model that was current when the
+  // window opened, not the one just switched to.
+  ipcMain.handle(CHANNEL.conversationsCreate, async (_event, input: unknown) => {
+    const asked = asString((input as { model?: unknown } | undefined)?.model);
+    const settings = await deps.settings.get();
+    if (!settings.ok) return err(settings.error);
+    // An explicit model still wins, and is checked like any other reference crossing IPC.
+    if (asked.length > 0 && modelRefIsConfigured(settings.value.providers, asked)) return deps.conversations.create({ model: asked });
+    const model = modelForNewConversation(settings.value.providers, settings.value.defaultModel);
+    if (model === undefined) return err({ kind: 'invalid', message: 'no model is set up yet' });
+    return deps.conversations.create({ model });
+  });
   ipcMain.handle(CHANNEL.conversationsGet, (_event, id: unknown) => deps.conversations.get(asString(id)));
   ipcMain.handle(CHANNEL.conversationsRename, (_event, input: unknown) => {
     const draft = input as { id?: unknown; title?: unknown } | undefined;
@@ -65,7 +78,13 @@ export const registerIpc = (deps: IpcDeps): void => {
     const settings = await deps.settings.get();
     if (!settings.ok) return err(settings.error);
     if (!modelRefIsConfigured(settings.value.providers, model)) return err({ kind: 'invalid', message: 'that model is not set up any more' });
-    return deps.conversations.setModel({ id: asString(draft?.id), model });
+    const changed = await deps.conversations.setModel({ id: asString(draft?.id), model });
+    // Remembered as the model the NEXT new conversation opens on. There is no setting for
+    // it: switching model here is the only way it is ever chosen. Saved after the
+    // conversation itself, and its failure is deliberately not reported, because the model
+    // did change: losing the memory of it is not worth failing the click the user made.
+    if (changed.ok) await deps.settings.save({ ...settings.value, defaultModel: model });
+    return changed;
   });
   ipcMain.handle(CHANNEL.conversationsDelete, (_event, id: unknown) => deps.conversations.remove(asString(id)));
 

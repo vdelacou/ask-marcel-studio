@@ -19,15 +19,7 @@ import { readJsonFile, removeFile, writeJsonFileAtomic } from './json-file.ts';
 import { parseModelRef } from '../../../shared/model-ref.ts';
 import { MAX_IMPORT_BYTES, resolveCollision, safeImportName } from '../../../shared/import-plan.ts';
 import { formatError } from '../../../shared/utilities/format-error.ts';
-import type {
-  CreateConversationInput,
-  ImportError,
-  ImportPathsInput,
-  ImportedFile,
-  RenameConversationInput,
-  SetConversationModelInput,
-  StoreError,
-} from '../../../shared/ipc-contract.ts';
+import type { ImportError, ImportPathsInput, ImportedFile, RenameConversationInput, SetConversationModelInput, StoreError } from '../../../shared/ipc-contract.ts';
 import type { Conversation, ConversationMeta } from '../../../shared/types.ts';
 import type { Result } from '../../../shared/result.ts';
 import { err, ok } from '../../../shared/result.ts';
@@ -39,9 +31,15 @@ export type ConversationsStoreDeps = {
   readonly now: () => string;
 };
 
+// What create needs once main has decided: a model reference that definitely exists. The
+// IPC input's model is optional and untrusted; this one has been through the checkpoint.
+export type ResolvedCreateInput = { readonly model: string };
+
 export type ConversationsStore = {
   readonly list: () => Promise<Result<readonly ConversationMeta[], StoreError>>;
-  readonly create: (input: CreateConversationInput) => Promise<Result<Conversation, StoreError>>;
+  // A RESOLVED model, unlike the optional one on the IPC input: main decides which model a
+  // new conversation opens on (model-ref.ts) and the store is handed the answer.
+  readonly create: (input: ResolvedCreateInput) => Promise<Result<Conversation, StoreError>>;
   readonly get: (id: string) => Promise<Result<Conversation, StoreError>>;
   readonly rename: (input: RenameConversationInput) => Promise<Result<ConversationMeta, StoreError>>;
   // Takes effect from the next message: the runtime reads the model per send.
@@ -101,7 +99,7 @@ export const createConversationsStore = (deps: ConversationsStoreDeps): Conversa
     return ok([...metas].sort(byMostRecentlyUpdated));
   };
 
-  const create = async (input: CreateConversationInput): Promise<Result<Conversation, StoreError>> => {
+  const create = async (input: ResolvedCreateInput): Promise<Result<Conversation, StoreError>> => {
     const conversation = newConversation(newConversationId(), input.model, deps.now());
     return writeOne(conversation);
   };
