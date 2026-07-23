@@ -101,7 +101,6 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
   const [pendingNotes, setPendingNotes] = useState(0);
   const [officePolicy, setOfficePolicy] = useState<OfficePolicy | undefined>(undefined);
   const [expandedCategory, setExpandedCategory] = useState<string | undefined>(undefined);
-  const [expandedCommand, setExpandedCommand] = useState<string | undefined>(undefined);
 
   const loadOffice = useCallback((): void => {
     void (async (): Promise<void> => {
@@ -267,7 +266,7 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
   const onToggleCategory = useCallback(
     (name: string): void => {
       const rows = categoryRows(officeCatalog, officePolicy);
-      const isEnabled = rows.find((row) => row.name === name)?.isEnabled ?? true;
+      const isEnabled = rows.find((row) => row.policyName === name)?.isEnabled ?? true;
       const next = toggleCategory(officePolicy, name, !isEnabled);
       setOfficePolicy(next);
       persist(drafts, defaultModel, next);
@@ -467,16 +466,11 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
           isScopesOpen={isScopesOpen}
           categories={categoryRows(officeCatalog, officePolicy)}
           {...(expandedCategory === undefined ? {} : { expandedCategory })}
-          {...(expandedCommand === undefined ? {} : { expandedCommand })}
           onToggleScopes={() => setIsScopesOpen((open) => !open)}
           onToggleCategory={onToggleCategory}
           // Closing a category forgets which command was open inside it, so reopening it
           // starts from the list rather than from whatever was read last time.
-          onExpandCategory={(name) => {
-            setExpandedCommand(undefined);
-            setExpandedCategory((current) => (current === name ? undefined : name));
-          }}
-          onExpandCommand={(name) => setExpandedCommand((current) => (current === name ? undefined : name))}
+          onExpandCategory={(key) => setExpandedCategory((current) => (current === key ? undefined : key))}
           onLogin={onLogin}
           onSignOut={onSignOut}
         />

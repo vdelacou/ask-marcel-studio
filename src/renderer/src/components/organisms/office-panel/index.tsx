@@ -5,7 +5,10 @@ import { CategoryToggleRow } from '../../molecules/category-toggle-row/index.tsx
 // One area of Microsoft 365, ready to be switched on or off. Built by the page shell
 // (lib/office-categories) from the CLI's own catalog.
 export type OfficeCategoryRow = {
-  readonly name: string;
+  // Stable per display row (a CLI category, or a meta group).
+  readonly key: string;
+  // The category the toggle actually flips.
+  readonly policyName: string;
   readonly label: string;
   readonly commandCount: number;
   readonly isEnabled: boolean;
@@ -32,11 +35,9 @@ export type OfficePanelProps = {
   isScopesOpen: boolean;
   categories: readonly OfficeCategoryRow[];
   expandedCategory?: string;
-  expandedCommand?: string;
   onToggleScopes: () => void;
-  onToggleCategory: (name: string) => void;
-  onExpandCategory: (name: string) => void;
-  onExpandCommand: (name: string) => void;
+  onToggleCategory: (policyName: string) => void;
+  onExpandCategory: (key: string) => void;
   onLogin: () => void;
   onSignOut: () => void;
 };
@@ -65,11 +66,9 @@ export const OfficePanel: FC<OfficePanelProps> = ({
   isScopesOpen,
   categories,
   expandedCategory,
-  expandedCommand,
   onToggleScopes,
   onToggleCategory,
   onExpandCategory,
-  onExpandCommand,
   onLogin,
   onSignOut,
 }) => (
@@ -141,17 +140,15 @@ export const OfficePanel: FC<OfficePanelProps> = ({
         </div>
         {categories.map((category) => (
           <CategoryToggleRow
-            key={category.name}
+            key={category.key}
             label={category.label}
             commandCount={category.commandCount}
             isEnabled={category.isEnabled}
             isLocked={category.isLocked}
-            isExpanded={category.name === expandedCategory}
-            {...(expandedCommand === undefined ? {} : { expandedCommand })}
+            isExpanded={category.key === expandedCategory}
             commands={category.commands}
-            onToggle={() => onToggleCategory(category.name)}
-            onToggleExpand={() => onExpandCategory(category.name)}
-            onExpandCommand={onExpandCommand}
+            onToggle={() => onToggleCategory(category.policyName)}
+            onToggleExpand={() => onExpandCategory(category.key)}
           />
         ))}
       </div>

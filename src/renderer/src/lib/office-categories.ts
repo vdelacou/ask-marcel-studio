@@ -22,10 +22,16 @@ const LABELS: Readonly<Record<string, string>> = {
   teams: 'Teams',
   tasks: 'Tasks and Planner',
   notes: 'OneNote',
-  // Not one app: search across everything, who the user is, paging through a long
-  // answer, reading a file already on the machine, and the sign-in self-check.
-  meta: 'Search and basics',
 };
+
+// The meta category is not one app, so calling it "Search and basics" told nobody
+// anything. For display it splits into groups by what its commands actually do; every
+// group still toggles the one meta policy, which stays always-on.
+const META_GROUPS: readonly { readonly key: string; readonly label: string; readonly commands: readonly string[] }[] = [
+  { key: 'meta:local-files', label: 'Local files', commands: ['convert-local-file-to-markdown', 'extract-local-file-images'] },
+  { key: 'meta:search', label: 'Search', commands: ['microsoft-search-query', 'next-page'] },
+  { key: 'meta:account', label: 'Account', commands: ['my-quick-context', 'scopes-check'] },
+];
 
 export const categoryLabel = (name: string): string => LABELS[name] ?? name;
 
@@ -52,22 +58,52 @@ export const summaryFirstSentence = (summary: string): string => {
 };
 
 export type CategoryRow = {
-  readonly name: string;
+  // Stable per display row: the CLI category for most, or 'meta:<group>' for the split.
+  readonly key: string;
+  // The category the switch actually toggles. Stays 'meta' for every split meta row, so
+  // switching one is switching the whole always-on group (which cannot be switched off).
+  readonly policyName: string;
   readonly label: string;
   readonly commandCount: number;
   readonly isEnabled: boolean;
-  // Everything else leans on this group: the ids other commands need, paging, and the
-  // check that says why a call failed. So that row shows its commands but has no switch.
+  // Everything else leans on the meta group: the ids other commands need, paging, and the
+  // check that says why a call failed. Those rows show their commands but have no switch.
   readonly isLocked: boolean;
   readonly commands: readonly { readonly name: string; readonly summary: string }[];
 };
 
-export const categoryRows = (catalog: readonly OfficeCategory[], policy: OfficePolicy | undefined): readonly CategoryRow[] =>
-  catalog.map((category) => ({
-    name: category.name,
-    label: categoryLabel(category.name),
-    commandCount: category.commands.length,
-    isEnabled: isCategoryEnabled(policy, category.name),
-    isLocked: category.name === ALWAYS_ENABLED_CATEGORY,
-    commands: category.commands.map((command) => ({ name: command.name, summary: summaryFirstSentence(command.summary) })),
+type Command = { readonly name: string; readonly summary: string };
+
+const readable = (command: { readonly name: string; readonly summary: string }): Command => ({ name: command.name, summary: summaryFirstSentence(command.summary) });
+
+// The meta category as its display groups. A command the table does not place falls to a
+// "Search and basics" catch-all, so a new CLI meta command is never dropped silently.
+const metaRows = (category: OfficeCategory): readonly CategoryRow[] => {
+  const placed = new Set(META_GROUPS.flatMap((group) => group.commands));
+  const grouped = META_GROUPS.map((group) => ({
+    key: group.key,
+    policyName: category.name,
+    label: group.label,
+    commands: category.commands.filter((command) => group.commands.includes(command.name)).map(readable),
   }));
+  const leftover = category.commands.filter((command) => !placed.has(command.name)).map(readable);
+  const rows = leftover.length === 0 ? grouped : [...grouped, { key: 'meta:other', policyName: category.name, label: 'Search and basics', commands: leftover }];
+  return rows.filter((row) => row.commands.length > 0).map((row) => ({ ...row, commandCount: row.commands.length, isEnabled: true, isLocked: true }));
+};
+
+export const categoryRows = (catalog: readonly OfficeCategory[], policy: OfficePolicy | undefined): readonly CategoryRow[] =>
+  catalog.flatMap((category) =>
+    category.name === ALWAYS_ENABLED_CATEGORY
+      ? metaRows(category)
+      : [
+          {
+            key: category.name,
+            policyName: category.name,
+            label: categoryLabel(category.name),
+            commandCount: category.commands.length,
+            isEnabled: isCategoryEnabled(policy, category.name),
+            isLocked: false,
+            commands: category.commands.map(readable),
+          },
+        ]
+  );
