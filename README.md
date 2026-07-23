@@ -31,10 +31,16 @@ Electron + React, MIT licensed. Built to the atelier engineering standard.
   because `bun run` delegates to real node. Everything else is Bun-only.
 - Optional: `gitleaks` for pre-commit gate 3 (`brew install gitleaks`). The hook warns and
   continues without it.
+- Xcode Command Line Tools (`xcode-select --install`), to build the one native dependency
+  (`better-sqlite3`, which backs the searchable memory).
 
 Running the app needs no separate Node install: Electron ships its own runtime. It has no
 postinstall, so `bun install` is fast and the ~124MB binary downloads on the first `bun run dev`
 instead (about two minutes, once).
+
+`better-sqlite3` is compiled against Electron's ABI, not Node's, so after every `bun install`
+and every Electron version bump run `bun run rebuild:native` (it wraps `electron-rebuild`).
+The app fails to load the memory store with a version-mismatch error otherwise.
 
 ## Install and run
 

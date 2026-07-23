@@ -19,8 +19,10 @@
     "mutate:changed": "bash scripts/mutate-changed.sh",
     "mutate:staged": "bash scripts/mutate-staged.sh",
     "fetch:python": "bun run scripts/fetch-python.ts",
-    "fetch:wheels": "bun run scripts/fetch-wheels.ts"
+    "fetch:wheels": "bun run scripts/fetch-wheels.ts",
+    "rebuild:native": "electron-rebuild -f -w better-sqlite3"
   },
+  "trustedDependencies": ["better-sqlite3"],
   "dependencies": {
     "@ai-sdk/openai": "^4.0.15",
     "@ai-sdk/openai-compatible": "^3.0.14",
@@ -32,15 +34,18 @@
     "@shikijs/themes": "^4.3.1",
     "ai": "^7.0.30",
     "ask-marcel-office-cli": "^2.2.0",
+    "better-sqlite3": "^13.0.1",
     "npm": "^12.0.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
-    "shiki": "^4.3.1"
+    "shiki": "^4.3.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^2.0.0",
+    "@electron/rebuild": "^4.2.0",
     "@eslint/js": "^10.0.1",
     "@stryker-mutator/core": "^9.6.1",
     "@tailwindcss/vite": "^4.3.3",
