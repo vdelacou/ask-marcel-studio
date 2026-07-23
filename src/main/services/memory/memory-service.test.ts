@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createMemoryService } from './memory-service.ts';
+import { createFakeMemoryStore } from '../../../test-helpers/fake-memory-store.ts';
 import type { MemoryService } from './memory-service.ts';
 import type { MemoryEvent } from '../../../shared/ipc-contract.ts';
 import type { RawCandidate } from '../../../shared/memory-extract.ts';
@@ -11,6 +12,7 @@ let userData = '';
 let service: MemoryService;
 let events: MemoryEvent[] = [];
 let nextId = 0;
+let store: ReturnType<typeof createFakeMemoryStore>;
 
 const found = (over: Partial<RawCandidate> = {}): RawCandidate => ({
   kind: 'jargon',
@@ -25,6 +27,7 @@ const noteAt = (name: string): string => join(userData, 'claude-config', 'memory
 
 beforeEach(() => {
   userData = mkdtempSync(join(tmpdir(), 'studio-memory-'));
+  store = createFakeMemoryStore();
   events = [];
   nextId = 0;
   service = createMemoryService({
@@ -34,7 +37,10 @@ beforeEach(() => {
       nextId += 1;
       return `c${String(nextId)}`;
     },
-    emit: (event) => events.push(event),
+    emit: (event) => {
+      events.push(event);
+    },
+    memoryStore: store,
   });
 });
 
@@ -86,20 +92,30 @@ describe('asking before remembering', () => {
 });
 
 describe('answering a question', () => {
-  test('accepting writes the note the user confirmed, not the one that was suggested', async () => {
+  test('accepting writes the confirmed meaning into the searchable memory', async () => {
     await service.addCandidates([found()], 'conv-1');
 
     const left = await service.resolve({ id: 'c1', action: 'accept', detail: 'quick win, as finance uses it' });
 
     expect(left).toEqual({ ok: true, value: [] });
-    expect(readFileSync(noteAt('jargon'), 'utf8')).toContain('- **QW**: quick win, as finance uses it');
+    const listed = await store.list();
+    expect(listed.ok && listed.value.map((item) => item.text)).toContain('QW: quick win, as finance uses it');
   });
 
-  test('the note lands where the agent reads it', async () => {
+  test('an accepted memory is tagged as extracted, so a cleanup can tell it from a hand-typed one', async () => {
     await service.addCandidates([found()], 'conv-1');
     await service.resolve({ id: 'c1', action: 'accept', detail: 'quick win' });
 
-    expect(readFileSync(join(userData, 'claude-config', 'memory', 'jargon.md'), 'utf8')).toContain('QW');
+    const listed = await store.list();
+    expect(listed.ok && listed.value[0]?.source).toBe('extracted');
+  });
+
+  test('with memory not set up, an accepted meaning falls back to the note so nothing is lost', async () => {
+    store.failNextWith({ kind: 'not-configured', message: 'no embedder' });
+    await service.addCandidates([found()], 'conv-1');
+    await service.resolve({ id: 'c1', action: 'accept', detail: 'quick win' });
+
+    expect(readFileSync(noteAt('jargon'), 'utf8')).toContain('QW');
   });
 
   test('rejecting writes nothing and drops the question', async () => {
@@ -214,5 +230,35 @@ describe('surviving files that are not what they should be', () => {
 
     expect(await service.extractionDue('conv-1', 1)).toBe(true);
     expect(await service.readSoFar('conv-1')).toBe(0);
+  });
+});
+
+describe('carrying the old notes into the searchable memory', () => {
+  test('the notes on disk become memories, tagged as migrated', async () => {
+    await service.write('jargon', '- **UCR**: Unique Customer Reference\n');
+    await service.migrateNotes();
+
+    const listed = await store.list();
+    expect(listed.ok && listed.value.map((item) => `${item.text}:${item.source}`)).toContain('UCR: Unique Customer Reference:migrated');
+  });
+
+  test('it runs once: a second call adds nothing', async () => {
+    await service.write('jargon', '- **UCR**: Unique Customer Reference\n');
+    await service.migrateNotes();
+    await service.migrateNotes();
+
+    const listed = await store.list();
+    expect(listed.ok && listed.value).toHaveLength(1);
+  });
+
+  test('with memory not set up, the notes stay put and it tries again next time', async () => {
+    await service.write('jargon', '- **UCR**: Unique Customer Reference\n');
+    store.failNextWith({ kind: 'not-configured', message: 'no embedder' });
+    await service.migrateNotes();
+
+    // Nothing migrated, so a later run (store now working) still carries it.
+    await service.migrateNotes();
+    const listed = await store.list();
+    expect(listed.ok && listed.value).toHaveLength(1);
   });
 });

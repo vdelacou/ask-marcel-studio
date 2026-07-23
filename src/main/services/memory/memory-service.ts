@@ -19,6 +19,9 @@ import type { RawCandidate } from '../../../shared/memory-extract.ts';
 import { memoryFilePath, memoryQueuePath, memoryStatePath } from '../../../shared/paths.ts';
 import { readJsonFile, readTextFile, writeTextFileAtomic } from '../store/json-file.ts';
 import type { MemoryEvent, MemoryResolveInput, StoreError } from '../../../shared/ipc-contract.ts';
+import type { MemoryStore } from '../../../shared/memory-store.ts';
+import { notesToFacts } from '../../../shared/memory-migrate.ts';
+import { memoryMigratedMarkerPath } from '../../../shared/paths.ts';
 import type { Result } from '../../../shared/result.ts';
 import { err, ok } from '../../../shared/result.ts';
 
@@ -28,6 +31,9 @@ export type MemoryServiceDeps = {
   readonly newId: () => string;
   // How the renderer learns there is something to ask. Fire and forget.
   readonly emit: (event: MemoryEvent) => void;
+  // The searchable memory. An accepted candidate is written here; the note is kept only as
+  // a transition fallback for a user who has not set up an embedding provider yet.
+  readonly memoryStore: MemoryStore;
 };
 
 export type MemoryService = {
@@ -41,6 +47,9 @@ export type MemoryService = {
   readonly extractionDue: (conversationId: string, messageCount: number) => Promise<boolean>;
   readonly readSoFar: (conversationId: string) => Promise<number>;
   readonly markExtracted: (conversationId: string, messageCount: number) => Promise<void>;
+  // One-shot: carry the old notes into the searchable memory. Does nothing after the
+  // first successful run, and nothing while memory is not set up.
+  readonly migrateNotes: () => Promise<void>;
 };
 
 export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
@@ -105,10 +114,17 @@ export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
       const detail = typeof draft.detail === 'string' ? draft.detail.trim() : '';
       if (detail.length === 0) return err({ kind: 'invalid', message: 'a note needs something written in it' });
 
-      const current = parseMemoryDoc(await readNote(candidate.kind));
-      const merged = serialiseMemoryDoc(mergeMemoryEntries(current, [{ term: candidate.term, detail }]));
-      const written = await writeTextFileAtomic(memoryFilePath(deps.userData, candidate.kind), merged);
-      if (!written.ok) return err({ kind: 'write-failed', message: written.error.message });
+      // Into the searchable memory first. If it is not set up (no embedding provider), fall
+      // back to the note so nothing the user accepted is lost during the transition.
+      const stored = await deps.memoryStore.add({ text: `${candidate.term}: ${detail}`, source: 'extracted' });
+      if (!stored.ok && stored.error.kind === 'not-configured') {
+        const current = parseMemoryDoc(await readNote(candidate.kind));
+        const merged = serialiseMemoryDoc(mergeMemoryEntries(current, [{ term: candidate.term, detail }]));
+        const written = await writeTextFileAtomic(memoryFilePath(deps.userData, candidate.kind), merged);
+        if (!written.ok) return err({ kind: 'write-failed', message: written.error.message });
+      } else if (!stored.ok) {
+        return err({ kind: 'write-failed', message: stored.error.message });
+      }
     }
 
     const next = removeCandidate(queue.value, draft.id);
@@ -172,5 +188,19 @@ export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
     await writeTextFileAtomic(memoryStatePath(deps.userData), serialiseMemoryState(markExtracted(state.value, conversationId, messageCount, deps.now())));
   };
 
-  return { pending, resolve, read, write, glossaryBlocks, addCandidates: addFound, extractionDue, readSoFar: howFar, markExtracted: rememberRead };
+  const migrateNotes = async (): Promise<void> => {
+    // Already done, or memory is not set up: either way, nothing to do now.
+    const marker = await readJsonFile(memoryMigratedMarkerPath(deps.userData));
+    if (marker.ok) return;
+    const facts = notesToFacts({ jargon: await readNote('jargon'), team: await readNote('team'), people: await readNote('people') });
+    for (const fact of facts) {
+      const added = await deps.memoryStore.add({ text: fact.text, source: 'migrated' });
+      // Not set up yet: leave the notes in place and try again next launch. A single
+      // failed add (a too-long line) is skipped rather than blocking the rest.
+      if (!added.ok && added.error.kind === 'not-configured') return;
+    }
+    await writeTextFileAtomic(memoryMigratedMarkerPath(deps.userData), JSON.stringify({ at: deps.now(), count: facts.length }, null, 2));
+  };
+
+  return { pending, resolve, read, write, glossaryBlocks, addCandidates: addFound, extractionDue, readSoFar: howFar, markExtracted: rememberRead, migrateNotes };
 };

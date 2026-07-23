@@ -259,11 +259,11 @@ const buildRuntime = (
   const officeCatalog = createOfficeCatalog(officeCatalogPath());
   const agentsStore = createAgentsStore({ userData: toolsRoot, builtins: BUILTIN_AGENTS });
   const agentFiles = createAgentFilesStore({ userData });
-  const memory = createMemoryService({ userData, now, newId: () => crypto.randomUUID(), emit: emitMemory });
 
   // The searchable memory: a native sqlite store behind the port when an embedding
   // provider is configured, and a not-set-up store otherwise. The embedder reads its
   // provider from settings per call, so changing it in settings applies without a restart.
+  // Built before the memory service, which writes accepted candidates into it.
   const memoryStore = ((): MemoryStore => {
     const embed: Embedder = async (text) => {
       const current = await settings.get();
@@ -276,6 +276,8 @@ const buildRuntime = (
     };
     return createSqliteMemoryStore({ dbPath: memoryDbPath(userData), embed, now, newId: () => crypto.randomUUID() });
   })();
+
+  const memory = createMemoryService({ userData, now, newId: () => crypto.randomUUID(), emit: emitMemory, memoryStore });
 
   const location = officeCliLocation();
   const officeRun = createOfficeRun(location, process.env);
@@ -471,6 +473,10 @@ void app.whenReady().then(async () => {
   // user deleted by hand comes back. Not awaited: a skill lands before the first
   // message can possibly be sent, and blocking startup on a copy would be worse.
   void skills.seedBuiltins();
+  // Carry the old jargon/team/people notes into the searchable memory, once. Silent and
+  // not awaited: it does nothing until an embedding provider is set up, and nothing after
+  // the first successful run.
+  void memory.migrateNotes();
   // Who the user is: read what was stored, then fetch again only if it has gone stale.
   // Not awaited, and silent on failure: the window opens either way, and the block is
   // simply absent from the prompt until it lands.
