@@ -5,8 +5,8 @@
  * which is why an incomplete one comes back as an error rather than being caught here.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { AGENT_TOOL_OPTIONS } from '../../../shared/agents-doc.ts';
-import type { AgentToolName, AgentView, SubAgent } from '../../../shared/agents-doc.ts';
+import type { AgentView, SubAgent } from '../../../shared/agents-doc.ts';
+import { slugify } from '../lib/slugify.ts';
 
 export type AgentDraft = SubAgent & { readonly isBuiltIn: boolean; readonly isModified: boolean; readonly isNew: boolean };
 
@@ -21,7 +21,6 @@ export type AgentsController = {
   readonly changeName: (name: string) => void;
   readonly changeDescription: (description: string) => void;
   readonly changePrompt: (prompt: string) => void;
-  readonly toggleTool: (tool: string) => void;
   readonly save: () => void;
   readonly remove: () => void;
   readonly restore: () => void;
@@ -73,22 +72,12 @@ export const useAgents = (): AgentsController => {
   const changeDescription = useCallback((description: string): void => patch({ description }), [patch]);
   const changePrompt = useCallback((prompt: string): void => patch({ prompt }), [patch]);
 
-  const toggleTool = useCallback((tool: string): void => {
-    const known = AGENT_TOOL_OPTIONS.find((option) => option === tool);
-    if (known === undefined) return;
-    setEditing((current) => {
-      if (current === undefined) return current;
-      const next: readonly AgentToolName[] = current.tools.includes(known) ? current.tools.filter((existing) => existing !== known) : [...current.tools, known];
-      return { ...current, tools: next };
-    });
-  }, []);
-
   const save = useCallback((): void => {
     if (editing === undefined) return;
     setError(undefined);
     setIsSaving(true);
     void (async (): Promise<void> => {
-      const saved = await studio.agents.save({ name: editing.name, description: editing.description, prompt: editing.prompt, tools: editing.tools });
+      const saved = await studio.agents.save({ name: slugify(editing.name), description: editing.description, prompt: editing.prompt, tools: [] });
       setIsSaving(false);
       if (!saved.ok) {
         setError(saved.error.message);
@@ -138,7 +127,6 @@ export const useAgents = (): AgentsController => {
     changeName,
     changeDescription,
     changePrompt,
-    toggleTool,
     save,
     remove,
     restore,

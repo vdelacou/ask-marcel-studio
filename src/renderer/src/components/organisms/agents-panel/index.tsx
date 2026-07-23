@@ -15,15 +15,15 @@ export const AgentsPanel: FC<AgentsPanelProps> = ({ agents, error, onAdd, onEdit
   <section className="flex flex-col gap-y-4">
     <header className="flex items-baseline justify-between">
       <div className="flex flex-col gap-y-1">
-        <h2 className="text-lg font-semibold tracking-tight text-ink">Helpers</h2>
-        <p className="text-sm text-ink-muted">Marcel hands long or repetitive jobs to a helper so the conversation stays readable.</p>
+        <h2 className="text-lg font-semibold tracking-tight text-ink">Agents</h2>
+        <p className="text-sm text-ink-muted">Marcel hands long or repetitive jobs to an agent so the conversation stays readable.</p>
       </div>
       <Button variant="secondary" onClick={onAdd}>
-        Add helper
+        Add agent
       </Button>
     </header>
 
-    {agents.length === 0 && <p className="rounded-panel border border-dashed border-border-subtle p-8 text-center text-sm text-ink-muted">No helpers yet.</p>}
+    {agents.length === 0 && <p className="rounded-panel border border-dashed border-border-subtle p-8 text-center text-sm text-ink-muted">No agents yet.</p>}
 
     {agents.map((agent) => (
       <AgentCard key={agent.name} name={agent.name} description={agent.description} isBuiltIn={agent.isBuiltIn} isModified={agent.isModified} onEdit={() => onEdit(agent.name)} />

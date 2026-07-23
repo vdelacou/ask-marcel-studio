@@ -32,11 +32,11 @@ import { categoryRows } from '../lib/office-categories.ts';
 import { toggleCategory } from '../../../shared/office-policy.ts';
 import type { OfficeCategory } from '../../../shared/office-catalog.ts';
 import type { OfficePolicy } from '../../../shared/types.ts';
-import { AGENT_TOOL_OPTIONS } from '../../../shared/agents-doc.ts';
 import { useModelTest } from '../hooks/use-model-test.ts';
 import { rowForTest } from '../lib/model-test-view.ts';
 import { useSkills } from '../hooks/use-skills.ts';
 import { useAgents } from '../hooks/use-agents.ts';
+import { slugify } from '../lib/slugify.ts';
 import { useAgentFile } from '../hooks/use-agent-file.ts';
 import { MarkdownEditor } from '../render/markdown-editor.tsx';
 import { renderMarkdown } from '../render/markdown.tsx';
@@ -49,7 +49,7 @@ const NAV_GROUPS: readonly SettingsNavGroup[] = [
     items: [
       { id: 'models', label: 'Models', icon: 'models' },
       { id: 'skills', label: 'Skills', icon: 'skills' },
-      { id: 'agents', label: 'Helpers', icon: 'agents' },
+      { id: 'agents', label: 'Agents', icon: 'agents' },
       { id: 'memory', label: 'What it remembers', icon: 'memory' },
     ],
   },
@@ -71,11 +71,6 @@ export type SettingsPageProps = {
   // updates without waiting for its next poll.
   onOfficeChanged?: () => void;
 };
-
-// The tool checkboxes for a helper: every tool the app offers, ticked when this one
-// asks for it.
-const agentToolChoices = (chosen: readonly string[]): readonly { id: string; label: string; checked: boolean }[] =>
-  AGENT_TOOL_OPTIONS.map((tool) => ({ id: tool, label: tool, checked: chosen.includes(tool) }));
 
 export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeChanged }) => {
   const [section, setSection] = useState(initialSection ?? 'models');
@@ -363,21 +358,21 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
     ) : (
       <AgentEditor
         name={agents.editing.name}
+        slug={agents.editing.isBuiltIn ? agents.editing.name : slugify(agents.editing.name)}
         description={agents.editing.description}
-        tools={agentToolChoices(agents.editing.tools)}
         isBuiltIn={agents.editing.isBuiltIn}
         isNew={agents.editing.isNew}
         isModified={agents.editing.isModified}
         {...agentError}
         onChangeName={agents.changeName}
         onChangeDescription={agents.changeDescription}
-        onToggleTool={agents.toggleTool}
         onBack={agents.closeEditor}
         onRemove={agents.remove}
         onRestore={agents.restore}
       >
         <DocumentEditor
-          mode="markdown"
+          mode="rich"
+          richNode={<MarkdownEditor key={agents.editing.isNew ? 'new-agent' : agents.editing.name} defaultValue={agents.editing.prompt} onChange={agents.changePrompt} />}
           markdownValue={agents.editing.prompt}
           isSaving={agents.isSaving}
           isDirty

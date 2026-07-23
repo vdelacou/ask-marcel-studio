@@ -1,7 +1,7 @@
 import type { FC } from 'react';
 import { Button } from '../../atoms/button/index.tsx';
 
-// One helper the agent can delegate to.
+// One agent Marcel can delegate to.
 export type AgentCardProps = {
   name: string;
   description: string;
