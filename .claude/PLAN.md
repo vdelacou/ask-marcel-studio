@@ -1,50 +1,19 @@
-# PLAN: Ask Marcel Studio M10 (the app an office employee can live in)
+# PLAN: branch feat/m365-builtin-pack, current state (2026-07-23)
 
-Status: **COMPLETE and committed** on `feat/m365-builtin-pack`, 2026-07-21. Branch tip green on
-`bun test` (1195), `typecheck`, `lint:strict`, `coverage`, `build`, and `mutate:staged` on every
-commit touching mutation scope. Not merged; never run against a live mailbox.
+No task in flight. Completed on this branch today, all gates green (1355 tests, lint,
+typecheck, build), verified live in the app via .claude/skills/run-studio:
 
-Source: the user's 20 features, planned in `~/.claude/plans/if-multiple-model-lively-pillow.md`
-and approved before any code. All twenty are in; the ones that changed how the app feels:
+1. [x] Role→person routing + scoped-title/two-source/tenant-first rules (core.md, skill)
+2. [x] doc-reader + mail-reader replace m365-reader; delegation forced; generic CLI
+       subagents withdrawn via Task() deny rules
+3. [x] Extraction doctrine: redirect + Grep/grep/awk, no jq dependency, no read-backs
+4. [x] Subagent steps persisted as child parts (parentToolUseId), rendered nested in
+       the Agent card live and after reopen; result bodies included
+5. [x] conversation-doc loader keeps parentToolUseId (was stripping it on load)
+6. [x] tool-label: Skill reads the `skill` key; Agent tool name labels by description
+7. [x] Prompt hardening: bare `ask-marcel-office` only (no absolute paths, no npx, no
+       silencing); local disk out of bounds for readers
 
-- **The conversation no longer disappears** when you switch away mid-answer (`lib/chat-cache`,
-  `use-chat-views`, plus a `turn-saved` event, because `turn-done` fires before the save).
-- **Tool calls say what they are doing** ("Reading your last 5 emails"), and a delegated helper
-  shows its steps.
-- **The shell is guarded** (`bash-guard`, `agent-hooks`): no deleting outside the conversation's
-  own folder, no touching the machine, no signing in to Microsoft 365 for you.
-- **Microsoft 365 is switchable by area**, and the panel says what was granted in words.
-- **Skills, helpers, signature, writing voice and the notes** are editable in Settings, in one
-  three-mode editor, with built-ins restorable.
-- **The app remembers the user's vocabulary**, and never without asking.
-
-## Decisions taken with the user (2026-07-21)
-
-1. **Authorization is per category, not per command.** 184 commands is not a screen; 11 is.
-2. **Invisible guardrails, no approval dialog.** The app is for people who cannot judge
-   `rm -rf ~/Documents`; a prompt would teach clicking yes. See LESSONS for the consequences.
-3. **Memory extracts on idle, asks politely.** Five minutes of silence, then a question only
-   when no turn is running and nothing is half-typed.
-4. **People are enriched from the directory first**, so the user confirms a fact, not a guess.
-
-## Deviations from the approved plan
-
-- No `readResourceText` helper: `agent-core-io`'s read was generalised to `readBundledText`.
-- The guard's `find` rule treats every path-shaped argument as a root rather than parsing find's
-  grammar. More conservative, and it removed code no test could distinguish.
-- The guard's opaque rule scans the whole command, not the segment, because `(` ends a segment
-  before the substitution is seen. It refuses a few harmless lines; the header says so.
-
-## Gated on the user (needs a running app and a signed-in account)
-
-Code-complete and gate-green, never run for real: a PreToolUse denial reaching the model under
-`bypassPermissions` and the hook firing for the `m365-reader` subagent; `get-mail-signature
---output-path` with no `--message-id`; the voice profile and memory extraction end to end (both
-spend tokens); Milkdown Crepe on screen (it builds; CSP may need `font-src 'self' data:`); and
-`webUtils.getPathForFile` for a real drop.
-
-## Next
-
-Merge to `main`. Then M6 packaging: `resources/background/**` needs an `extraResources` entry
-beside `agent-core` and `builtin-skills`, `commands.json` rides the same asar probe, and the
-5 MB renderer chunk (Milkdown plus Shiki) is worth a look first.
+Pending, user-gated: commit slices + atelier-review-me before landing; consider a
+stronger default model than gemini-3.5-flash-lite; optional shell-guard hardening
+(block reads outside workspace/scratch) and a README line for run-studio.

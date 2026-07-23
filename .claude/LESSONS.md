@@ -307,3 +307,85 @@ Two consequences landed: `disallowedTools` on every turn plus a withdrawn-tools 
 `agents-doc`, and a gateway that refuses a tool spec with a `type` and no `input_schema`
 instead of forwarding it as an ordinary one. The general form: when a capability silently
 returns nothing on a third-party endpoint, ask whether the real API was running it for you.
+
+## [gotcha] a Gemini 3 tool loop dies on the second step without a thought signature (2026-07-22)
+
+`gemini-3.5-flash-lite` answered the first turn, then 400d the moment the agent replayed its
+own tool call: "Function call is missing a thought_signature in functionCall parts ... function
+call `default_api:Bash`, position 5". Every Gemini 3 tier enforces it, including at minimal
+thinking; Gemini 2.5 does not, which is why this never showed up before.
+
+The signature is opaque state minted with each function call and it has to come back with the
+call. `@ai-sdk/openai-compatible` handles both ends of that on its own, and PLAN.md had
+recorded the swap as closing the risk. It does not, for two reasons that only reading the
+installed package showed:
+
+- Between its two ends sits this repo's Anthropic round trip. The value arrives on the
+  `tool-call` stream part, an Anthropic `tool_use` block has nowhere to put it, and the agent
+  replays id, name and input alone. Only the gateway can hold it, keyed by tool call id.
+- The package's own round trip is broken in the middle anyway: it WRITES the signature under
+  the provider's name (`createOpenAICompatible({ name })`, here the user's provider id) and
+  READS it back from a hardcoded `providerOptions.google`. Named anything but `google` it
+  drops the value silently. Verified by probing the installed dist, not by reading the docs.
+
+What Google validates is narrower than the error reads: the first function call of each step
+of the current turn only, where the turn opens at the last user message. Later calls in a
+parallel batch legitimately carry none, so signing everything would be wrong as well as
+wasteful. Where nothing is remembered there is a documented dummy,
+`skip_thought_signature_validator`; an invented placeholder is refused as corrupted rather
+than ignored, and signatures are endpoint-bound, so one minted on Vertex will not validate on
+AI Studio.
+
+The first version of the fix then made a second mistake worth remembering on its own: it
+signed unconditionally. Every provider of kind `openai` comes through this one gateway, a
+local llama server, DeepSeek, OpenRouter, and the package writes `extra_content.google...`
+out whenever the value is present with no idea where the request is going. So the dummy
+landed on every tool loop of every non-Google endpoint from the second step on. Caught in
+review, not by a gate: every test in the block built its gateway with the Gemini provider,
+so nothing exercised the shared path. The fix gates on the upstream host being under
+`.googleapis.com`, and the test that pins it was proved meaningful by removing the gate and
+watching it fail.
+
+Two general forms. A provider SDK that claims to round-trip opaque state round-trips it only
+between its own two ends: put a translation layer in the middle and the state is yours to
+carry. And a vendor workaround added to a shared path needs the vendor test at the point of
+use, or every other vendor wears it.
+
+## [gotcha] the thin-orchestrator port dropped role→person routing, and four runs gave three CIOs (2026-07-23)
+
+"Who is the CIO of Celine?" got three different answers in four runs: the user themselves (a
+regional title on a deck they presented, promoted to the maison), "no such role" (absent from
+one divisional org chart), and twice the right person, once from the public web through plain
+Bash and once from the people path. The core routing table covered name→person (`get-user`)
+but not title→person, so every run improvised its entry point; keyword file search rewards
+co-occurrence over authority, and this mailbox over-represents the user's own region, so the
+improvisations anchored on the wrong decks. The upstream ask-marcel skill already carried the
+fix, a `microsoft-search-query` routing row and a "role titles are org-local" pitfall; the
+07-20 thin-orchestrator split simply dropped them. Ported back, plus three rules upstream
+also lacks: newest-wins is scoped to versions of the same source kind (the directory outranks
+a fresher deck for titles), titles keep their scope and identity claims need two sources, and
+the tenant outranks the public web (one run scraped DuckDuckGo via Bash even with the
+WebSearch tool removed; a tool you delete is still reachable through the shell).
+
+Two general forms. A prompt refactor that condenses a source document sheds its rarest rows
+first, exactly the ones a routing table exists for; diff the port against upstream before
+trusting it. And retrieval strategy is behavior, not commentary: a question shape with no
+prescribed first call gets a sampled one.
+
+## [gotcha] a rule phrased as confirmation guidance is optional to a flash-tier model (2026-07-23)
+
+Verified the role→person routing live by driving the built app with a Playwright script,
+seven fresh conversations, two models. First wording ("then confirm structurally: reports to
+the org's head, owns the CISO/CTO reports") executed in zero of four runs; both models
+answered from decks and rosters, and deepseek-v4-pro read the attendee list's empty CIO row
+as "the position is vacant" while holding the "CIO Office Manager" hit whose manager IS the
+answer. Rewriting the same content as a numbered procedure ("do not answer before step 3",
+step 3 being the `get-user-manager` walk) made both models run the walk on the next try, and
+gemini-3.5-flash-lite then printed the correct chain and still crowned the subordinate CTO,
+which took one more explicit line: crown the parent, never the child. Final state: both
+models converge on the right person, small model included.
+
+The general form: prose near an instruction reads as color to a small model; only numbered
+steps with an explicit stop condition and an explicitly forbidden wrong conclusion are
+load-bearing. And an eval you cannot re-run is a hope, not a gate: the Playwright driver
+(launch, fresh conversation, ask, wait, dump) is what made three wording iterations cheap.
