@@ -87,12 +87,21 @@ const parsePart = (raw: unknown): Result<MessagePart, ConversationDocError> => {
     return ok({ type: 'text', text: raw['text'] });
   }
   if (raw['type'] === 'tool') {
-    const { toolUseId, name, status, result } = raw;
+    const { toolUseId, name, status, result, parentToolUseId } = raw;
     if (typeof toolUseId !== 'string') return unreadable('a tool part must have a toolUseId');
     if (typeof name !== 'string') return unreadable('a tool part must have a name');
     if (status !== 'running' && status !== 'done' && status !== 'error') return unreadable(`a tool part has an unknown status: ${String(status)}`);
     if (result !== undefined && typeof result !== 'string') return unreadable('a tool part result must be a string');
-    return ok({ type: 'tool', toolUseId, name, input: raw['input'], status, ...(result === undefined ? {} : { result }) });
+    if (parentToolUseId !== undefined && typeof parentToolUseId !== 'string') return unreadable('a tool part parentToolUseId must be a string');
+    return ok({
+      type: 'tool',
+      toolUseId,
+      name,
+      input: raw['input'],
+      status,
+      ...(result === undefined ? {} : { result }),
+      ...(parentToolUseId === undefined ? {} : { parentToolUseId }),
+    });
   }
   return unreadable(`unknown message part type: ${String(raw['type'])}`);
 };

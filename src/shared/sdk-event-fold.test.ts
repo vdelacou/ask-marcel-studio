@@ -212,54 +212,74 @@ describe('watching the agent use a tool', () => {
   });
 });
 
-describe('showing what a subagent is doing without letting it into the transcript', () => {
+describe('watching and recording what a subagent does, without its narration', () => {
   // A Task tool spawns a subagent whose messages arrive on the same stream with
-  // parent_tool_use_id set. Its tool calls are surfaced so the user can watch a
-  // delegated job progress; nothing it does is persisted, because the spawning tool's
-  // own result is the durable record of what it concluded.
+  // parent_tool_use_id set. Its tool calls are folded as CHILD parts tagged with the
+  // spawning tool's id, so a delegated job can be watched live AND reviewed after the
+  // conversation is reopened; its narration stays out (a second conversation).
   const subagentToolUse = {
     type: 'assistant',
     session_id: 's1',
     parent_tool_use_id: 't1',
     message: { role: 'assistant', content: [{ type: 'tool_use', id: 'inner', name: 'Read', input: { file_path: '/deck.pptx' } }] },
   };
+  const subagentToolResult = {
+    type: 'user',
+    session_id: 's1',
+    parent_tool_use_id: 't1',
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'inner', content: 'forty pages of slides' }] },
+  };
 
-  test('a subagent tool call is reported under the tool that spawned it', () => {
-    const { events } = run([subagentToolUse]);
+  test('a subagent tool call is reported under the tool that spawned it and lands as a child part', () => {
+    const { state, events } = run([subagentToolUse]);
 
     expect(events).toEqual([
       { type: 'subagent-tool-start', conversationId: CONV, messageId: MSG, parentToolUseId: 't1', toolUseId: 'inner', name: 'Read', input: { file_path: '/deck.pptx' } },
     ]);
+    expect(state.parts).toEqual([{ type: 'tool', toolUseId: 'inner', name: 'Read', input: { file_path: '/deck.pptx' }, status: 'running', parentToolUseId: 't1' }]);
   });
 
-  test('nothing a subagent does reaches the conversation file', () => {
-    const { state } = run([subagentToolUse]);
+  test('a subagent tool result carries what it returned and resolves the child part', () => {
+    const { state, events } = run([subagentToolUse, subagentToolResult]);
 
-    expect(state.parts).toEqual([]);
+    expect(events.at(-1)).toEqual({
+      type: 'subagent-tool-result',
+      conversationId: CONV,
+      messageId: MSG,
+      parentToolUseId: 't1',
+      toolUseId: 'inner',
+      isError: false,
+      result: 'forty pages of slides',
+    });
+    expect(state.parts).toEqual([
+      { type: 'tool', toolUseId: 'inner', name: 'Read', input: { file_path: '/deck.pptx' }, status: 'done', result: 'forty pages of slides', parentToolUseId: 't1' },
+    ]);
   });
 
-  test('a subagent tool result reports only whether it worked, not what it returned', () => {
-    const nested = {
+  test('a subagent result for a step that never started is ignored', () => {
+    const ghost = {
       type: 'user',
       session_id: 's1',
       parent_tool_use_id: 't1',
-      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'inner', content: 'forty pages of slides' }] },
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'ghost', content: 'x' }] },
     };
-    const { state, events } = run([nested]);
+    const { state, events } = run([ghost]);
 
-    expect(events).toEqual([{ type: 'subagent-tool-result', conversationId: CONV, messageId: MSG, parentToolUseId: 't1', toolUseId: 'inner', isError: false }]);
+    expect(events).toEqual([]);
     expect(state.parts).toEqual([]);
   });
 
   test('a subagent tool that failed says so', () => {
-    const nested = {
+    const failed = {
       type: 'user',
       session_id: 's1',
       parent_tool_use_id: 't1',
       message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'inner', content: 'nope', is_error: true }] },
     };
+    const { state, events } = run([subagentToolUse, failed]);
 
-    expect(run([nested]).events).toEqual([{ type: 'subagent-tool-result', conversationId: CONV, messageId: MSG, parentToolUseId: 't1', toolUseId: 'inner', isError: true }]);
+    expect(events.at(-1)).toEqual({ type: 'subagent-tool-result', conversationId: CONV, messageId: MSG, parentToolUseId: 't1', toolUseId: 'inner', isError: true, result: 'nope' });
+    expect(state.parts.at(-1)).toMatchObject({ status: 'error', result: 'nope' });
   });
 
   test('a subagent text delta is still not shown: its narration is a second conversation', () => {
@@ -342,7 +362,7 @@ describe('showing what a subagent is doing without letting it into the transcrip
       },
     };
 
-    expect(run([nested]).events.map((e) => (e.type === 'subagent-tool-result' ? e.toolUseId : e.type))).toEqual(['inner']);
+    expect(run([subagentToolUse, nested]).events.map((e) => (e.type === 'subagent-tool-result' ? e.toolUseId : e.type))).toEqual(['subagent-tool-start', 'inner']);
   });
 
   test('a subagent tool result missing its id is skipped', () => {

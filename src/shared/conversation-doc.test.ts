@@ -128,6 +128,28 @@ describe('reopening a conversation saved by an earlier run', () => {
     expect(parseConversation(running).ok).toBe(true);
   });
 
+  test('a delegated step keeps the tool call that spawned it across save and load', () => {
+    const nested = {
+      ...onDisk,
+      messages: [
+        {
+          id: 'm1',
+          role: 'assistant',
+          createdAt: NOW,
+          parts: [
+            { type: 'tool', toolUseId: 't1', name: 'Agent', input: {}, status: 'done', result: 'summary' },
+            { type: 'tool', toolUseId: 's1', name: 'Bash', input: {}, status: 'done', result: 'hits', parentToolUseId: 't1' },
+          ],
+        },
+      ],
+    };
+    const parsed = parseConversation(nested);
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.messages[0]?.parts[1]).toMatchObject({ parentToolUseId: 't1' });
+  });
+
   test('a resumed conversation keeps the agent session id that lets it continue', () => {
     const parsed = parseConversation({ ...onDisk, sdkSessionId: 'sess_123' });
 

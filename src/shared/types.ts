@@ -38,7 +38,9 @@ export type OfficePolicy = {
 
 export type Settings = {
   readonly providers: readonly Provider[];
-  // A model reference, 'providerId::modelId'. See model-ref.ts.
+  // The model last used, as a reference 'providerId::modelId' (model-ref.ts). Written when
+  // a conversation's model is switched, read to open the next new conversation. Not a
+  // setting: nothing on the settings screen edits it.
   readonly defaultModel?: string;
   readonly officePolicy?: OfficePolicy;
 };
@@ -58,6 +60,9 @@ export type MessagePart =
       readonly input: unknown;
       readonly result?: string;
       readonly status: 'running' | 'done' | 'error';
+      // Set when this call ran inside a delegated subagent: the id of the tool call
+      // that spawned it. The thread nests these under their parent's card.
+      readonly parentToolUseId?: string;
     };
 
 export type Message = {

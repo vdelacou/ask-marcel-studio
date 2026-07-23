@@ -80,9 +80,9 @@ export type UIEvent =
   | { readonly type: 'text-delta'; readonly conversationId: string; readonly messageId: string; readonly delta: string }
   | { readonly type: 'tool-start'; readonly conversationId: string; readonly messageId: string; readonly toolUseId: string; readonly name: string; readonly input: unknown }
   | { readonly type: 'tool-result'; readonly conversationId: string; readonly messageId: string; readonly toolUseId: string; readonly result: string; readonly isError: boolean }
-  // What a subagent is doing, nested under the tool call that spawned it. Live only:
-  // these never reach the conversation file, because the spawning tool's own result
-  // (the summary the subagent hands back) is the durable record of what it did.
+  // What a subagent is doing, nested under the tool call that spawned it. The fold
+  // also persists these as child parts (tagged parentToolUseId), so the live view and
+  // the reopened conversation show the same delegated steps.
   | {
       readonly type: 'subagent-tool-start';
       readonly conversationId: string;
@@ -98,6 +98,7 @@ export type UIEvent =
       readonly messageId: string;
       readonly parentToolUseId: string;
       readonly toolUseId: string;
+      readonly result: string;
       readonly isError: boolean;
     }
   | { readonly type: 'turn-done'; readonly conversationId: string; readonly usage: TurnUsage }
@@ -172,8 +173,10 @@ export type StoreError =
   | { readonly kind: 'no-encryption'; readonly message: string };
 
 export type CreateConversationInput = {
-  // A model reference, 'providerId::modelId'.
-  readonly model: string;
+  // A model reference, 'providerId::modelId'. Optional, and normally absent: main resolves
+  // which model a new conversation opens on from the last one used (model-ref.ts), because
+  // the renderer's copy dates from boot and a model switched since would be missed.
+  readonly model?: string;
 };
 
 export type RenameConversationInput = {

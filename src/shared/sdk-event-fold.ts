@@ -12,10 +12,11 @@
  * - Text comes from stream_event deltas ONLY. The assistant message repeats the whole
  *   text, so folding both would show everything twice.
  * - Messages with parent_tool_use_id set belong to a subagent. Their TOOL CALLS are
- *   surfaced as subagent events so the user can watch a delegated job progress, but
- *   their narration is dropped (it would interleave a second conversation into this
- *   one) and none of it touches `parts`: the spawning tool's own result is what gets
- *   persisted, so the file keeps saying what the subagent concluded, not how.
+ *   folded as CHILD parts (tagged parentToolUseId) and surfaced as subagent events,
+ *   so a delegated job can be watched live and reviewed after reopening. Their
+ *   narration is dropped (it would interleave a second conversation into this one)
+ *   and their own result message never ends the outer turn: the spawning tool's
+ *   result stays the record of what the subagent concluded.
  * - Thinking blocks are dropped in v1.
  */
 import type { MessagePart } from './types.ts';
@@ -118,31 +119,38 @@ const foldUser = (state: FoldState, message: Record<string, unknown>, conversati
   return { state: next, events };
 };
 
-// A subagent's own tool calls. Every path returns the state it was given: nothing a
-// subagent does is persisted, so these can only emit.
+// A subagent's own tool calls: folded as child parts under the spawning tool call,
+// with the same event mirror as the main loop, so live view and file agree.
 const foldSubagentStarts = (state: FoldState, blocks: readonly Record<string, unknown>[], conversationId: string, parentToolUseId: string): Step => {
+  let next = state;
   const events: UIEvent[] = [];
   for (const block of blocks) {
     if (block['type'] !== 'tool_use') continue;
     const toolUseId = asString(block['id']);
     const name = asString(block['name']);
     if (toolUseId === undefined || name === undefined) continue;
+    next = { ...next, parts: [...next.parts, { type: 'tool', toolUseId, name, input: block['input'], status: 'running', parentToolUseId }] };
     events.push({ type: 'subagent-tool-start', conversationId, messageId: state.messageId, parentToolUseId, toolUseId, name, input: block['input'] });
   }
-  return { state, events };
+  return { state: next, events };
 };
 
 const foldSubagentResults = (state: FoldState, blocks: readonly Record<string, unknown>[], conversationId: string, parentToolUseId: string): Step => {
+  let next = state;
   const events: UIEvent[] = [];
   for (const block of blocks) {
     if (block['type'] !== 'tool_result') continue;
     const toolUseId = asString(block['tool_use_id']);
     if (toolUseId === undefined) continue;
-    // No result body: the step list shows what was done and whether it worked. The
-    // output itself belongs to the subagent's own reasoning, not to this transcript.
-    events.push({ type: 'subagent-tool-result', conversationId, messageId: state.messageId, parentToolUseId, toolUseId, isError: block['is_error'] === true });
+    // A result for a step we never saw start: ignore rather than invent a card.
+    if (!next.parts.some((p) => p.type === 'tool' && p.toolUseId === toolUseId)) continue;
+
+    const result = flattenToolContent(block['content']);
+    const isError = block['is_error'] === true;
+    next = { ...next, parts: resolveTool(next.parts, toolUseId, result, isError) };
+    events.push({ type: 'subagent-tool-result', conversationId, messageId: state.messageId, parentToolUseId, toolUseId, result, isError });
   }
-  return { state, events };
+  return { state: next, events };
 };
 
 const foldSubagent = (state: FoldState, message: Record<string, unknown>, conversationId: string, parentToolUseId: string): Step => {
