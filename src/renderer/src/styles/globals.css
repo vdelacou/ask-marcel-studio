@@ -15,6 +15,10 @@
   --color-border-subtle: oklch(0.9 0.008 85);
   --color-ink: oklch(0.27 0.012 75);
   --color-ink-muted: oklch(0.53 0.014 75);
+  /* One step quieter than muted, for the things a list is made of rather than the things
+     it says: the "Recents" heading and idle conversation rows. Anything a user reads to
+     answer a question stays at muted or above. */
+  --color-ink-faint: oklch(0.62 0.012 75);
   --color-accent: oklch(0.62 0.14 42);
   --color-accent-ink: oklch(0.99 0.004 85);
   --color-danger: oklch(0.55 0.19 27);
@@ -81,5 +85,36 @@ body,
  */
 .milkdown .ProseMirror.ProseMirror > :first-child {
   margin-top: 0;
+}
+
+/*
+ * Crepe's type scale is built for a full-page writing canvas: 16px body and a 32px h1,
+ * which inside a settings panel read as someone shouting a skill description. These bring
+ * the editor down to the size the rest of the app uses for prose, keeping the heading
+ * hierarchy intact but proportional. Same doubled-class trick as above, same reason.
+ */
+.milkdown .ProseMirror.ProseMirror {
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.milkdown .ProseMirror.ProseMirror h1 {
+  font-size: 1.25rem;
+  margin-top: 1.25rem;
+}
+
+.milkdown .ProseMirror.ProseMirror h2 {
+  font-size: 1.125rem;
+  margin-top: 1rem;
+}
+
+.milkdown .ProseMirror.ProseMirror h3 {
+  font-size: 1rem;
+  margin-top: 0.875rem;
+}
+
+.milkdown .ProseMirror.ProseMirror code,
+.milkdown .ProseMirror.ProseMirror pre {
+  font-size: 0.8125rem;
 }
 
