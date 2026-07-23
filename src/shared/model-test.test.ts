@@ -105,6 +105,17 @@ describe('reading the answer', () => {
     expect(verdictForStatus(418).message).toBe('The provider answered with an error (418).');
   });
 
+  // Gemini's OpenAI-compatible endpoint answers a bad key with 400, not 401, so a 400 that
+  // blames the model name alone sends the user off checking the wrong field.
+  test('a 400 names the key as well as the model, because it can be either', () => {
+    expect(verdictForStatus(400).message).toContain('key');
+    expect(verdictForStatus(400).message).toContain('model');
+  });
+
+  test('a 404, which only ever means the address had no such model, still says just that', () => {
+    expect(verdictForStatus(404).message).not.toContain('key');
+  });
+
   test('every verdict says something a person can act on', () => {
     const messages = [200, 401, 404, 429, 500].map((status) => verdictForStatus(status).message);
 

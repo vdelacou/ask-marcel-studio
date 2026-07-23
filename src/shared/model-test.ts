@@ -105,13 +105,19 @@ export const UNREACHABLE: ModelTestVerdict = { outcome: 'unreachable', message: 
 export const TOO_SLOW: ModelTestVerdict = { outcome: 'unreachable', message: 'That address did not answer in time.' };
 
 // The status is the whole answer. 401 and 403 are both the key: one says it is not a
-// key, the other says it is not a key for this. 400 joins 404 because an OpenAI-
-// compatible endpoint refuses an unknown model name either way, and the request itself
-// is fixed here, so it is not the thing at fault.
+// key, the other says it is not a key for this. 400 and 404 both mean the endpoint
+// refused what was asked for, and the request itself is fixed here, so it is not the
+// thing at fault.
+//
+// 400 cannot name the model on its own, though. It is what an OpenAI-compatible endpoint
+// returns for an unknown model name, but Gemini also answers a bad key with it ("Please
+// pass a valid API key") rather than the 401 everyone else sends. The status cannot tell
+// those apart, so the message names both instead of confidently picking the wrong one.
 export const verdictForStatus = (status: number): ModelTestVerdict => {
   if (status >= 200 && status < 300) return { outcome: 'works', message: 'Works. The model answered.' };
   if (status === 401 || status === 403) return { outcome: 'key-refused', message: 'The key was refused. Check it is complete and still valid.' };
-  if (status === 400 || status === 404) return { outcome: 'model-unknown', message: 'That model name was not recognised at this address.' };
+  if (status === 400) return { outcome: 'model-unknown', message: 'That request was refused. Check the model name, and check the key.' };
+  if (status === 404) return { outcome: 'model-unknown', message: 'That model name was not recognised at this address.' };
   if (status === 429) return { outcome: 'busy', message: 'The provider is busy right now. Try again in a moment.' };
   return { outcome: 'provider-error', message: `The provider answered with an error (${String(status)}).` };
 };
