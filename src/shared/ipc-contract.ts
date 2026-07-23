@@ -18,6 +18,7 @@ import type { ModelTestTarget, ModelTestVerdict } from './model-test.ts';
 import type { OfficeCategory } from './office-catalog.ts';
 import type { OfficeStatus } from './office-status.ts';
 import type { MemoryItem, MemoryHistoryEntry, MemoryStoreError } from './memory-store.ts';
+import type { UpdateStatus } from './update-check.ts';
 import type { QuickContext } from './quick-context.ts';
 import type { Result } from './result.ts';
 
@@ -65,6 +66,7 @@ export const CHANNEL = {
   memoryDelete: 'memory:delete',
   memoryClearAll: 'memory:clearAll',
   memoryHistory: 'memory:history',
+  updateStatus: 'update:status',
 } as const;
 
 // The one main-to-renderer stream. Everything the UI learns during a turn arrives here.
@@ -348,5 +350,11 @@ export type StudioApi = {
     // Who the user is, as the app last fetched it. Undefined until a first successful
     // fetch: no Result, because "not known yet" is an answer, not a failure.
     readonly quickContext: () => Promise<QuickContext | undefined>;
+  };
+  readonly update: {
+    // The running version and, if a newer release was found, where to get it. No Result:
+    // a check that could not run just reports the running version and no update, which is
+    // the safe reading. Also feeds the version line in settings.
+    readonly status: () => Promise<UpdateStatus>;
   };
 };

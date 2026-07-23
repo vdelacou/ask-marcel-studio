@@ -112,6 +112,9 @@ const api: StudioApi = {
     commands: () => ipcRenderer.invoke(CHANNEL.officeCommands),
     quickContext: () => ipcRenderer.invoke(CHANNEL.officeQuickContext),
   },
+  update: {
+    status: () => ipcRenderer.invoke(CHANNEL.updateStatus),
+  },
 };
 
 contextBridge.exposeInMainWorld('studio', api);

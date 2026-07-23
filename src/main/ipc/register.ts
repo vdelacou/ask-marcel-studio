@@ -25,6 +25,7 @@ import type { AgentsStore } from '../services/store/agents-store.ts';
 import type { AgentFilesStore } from '../services/store/agent-files-store.ts';
 import type { MemoryService } from '../services/memory/memory-service.ts';
 import type { MemoryStore } from '../../shared/memory-store.ts';
+import type { UpdateChecker } from '../services/update/update-checker.ts';
 import type { AgentFileError } from '../../shared/agent-files.ts';
 import type { Result } from '../../shared/result.ts';
 import { err } from '../../shared/result.ts';
@@ -42,6 +43,9 @@ export type IpcDeps = {
   readonly agentFiles: AgentFilesStore;
   readonly memory: MemoryService;
   readonly memoryStore: MemoryStore;
+  // The last update status the checker learned. Synchronous read: the network happens on a
+  // schedule in the background, never on the click that asks.
+  readonly updateChecker: UpdateChecker;
   // Filled by the background runner once it exists; until then it says so honestly and
   // the panel disables the button.
   readonly regenerateAgentFile: (doc: unknown) => Promise<Result<string, AgentFileError>>;
@@ -137,6 +141,8 @@ export const registerIpc = (deps: IpcDeps): void => {
   ipcMain.handle(CHANNEL.officeLogout, () => deps.office.logout());
   ipcMain.handle(CHANNEL.officeQuickContext, () => Promise.resolve(deps.quickContext.current()));
   ipcMain.handle(CHANNEL.officeCommands, () => Promise.resolve(deps.officeCatalog.categories()));
+
+  ipcMain.handle(CHANNEL.updateStatus, () => Promise.resolve(deps.updateChecker.current()));
 
   ipcMain.handle(CHANNEL.skillsList, () => deps.skills.list());
   ipcMain.handle(CHANNEL.skillsRemove, (_event, name: unknown) => deps.skills.remove(asString(name)));

@@ -53,6 +53,7 @@ describe('the channels main and the renderer agree on', () => {
       memoryDelete: 'memory:delete',
       memoryClearAll: 'memory:clearAll',
       memoryHistory: 'memory:history',
+      updateStatus: 'update:status',
     });
   });
 

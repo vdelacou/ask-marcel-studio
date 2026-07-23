@@ -69,6 +69,7 @@ const BUN_TESTABLE_MAIN: ReadonlyArray<string> = [
   'src/main/services/skills/skills-service.ts',
   'src/main/services/office/office-service.ts',
   'src/main/services/log/file-logger.ts',
+  'src/main/services/update/update-checker.ts',
   'src/main/services/office/quick-context-service.ts',
   // Which account's folder the app opens, and the two one-off moves that get it there.
   'src/main/services/account/account-service.ts',

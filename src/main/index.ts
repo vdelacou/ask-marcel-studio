@@ -26,6 +26,8 @@ import { createBackgroundRunner } from './services/background/background-runner.
 import { createFileLogger } from './services/log/file-logger.ts';
 import type { Logger } from '../shared/log-line.ts';
 import { sweepTranscripts } from './services/store/transcript-sweep-io.ts';
+import { createUpdateChecker } from './services/update/update-checker.ts';
+import type { UpdateChecker } from './services/update/update-checker.ts';
 import { createMemoryService } from './services/memory/memory-service.ts';
 import { createSqliteMemoryStore } from './services/memory/sqlite-memory-store.ts';
 import type { Embedder } from './services/memory/sqlite-memory-store.ts';
@@ -192,6 +194,12 @@ const CATCH_UP_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 // week. Live conversations' transcripts are never aged out: the SDK resumes from them.
 const BACKGROUND_TRANSCRIPT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
+// Where releases are published, and how the update check is leashed: a 10s deadline per
+// request, and one check a day. The build is unsigned, so this only ever informs.
+const UPDATE_REPO = 'vdelacou/ask-marcel-studio';
+const UPDATE_TIMEOUT_MS = 10 * 1000;
+const UPDATE_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
 // The embedded Python runtime (M8 Phase B). The build string is the runtime pin from
 // scripts/fetch-python.ts; a change forces the venv to be rebuilt.
 //
@@ -255,6 +263,7 @@ const buildRuntime = (
   quickContext: QuickContextService;
   userData: string;
   log: Logger;
+  updateChecker: UpdateChecker;
 } => {
   const toolsRoot = app.getPath('userData');
 
@@ -419,10 +428,20 @@ const buildRuntime = (
     }),
   });
 
+  // Notices a newer release and lets the renderer offer the DMG. Refreshed on a schedule
+  // in whenReady; the IPC read is synchronous off this cache.
+  const updateChecker = createUpdateChecker({
+    fetch: (url, init) => fetch(url, init),
+    repo: UPDATE_REPO,
+    currentVersion: app.getVersion(),
+    timeoutMs: UPDATE_TIMEOUT_MS,
+  });
+
   registerIpc({
     settings,
     // The real fetch, with the deadline the service puts on every call.
     modelTest: createModelTestService({ fetch: (url, init) => fetch(url, init) }),
+    updateChecker,
     conversations,
     agent,
     skills,
@@ -455,7 +474,7 @@ const buildRuntime = (
     clearTimer: (handle) => clearTimeout(handle as NodeJS.Timeout),
   });
 
-  return { agent, skills, gateway, background, idle, memory, conversations, quickContext, userData, log };
+  return { agent, skills, gateway, background, idle, memory, conversations, quickContext, userData, log, updateChecker };
 };
 
 void app.whenReady().then(async () => {
@@ -481,6 +500,7 @@ void app.whenReady().then(async () => {
     quickContext: quickContextRuntime,
     userData,
     log,
+    updateChecker,
   } = buildRuntime(
     (event) => {
       // The idle watcher sees the same stream the renderer does: a turn ending is
@@ -558,12 +578,20 @@ void app.whenReady().then(async () => {
     if (summary.removedFolders > 0 || summary.trimmedFiles > 0) log.info('transcript-swept', summary);
   })();
 
+  // Look for a newer release once at launch and then daily. Silent: the checker keeps the
+  // last answer on any failure, and the renderer shows a banner only when one was found.
+  void updateChecker
+    .refresh()
+    .then((status) => log.info('update-checked', { available: status.updateAvailable, ...(status.latest === undefined ? {} : { latest: status.latest }) }));
+  const updateTimer = setInterval(() => void updateChecker.refresh(), UPDATE_INTERVAL_MS);
+
   // A turn left running would keep an orphaned agent subprocess alive after quit, and
   // the gateway would keep a socket listening.
   app.on('before-quit', () => {
     runtime.cancelAll();
     idle.stop();
     runtimeBackground.stop();
+    clearInterval(updateTimer);
     void gateway.stop();
   });
 
