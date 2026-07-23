@@ -20,7 +20,8 @@
     "mutate:staged": "bash scripts/mutate-staged.sh",
     "fetch:python": "bun run scripts/fetch-python.ts",
     "fetch:wheels": "bun run scripts/fetch-wheels.ts",
-    "rebuild:native": "electron-rebuild -f -w better-sqlite3"
+    "rebuild:native": "electron-rebuild -f -w better-sqlite3",
+    "icons": "bash scripts/make-icons.sh"
   },
   "trustedDependencies": ["better-sqlite3"],
   "dependencies": {
