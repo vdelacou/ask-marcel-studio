@@ -163,13 +163,15 @@ describe('watching a delegated job progress', () => {
 
   const started = applyUIEvent(emptyChat('c1'), { type: 'turn-start', conversationId: 'c1', messageId: 'm1' });
 
-  test('a subagent step appears under the tool call that spawned it, marked running', () => {
+  test('a subagent step lands as a child part tagged with the tool call that spawned it', () => {
     const view = spawned(started);
 
-    expect(view.subagentSteps?.['task-1']).toEqual([{ toolUseId: 'step-1', name: 'Read', input: { file_path: '/deck.pptx' }, status: 'running' }]);
+    expect(view.messages[0]?.parts).toEqual([
+      { type: 'tool', toolUseId: 'step-1', name: 'Read', input: { file_path: '/deck.pptx' }, status: 'running', parentToolUseId: 'task-1' },
+    ]);
   });
 
-  test('a step that finished is marked done', () => {
+  test('a step that finished keeps what it returned and is marked done', () => {
     const view = applyUIEvent(spawned(started), {
       type: 'subagent-tool-result',
       conversationId: 'c1',
@@ -177,9 +179,10 @@ describe('watching a delegated job progress', () => {
       parentToolUseId: 'task-1',
       toolUseId: 'step-1',
       isError: false,
+      result: 'forty pages of slides',
     });
 
-    expect(view.subagentSteps?.['task-1']?.[0]?.status).toBe('done');
+    expect(view.messages[0]?.parts[0]).toMatchObject({ status: 'done', result: 'forty pages of slides' });
   });
 
   test('a step that failed is marked as such', () => {
@@ -190,36 +193,44 @@ describe('watching a delegated job progress', () => {
       parentToolUseId: 'task-1',
       toolUseId: 'step-1',
       isError: true,
+      result: 'nope',
     });
 
-    expect(view.subagentSteps?.['task-1']?.[0]?.status).toBe('error');
+    expect(view.messages[0]?.parts[0]).toMatchObject({ status: 'error' });
   });
 
   test('steps accumulate in the order the subagent took them', () => {
     let view = spawned(started);
     view = applyUIEvent(view, { type: 'subagent-tool-start', conversationId: 'c1', messageId: 'm1', parentToolUseId: 'task-1', toolUseId: 'step-2', name: 'Grep', input: {} });
 
-    expect(view.subagentSteps?.['task-1']?.map((s) => s.name)).toEqual(['Read', 'Grep']);
+    expect(view.messages[0]?.parts.map((p) => (p.type === 'tool' ? p.name : ''))).toEqual(['Read', 'Grep']);
   });
 
-  test('two delegated jobs keep their own step lists', () => {
+  test('two delegated jobs keep their own parent tags', () => {
     let view = spawned(started);
     view = applyUIEvent(view, { type: 'subagent-tool-start', conversationId: 'c1', messageId: 'm1', parentToolUseId: 'task-2', toolUseId: 'step-9', name: 'Glob', input: {} });
 
-    expect(view.subagentSteps?.['task-1']).toHaveLength(1);
-    expect(view.subagentSteps?.['task-2']).toHaveLength(1);
+    expect(view.messages[0]?.parts.map((p) => (p.type === 'tool' ? p.parentToolUseId : ''))).toEqual(['task-1', 'task-2']);
   });
 
   test('a result for a step we never saw start is dropped rather than inventing a row', () => {
-    const view = applyUIEvent(started, { type: 'subagent-tool-result', conversationId: 'c1', messageId: 'm1', parentToolUseId: 'ghost', toolUseId: 'step-1', isError: false });
+    const view = applyUIEvent(started, {
+      type: 'subagent-tool-result',
+      conversationId: 'c1',
+      messageId: 'm1',
+      parentToolUseId: 'ghost',
+      toolUseId: 'step-1',
+      isError: false,
+      result: 'x',
+    });
 
-    expect(view.subagentSteps).toBeUndefined();
+    expect(view.messages[0]?.parts).toEqual([]);
   });
 
   test('the steps survive the end of the turn, so a finished job can still be inspected', () => {
     const view = applyUIEvent(spawned(started), { type: 'turn-done', conversationId: 'c1', usage: { inputTokens: 1, outputTokens: 1 } });
 
-    expect(view.subagentSteps?.['task-1']).toHaveLength(1);
+    expect(view.messages[0]?.parts).toHaveLength(1);
   });
 
   test('a subagent step belonging to another conversation is ignored', () => {
@@ -233,6 +244,6 @@ describe('watching a delegated job progress', () => {
       input: {},
     });
 
-    expect(view.subagentSteps).toBeUndefined();
+    expect(view.messages[0]?.parts).toEqual([]);
   });
 });

@@ -11,16 +11,6 @@
 import type { TurnUsage, UIEvent } from '../../../shared/ipc-contract.ts';
 import type { Message, MessagePart } from '../../../shared/types.ts';
 
-// One thing a subagent did, shown nested under the tool call that spawned it. No
-// result body: the step list says what was done and whether it worked, and the
-// subagent's own conclusion arrives as the spawning tool's result.
-export type SubagentStep = {
-  readonly toolUseId: string;
-  readonly name: string;
-  readonly input: unknown;
-  readonly status: 'running' | 'done' | 'error';
-};
-
 export type ChatView = {
   readonly conversationId?: string;
   readonly title: string;
@@ -28,9 +18,6 @@ export type ChatView = {
   readonly isStreaming: boolean;
   readonly error?: string;
   readonly lastUsage?: TurnUsage;
-  // Keyed by the tool call that spawned the subagent. Live only, never persisted:
-  // this is how a delegated job is watched, not how it is recorded.
-  readonly subagentSteps?: Readonly<Record<string, readonly SubagentStep[]>>;
 };
 
 export const emptyChat = (conversationId?: string): ChatView => ({
@@ -72,31 +59,20 @@ export const applyUIEvent = (view: ChatView, event: UIEvent): ChatView => {
     case 'tool-start':
       return patchMessage(view, event.messageId, (parts) => [...parts, { type: 'tool', toolUseId: event.toolUseId, name: event.name, input: event.input, status: 'running' }]);
 
+    // A subagent's steps land as child parts, the same shape the file keeps, so the
+    // live transcript and a reopened one render identically; resolving a result is
+    // the same move for a main-loop tool and a delegated step.
     case 'tool-result':
+    case 'subagent-tool-result':
       return patchMessage(view, event.messageId, (parts) =>
         parts.map((p) => (p.type === 'tool' && p.toolUseId === event.toolUseId ? { ...p, status: event.isError ? 'error' : 'done', result: event.result } : p))
       );
 
-    case 'subagent-tool-start': {
-      const steps = view.subagentSteps?.[event.parentToolUseId] ?? [];
-      return {
-        ...view,
-        subagentSteps: { ...view.subagentSteps, [event.parentToolUseId]: [...steps, { toolUseId: event.toolUseId, name: event.name, input: event.input, status: 'running' }] },
-      };
-    }
-
-    case 'subagent-tool-result': {
-      const steps = view.subagentSteps?.[event.parentToolUseId];
-      // A step we never saw start, same rule as the ghost tool result above.
-      if (steps === undefined) return view;
-      return {
-        ...view,
-        subagentSteps: {
-          ...view.subagentSteps,
-          [event.parentToolUseId]: steps.map((step) => (step.toolUseId === event.toolUseId ? { ...step, status: event.isError ? 'error' : 'done' } : step)),
-        },
-      };
-    }
+    case 'subagent-tool-start':
+      return patchMessage(view, event.messageId, (parts) => [
+        ...parts,
+        { type: 'tool', toolUseId: event.toolUseId, name: event.name, input: event.input, status: 'running', parentToolUseId: event.parentToolUseId },
+      ]);
 
     case 'turn-done':
       return { ...view, isStreaming: false, lastUsage: event.usage };

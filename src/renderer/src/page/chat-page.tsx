@@ -6,7 +6,7 @@
  * that switching conversations cannot throw away a turn that is still running. Carries
  * no class string (rule 22); every decision it makes is a call into src/renderer/src/lib.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { DragEvent, FC } from 'react';
 import { ChatThread } from '../components/organisms/chat-thread/index.tsx';
 import type { ThreadMessage } from '../components/organisms/chat-thread/index.tsx';
@@ -21,7 +21,8 @@ import { useAttachments } from '../hooks/use-attachments.ts';
 import { toolLabel } from '../lib/tool-label.ts';
 import { filterSkills, insertSkill, slashQuery, stepActive } from '../lib/slash-suggest.ts';
 import type { SkillSuggestion } from '../lib/slash-suggest.ts';
-import { attachmentSuffix } from '../../../shared/import-plan.ts';
+import { stepHistory } from '../lib/message-history.ts';
+import { attachmentSuffix, withoutAttachmentSuffix } from '../../../shared/import-plan.ts';
 import type { ChatView } from '../lib/ui-event-fold.ts';
 import { renderMarkdown } from '../render/markdown.tsx';
 import type { Message } from '../../../shared/types.ts';
@@ -45,36 +46,50 @@ const MENU_ITEMS = [{ id: 'import-file', label: 'Attach a file…' }];
 // Maps the domain message onto the design system's view model. The components never
 // import src/shared (rule 21), so the shell is where the two meet.
 //
-// Takes the live subagent steps because they are keyed by the tool call that spawned
-// them, and this is where a tool part and its steps can be put back together.
-const toThreadMessage =
-  (subagentSteps: ChatView['subagentSteps']) =>
-  (message: Message): ThreadMessage => ({
+// Child tool parts (a delegated reader's own steps, tagged parentToolUseId) render
+// nested inside the tool call that spawned them, never as top-level cards.
+const toThreadMessage = (message: Message): ThreadMessage => {
+  const stepsFor = (parentId: string): readonly ToolStep[] =>
+    message.parts.flatMap((part): ToolStep[] =>
+      part.type === 'tool' && part.parentToolUseId === parentId
+        ? [
+            {
+              id: part.toolUseId,
+              label: toolLabel(part.name, part.input),
+              name: part.name,
+              status: part.status,
+              input: JSON.stringify(part.input ?? {}, null, 2),
+              ...(part.result === undefined ? {} : { result: part.result }),
+            },
+          ]
+        : []
+    );
+
+  return {
     id: message.id,
     role: message.role,
-    parts: message.parts.map((part): ChatPart => {
+    parts: message.parts.flatMap((part): ChatPart[] => {
       // The assistant speaks markdown; the user's own text is shown verbatim.
-      if (part.type === 'text') return { kind: 'text', content: message.role === 'assistant' ? renderMarkdown(part.text) : part.text };
+      if (part.type === 'text') return [{ kind: 'text', content: message.role === 'assistant' ? renderMarkdown(part.text) : part.text }];
+      if (part.parentToolUseId !== undefined) return [];
 
-      const steps: readonly ToolStep[] = (subagentSteps?.[part.toolUseId] ?? []).map((step) => ({
-        id: step.toolUseId,
-        label: toolLabel(step.name, step.input),
-        name: step.name,
-        status: step.status,
-      }));
-      return {
-        kind: 'tool',
-        id: part.toolUseId,
-        label: toolLabel(part.name, part.input),
-        name: part.name,
-        // Pretty-printed here rather than in the card: the card renders strings.
-        input: JSON.stringify(part.input ?? {}, null, 2),
-        ...(part.result === undefined ? {} : { result: part.result }),
-        status: part.status,
-        ...(steps.length === 0 ? {} : { steps }),
-      };
+      const steps = stepsFor(part.toolUseId);
+      return [
+        {
+          kind: 'tool',
+          id: part.toolUseId,
+          label: toolLabel(part.name, part.input),
+          name: part.name,
+          // Pretty-printed here rather than in the card: the card renders strings.
+          input: JSON.stringify(part.input ?? {}, null, 2),
+          ...(part.result === undefined ? {} : { result: part.result }),
+          status: part.status,
+          ...(steps.length === 0 ? {} : { steps }),
+        },
+      ];
     }),
-  });
+  };
+};
 
 export const ChatPage: FC<ChatPageProps> = ({ conversationId, view, model, onHydrate, onSend, onCancel, onChangeModel, onComposerActivity }) => {
   const [draft, setDraft] = useState('');
@@ -82,6 +97,10 @@ export const ChatPage: FC<ChatPageProps> = ({ conversationId, view, model, onHyd
   const [skills, setSkills] = useState<readonly SkillSuggestion[]>([]);
   const [activeSuggestion, setActiveSuggestion] = useState(0);
   const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
+  // How far back through what was already sent the box currently is, and the text that was
+  // in it before that started. Undefined depth means the box is the user's own again.
+  const [historyDepth, setHistoryDepth] = useState<number | undefined>(undefined);
+  const [pending, setPending] = useState('');
   // A counter, not a boolean: dragging over a child fires dragleave on the parent, and
   // a boolean would flicker the overlay away under the cursor.
   const [dragDepth, setDragDepth] = useState(0);
@@ -101,11 +120,44 @@ export const ChatPage: FC<ChatPageProps> = ({ conversationId, view, model, onHyd
   const suggestions: readonly SuggestItem[] =
     query === undefined || suggestionsDismissed ? [] : filterSkills(skills, query).map((skill) => ({ id: skill.name, title: `/${skill.name}`, subtitle: skill.description }));
 
+  // What they have already sent, oldest first, as they typed it. The transcript keeps the
+  // attached-files paragraph the composer appended on the way out, and that paragraph is
+  // not theirs to send again.
+  const sent = useMemo(
+    () =>
+      view.messages
+        .filter((message) => message.role === 'user')
+        .map((message) => withoutAttachmentSuffix(message.parts.map((part) => (part.type === 'text' ? part.text : '')).join('')))
+        .filter((text) => text.length > 0),
+    [view.messages]
+  );
+
+  // Only when the box is empty or already holds something recalled. With their own text in
+  // it the arrows belong to the caret.
+  const canRecallHistory = sent.length > 0 && (historyDepth !== undefined || draft.length === 0);
+
+  const recall = useCallback(
+    (direction: 1 | -1): void => {
+      // Captured on the way in rather than on every keystroke: this is the text to hand
+      // back if they walk all the way forward again.
+      const carried = historyDepth === undefined ? draft : pending;
+      const step = stepHistory({ entries: sent, ...(historyDepth === undefined ? {} : { depth: historyDepth }), pending: carried, direction });
+      if (step === undefined) return;
+      setPending(carried);
+      setDraft(step.draft);
+      setHistoryDepth(step.depth);
+      onComposerActivity(step.draft.trim().length > 0);
+    },
+    [sent, historyDepth, pending, draft, onComposerActivity]
+  );
+
   const changeDraft = useCallback(
     (next: string): void => {
       setDraft(next);
       setSuggestionsDismissed(false);
       setActiveSuggestion(0);
+      // Typing ends the browsing, so the next press of up starts from the newest again.
+      setHistoryDepth(undefined);
       onComposerActivity(next.trim().length > 0);
     },
     [onComposerActivity]
@@ -122,6 +174,8 @@ export const ChatPage: FC<ChatPageProps> = ({ conversationId, view, model, onHyd
     const text = draft.trim();
     if (text.length === 0) return;
     setDraft('');
+    setHistoryDepth(undefined);
+    setPending('');
     setMenuOpen(false);
     onComposerActivity(false);
     onSend(`${text}${attachmentSuffix(attached)}`);
@@ -165,7 +219,7 @@ export const ChatPage: FC<ChatPageProps> = ({ conversationId, view, model, onHyd
       onDrop={onDrop}
     >
       <ChatThread
-        messages={view.messages.map(toThreadMessage(view.subagentSteps))}
+        messages={view.messages.map(toThreadMessage)}
         isStreaming={view.isStreaming}
         error={view.error}
         emptyHint="Ask anything. The agent can run commands and read files in this conversation's workspace."
@@ -180,6 +234,7 @@ export const ChatPage: FC<ChatPageProps> = ({ conversationId, view, model, onHyd
         menuItems={MENU_ITEMS}
         suggestions={suggestions}
         activeSuggestion={activeSuggestion}
+        canRecallHistory={canRecallHistory}
         {...(model === undefined ? {} : { model })}
         onChange={changeDraft}
         onSend={send}
@@ -191,6 +246,7 @@ export const ChatPage: FC<ChatPageProps> = ({ conversationId, view, model, onHyd
         onMoveSuggestion={(delta) => setActiveSuggestion((current) => stepActive(suggestions.length, current, delta))}
         onHoverSuggestion={setActiveSuggestion}
         onDismissSuggestions={() => setSuggestionsDismissed(true)}
+        onRecall={recall}
         onChangeModel={onChangeModel}
       />
       {attachments.error !== undefined && <Toast message={attachments.error} onDismiss={attachments.dismissError} />}

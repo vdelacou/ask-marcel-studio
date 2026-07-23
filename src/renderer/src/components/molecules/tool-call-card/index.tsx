@@ -3,12 +3,15 @@ import type { FC } from 'react';
 export type ToolCallStatus = 'running' | 'done' | 'error';
 
 // One thing a delegated helper did while this tool call was running. The label is
-// already a sentence, written by the page shell (lib/tool-label).
+// already a sentence, and input/result arrive pre-rendered as strings, both written
+// by the page shell (lib/tool-label, JSON pretty-print).
 export type ToolStep = {
   id: string;
   label: string;
   name: string;
   status: ToolCallStatus;
+  input: string;
+  result?: string;
 };
 
 export type ToolCallCardProps = {
@@ -88,18 +91,31 @@ export const ToolCallCard: FC<ToolCallCardProps> = ({ label, name, input, result
       {steps.length > 0 && (
         <ul className="flex flex-col gap-y-1 pb-1">
           {steps.map((step) => (
-            <li key={step.id} className="flex items-center gap-x-2 text-xs">
-              <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotFor(step.status)}`} />
-              <span className="min-w-0 truncate text-ink">{step.label}</span>
-              <span className="shrink-0 font-mono text-[10px] text-ink-muted">{step.name}</span>
+            <li key={step.id}>
+              <details>
+                <summary className="flex cursor-pointer list-none items-center gap-x-2 text-xs">
+                  <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotFor(step.status)}`} />
+                  <span className="min-w-0 truncate text-ink">{step.label}</span>
+                  <span className="shrink-0 font-mono text-[10px] text-ink-muted">{step.name}</span>
+                </summary>
+                <div className="ml-3.5 mt-1 flex flex-col gap-y-1 border-l border-border-subtle pl-2.5">
+                  <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs text-ink-muted">{step.input}</pre>
+                  {step.result !== undefined && (
+                    <pre className="overflow-x-auto whitespace-pre-wrap break-words border-t border-border-subtle pt-1 font-mono text-xs text-ink-muted">{step.result}</pre>
+                  )}
+                </div>
+              </details>
             </li>
           ))}
         </ul>
       )}
       <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs text-ink-muted">{input}</pre>
-      {result !== undefined && (
-        <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words border-t border-border-subtle pt-2 font-mono text-xs text-ink-muted">{result}</pre>
-      )}
+      {/* Deliberately uncapped, like the input above it. A max-height here put long output
+          in a 16rem box with its own scrollbar, which left the thread almost nothing to
+          scroll: the page stopped after a few pixels and the text only moved while the
+          pointer sat inside that small pane. The card is collapsed until asked, so the
+          height it takes when open is the height the reader wanted. */}
+      {result !== undefined && <pre className="overflow-x-auto whitespace-pre-wrap break-words border-t border-border-subtle pt-2 font-mono text-xs text-ink-muted">{result}</pre>}
     </div>
   </details>
 );
