@@ -321,3 +321,37 @@ describe('remembering which parts of Microsoft 365 are switched off', () => {
     expect(parsed.ok && parsed.value.officePolicy).toEqual({ disabledCategories: ['calendar'] });
   });
 });
+
+describe('remembering which skills are switched off', () => {
+  test('a settings file with no skills policy still parses', () => {
+    const parsed = parseStoredSettings({ providers: [] });
+
+    expect(parsed.ok && 'skillsPolicy' in parsed.value).toBe(false);
+  });
+
+  test('disabled folders are stored sorted and without duplicates', () => {
+    const parsed = parseStoredSettings({ providers: [], skillsPolicy: { disabledFolders: ['weekly', 'answer-from-m365', 'weekly'] } });
+
+    expect(parsed.ok && parsed.value.skillsPolicy).toEqual({ disabledFolders: ['answer-from-m365', 'weekly'] });
+  });
+
+  test('a blank folder name is dropped rather than kept as a phantom skill', () => {
+    const parsed = parseStoredSettings({ providers: [], skillsPolicy: { disabledFolders: ['  ', 'weekly'] } });
+
+    expect(parsed.ok && parsed.value.skillsPolicy).toEqual({ disabledFolders: ['weekly'] });
+  });
+
+  test('a skills policy that is not an object is refused, not ignored', () => {
+    expect(parseStoredSettings({ providers: [], skillsPolicy: 'nope' }).ok).toBe(false);
+  });
+
+  test('disabled folders that are not strings are refused', () => {
+    expect(parseStoredSettings({ providers: [], skillsPolicy: { disabledFolders: [42] } }).ok).toBe(false);
+  });
+
+  test('a validated settings object keeps its skills policy through to storage', () => {
+    const validated = validateSettings({ providers: [], skillsPolicy: { disabledFolders: ['weekly'] } });
+
+    expect(validated.ok && validated.value.skillsPolicy).toEqual({ disabledFolders: ['weekly'] });
+  });
+});

@@ -36,6 +36,13 @@ export type OfficePolicy = {
   readonly disabledCategories: readonly string[];
 };
 
+// Which skills the user has switched off. A disabled skill is left on disk (a built-in
+// cannot be removed anyway), just kept out of what the agent may load and out of the "/"
+// suggestions. Keyed by folder, which is the skill's stable handle.
+export type SkillsPolicy = {
+  readonly disabledFolders: readonly string[];
+};
+
 export type Settings = {
   readonly providers: readonly Provider[];
   // The model last used, as a reference 'providerId::modelId' (model-ref.ts). Written when
@@ -43,12 +50,14 @@ export type Settings = {
   // setting: nothing on the settings screen edits it.
   readonly defaultModel?: string;
   readonly officePolicy?: OfficePolicy;
+  readonly skillsPolicy?: SkillsPolicy;
 };
 
 export type StoredSettings = {
   readonly providers: readonly StoredProvider[];
   readonly defaultModel?: string;
   readonly officePolicy?: OfficePolicy;
+  readonly skillsPolicy?: SkillsPolicy;
 };
 
 export type MessagePart =

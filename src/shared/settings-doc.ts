@@ -14,7 +14,7 @@
  */
 import { MODEL_REF_SEPARATOR } from './model-ref.ts';
 import { ALWAYS_ENABLED_CATEGORY } from './office-policy.ts';
-import type { OfficePolicy, Provider, Settings, StoredProvider, StoredSettings } from './types.ts';
+import type { OfficePolicy, Provider, Settings, SkillsPolicy, StoredProvider, StoredSettings } from './types.ts';
 import type { Result } from './result.ts';
 import { err, ok } from './result.ts';
 
@@ -55,6 +55,16 @@ const officePolicyField = (raw: unknown): Result<OfficePolicy | undefined, strin
   return ok({ disabledCategories: [...new Set(names)].sort((a, b) => a.localeCompare(b)) });
 };
 
+const skillsPolicyField = (raw: unknown): Result<SkillsPolicy | undefined, string> => {
+  if (raw === undefined) return ok(undefined);
+  if (!isRecord(raw)) return err('skillsPolicy must be an object');
+  const disabled = raw['disabledFolders'];
+  if (!isStringArray(disabled)) return err('skillsPolicy.disabledFolders must be an array of strings');
+
+  const folders = disabled.map((folder) => folder.trim()).filter((folder) => folder.length > 0);
+  return ok({ disabledFolders: [...new Set(folders)].sort((a, b) => a.localeCompare(b)) });
+};
+
 // Fields shared by both shapes. Returns the common part or a reason.
 const commonProviderFields = (raw: unknown): Result<{ id: string; kind: 'anthropic' | 'openai'; label: string; modelIds: string[]; baseUrl?: string }, SettingsDocError> => {
   if (!isRecord(raw)) return unreadable('provider must be an object');
@@ -85,6 +95,8 @@ export const parseStoredSettings = (raw: unknown): Result<StoredSettings, Settin
   if (defaultModel !== undefined && typeof defaultModel !== 'string') return unreadable('defaultModel must be a string');
   const officePolicy = officePolicyField(raw['officePolicy']);
   if (!officePolicy.ok) return unreadable(officePolicy.error);
+  const skillsPolicy = skillsPolicyField(raw['skillsPolicy']);
+  if (!skillsPolicy.ok) return unreadable(skillsPolicy.error);
 
   const providers: StoredProvider[] = [];
   for (const candidate of raw['providers']) {
@@ -92,7 +104,12 @@ export const parseStoredSettings = (raw: unknown): Result<StoredSettings, Settin
     if (!provider.ok) return provider;
     providers.push(provider.value);
   }
-  return ok({ providers, ...(defaultModel === undefined ? {} : { defaultModel }), ...(officePolicy.value === undefined ? {} : { officePolicy: officePolicy.value }) });
+  return ok({
+    providers,
+    ...(defaultModel === undefined ? {} : { defaultModel }),
+    ...(officePolicy.value === undefined ? {} : { officePolicy: officePolicy.value }),
+    ...(skillsPolicy.value === undefined ? {} : { skillsPolicy: skillsPolicy.value }),
+  });
 };
 
 const validateProvider = (raw: unknown): Result<Provider, SettingsDocError> => {
@@ -120,6 +137,8 @@ export const validateSettings = (raw: unknown): Result<Settings, SettingsDocErro
   if (defaultModel !== undefined && typeof defaultModel !== 'string') return invalid('defaultModel must be a string');
   const officePolicy = officePolicyField(raw['officePolicy']);
   if (!officePolicy.ok) return invalid(officePolicy.error);
+  const skillsPolicy = skillsPolicyField(raw['skillsPolicy']);
+  if (!skillsPolicy.ok) return invalid(skillsPolicy.error);
 
   const providers: Provider[] = [];
   for (const candidate of raw['providers']) {
@@ -128,7 +147,12 @@ export const validateSettings = (raw: unknown): Result<Settings, SettingsDocErro
     if (providers.some((p) => p.id === provider.value.id)) return invalid(`two providers share the id ${provider.value.id}`);
     providers.push(provider.value);
   }
-  return ok({ providers, ...(defaultModel === undefined ? {} : { defaultModel }), ...(officePolicy.value === undefined ? {} : { officePolicy: officePolicy.value }) });
+  return ok({
+    providers,
+    ...(defaultModel === undefined ? {} : { defaultModel }),
+    ...(officePolicy.value === undefined ? {} : { officePolicy: officePolicy.value }),
+    ...(skillsPolicy.value === undefined ? {} : { skillsPolicy: skillsPolicy.value }),
+  });
 };
 
 export const serialiseStoredSettings = (settings: StoredSettings): string => JSON.stringify(settings, null, 2);
