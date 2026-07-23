@@ -32,7 +32,7 @@ const ASKS: Record<MemoryQuestion['kind'], string> = {
 };
 
 export const MemoryConfirmDialog: FC<MemoryConfirmDialogProps> = ({ question, remaining, selected, ownAnswer, isSaving, onSelect, onChangeOwn, onAccept, onSkip, onClose }) => (
-  <div className="fixed inset-0 z-40 flex items-center justify-center bg-ink/20 p-6">
+  <div className="fixed inset-0 z-40 flex items-center justify-center bg-ink/20 p-6 [-webkit-app-region:no-drag]">
     <section
       role="dialog"
       aria-modal="true"

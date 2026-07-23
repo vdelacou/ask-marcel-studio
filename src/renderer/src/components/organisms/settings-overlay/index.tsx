@@ -3,13 +3,19 @@ import type { FC, ReactNode } from 'react';
 // Props-only (rule 21). A centered modal over a dimmed backdrop; the page shell owns the
 // open state and the Escape key (a component holds no hooks). The backdrop is a real
 // button so clicking outside closes without a static-div click handler.
+//
+// no-drag on the root: the window has no title bar, so the app frame paints a draggable
+// band across its top 36px. Chromium hands that strip to the OS, which swallowed every
+// click landing on the part of this backdrop underneath it, and clicking there dragged the
+// window instead of closing settings. Declaring no-drag on the overlay gives those clicks
+// back for as long as it is open.
 export type SettingsOverlayProps = {
   onClose: () => void;
   children: ReactNode;
 };
 
 export const SettingsOverlay: FC<SettingsOverlayProps> = ({ onClose, children }) => (
-  <div className="fixed inset-0 z-40 flex items-center justify-center p-6 sm:p-10">
+  <div className="fixed inset-0 z-40 flex items-center justify-center p-6 [-webkit-app-region:no-drag] sm:p-10">
     <button type="button" aria-label="Close settings" onClick={onClose} className="absolute inset-0 cursor-default bg-black/30" />
     {/* Takes the window it is given, less the padding above. The sheet itself is a frame,
         so it has no cap of its own: the column inside it stops at the reading width, which
