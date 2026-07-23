@@ -16,6 +16,7 @@ import {
   signatureFilePath,
   voiceProfileFilePath,
   quickContextFilePath,
+  sdkProjectsDir,
   cliCheatsheetPath,
   memoryDbPath,
   memoryMigratedMarkerPath,
@@ -122,6 +123,10 @@ describe('where the agent finds what the user wrote about themselves', () => {
 
   test('the quick context sits there too, because a skill may want an id the block left out', () => {
     expect(quickContextFilePath('/data')).toBe(`${claudeConfigDir('/data')}/quick-context.json`);
+  });
+
+  test('the SDK transcripts live under the same config folder the sweep walks', () => {
+    expect(sdkProjectsDir('/data')).toBe(`${claudeConfigDir('/data')}/projects`);
   });
 });
 

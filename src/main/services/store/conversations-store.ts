@@ -14,7 +14,8 @@ import { basename, join } from 'node:path';
 import { copyFile, mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { conversationId, newConversationId } from '../../../shared/conversation-id.ts';
 import { applyGeneratedTitle, byMostRecentlyUpdated, newConversation, parseConversation, serialiseConversation, toMeta } from '../../../shared/conversation-doc.ts';
-import { conversationFilePath, conversationsDir, importsDir, workspaceDir } from '../../../shared/paths.ts';
+import { conversationFilePath, conversationsDir, importsDir, sdkProjectsDir, workspaceDir } from '../../../shared/paths.ts';
+import { sdkProjectDirName } from '../../../shared/transcript-sweep.ts';
 import { readJsonFile, removeFile, writeJsonFileAtomic } from './json-file.ts';
 import { parseModelRef } from '../../../shared/model-ref.ts';
 import { MAX_IMPORT_BYTES, resolveCollision, safeImportName } from '../../../shared/import-plan.ts';
@@ -159,6 +160,9 @@ export const createConversationsStore = (deps: ConversationsStoreDeps): Conversa
     // The workspace holds whatever the agent wrote. It goes with the conversation;
     // leaving it behind would silently grow userData forever.
     await rm(workspaceDir(deps.userData, checked.value), { recursive: true, force: true }).catch(() => undefined);
+    // The SDK's transcript for this conversation goes too. Its folder is the encoded
+    // workspace path; without this it would outlive the conversation as dead history.
+    await rm(join(sdkProjectsDir(deps.userData), sdkProjectDirName(workspaceDir(deps.userData, checked.value))), { recursive: true, force: true }).catch(() => undefined);
     return ok(null);
   };
 

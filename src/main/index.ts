@@ -24,6 +24,8 @@ import { createAgentsStore } from './services/store/agents-store.ts';
 import { createAgentFilesStore } from './services/store/agent-files-store.ts';
 import { createBackgroundRunner } from './services/background/background-runner.ts';
 import { createFileLogger } from './services/log/file-logger.ts';
+import type { Logger } from '../shared/log-line.ts';
+import { sweepTranscripts } from './services/store/transcript-sweep-io.ts';
 import { createMemoryService } from './services/memory/memory-service.ts';
 import { createSqliteMemoryStore } from './services/memory/sqlite-memory-store.ts';
 import type { Embedder } from './services/memory/sqlite-memory-store.ts';
@@ -38,7 +40,17 @@ import { createTitleJob } from './services/background/title-job.ts';
 import { createSignatureService } from './services/office/signature-service.ts';
 import { parseAgentFileDoc } from '../shared/agent-files.ts';
 import { createModelTestService } from './services/models/model-test-service.ts';
-import { accountDir, backgroundWorkspaceDir, mainLogPath, memoryDbPath, quickContextFilePath, signatureFilePath, voiceProfileFilePath } from '../shared/paths.ts';
+import {
+  accountDir,
+  backgroundWorkspaceDir,
+  mainLogPath,
+  memoryDbPath,
+  quickContextFilePath,
+  sdkProjectsDir,
+  signatureFilePath,
+  voiceProfileFilePath,
+  workspaceDir,
+} from '../shared/paths.ts';
 import { parseStoredQuickContext } from '../shared/quick-context.ts';
 import { readJsonFile, writeJsonFileAtomic } from './services/store/json-file.ts';
 import { BUILTIN_AGENTS } from './services/agent/builtin-agents.ts';
@@ -176,6 +188,10 @@ const IDLE_MS = 300_000;
 // How far back the app looks at launch for conversations it never got to read.
 const CATCH_UP_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 
+// The background workspace resumes nothing, so its own transcripts are disposable past a
+// week. Live conversations' transcripts are never aged out: the SDK resumes from them.
+const BACKGROUND_TRANSCRIPT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
 // The embedded Python runtime (M8 Phase B). The build string is the runtime pin from
 // scripts/fetch-python.ts; a change forces the venv to be rebuilt.
 //
@@ -237,6 +253,8 @@ const buildRuntime = (
   memory: MemoryService;
   conversations: ConversationsStore;
   quickContext: QuickContextService;
+  userData: string;
+  log: Logger;
 } => {
   const toolsRoot = app.getPath('userData');
 
@@ -437,7 +455,7 @@ const buildRuntime = (
     clearTimer: (handle) => clearTimeout(handle as NodeJS.Timeout),
   });
 
-  return { agent, skills, gateway, background, idle, memory, conversations, quickContext };
+  return { agent, skills, gateway, background, idle, memory, conversations, quickContext, userData, log };
 };
 
 void app.whenReady().then(async () => {
@@ -461,6 +479,8 @@ void app.whenReady().then(async () => {
     memory,
     conversations,
     quickContext: quickContextRuntime,
+    userData,
+    log,
   } = buildRuntime(
     (event) => {
       // The idle watcher sees the same stream the renderer does: a turn ending is
@@ -519,6 +539,23 @@ void app.whenReady().then(async () => {
       if (!conversation.ok) continue;
       if (await memory.extractionDue(meta.id, conversation.value.messages.length)) void runtimeBackground.enqueue({ kind: 'memory-extract', conversationId: meta.id });
     }
+  })();
+
+  // The SDK writes a transcript folder per conversation and never cleans them: ~193 MB of
+  // history for conversations long deleted. Sweep folders with no conversation left, and age
+  // out the background workspace's own jsonl. Not awaited: a maintenance chore, silent on
+  // failure, that must not hold the window shut.
+  void (async (): Promise<void> => {
+    const listed = await conversations.list();
+    if (!listed.ok) return;
+    const summary = await sweepTranscripts({
+      projectsDir: sdkProjectsDir(userData),
+      keepWorkspacePaths: listed.value.map((meta) => workspaceDir(userData, meta.id)),
+      backgroundWorkspacePath: backgroundWorkspaceDir(userData),
+      now: () => Date.now(),
+      maxBackgroundAgeMs: BACKGROUND_TRANSCRIPT_MAX_AGE_MS,
+    });
+    if (summary.removedFolders > 0 || summary.trimmedFiles > 0) log.info('transcript-swept', summary);
   })();
 
   // A turn left running would keep an orphaned agent subprocess alive after quit, and

@@ -58,6 +58,7 @@ const BUN_TESTABLE_MAIN: ReadonlyArray<string> = [
   'src/main/services/store/conversations-store.ts',
   'src/main/services/store/agent-files-store.ts',
   'src/main/services/store/agents-store.ts',
+  'src/main/services/store/transcript-sweep-io.ts',
   'src/main/services/background/background-runner.ts',
   'src/main/services/background/voice-profile-job.ts',
   'src/main/services/background/title-job.ts',

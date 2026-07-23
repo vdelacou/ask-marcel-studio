@@ -61,6 +61,11 @@ export const currentAccountPath = (userData: string): string => join(userData, '
 // settingSources: ['user'] loads.
 export const claudeConfigDir = (userData: string): string => join(userData, 'claude-config');
 
+// Where the Claude Agent SDK writes a transcript folder per conversation workspace. Swept
+// at launch: a folder whose conversation no longer exists is deleted, freeing what had
+// grown to ~193 MB of history for conversations long gone.
+export const sdkProjectsDir = (userData: string): string => join(claudeConfigDir(userData), 'projects');
+
 // The user's own email signature, written by the app and read by the drafting skill as
 // $CLAUDE_CONFIG_DIR/signature.html. Plain HTML on purpose: it is pasted into a draft
 // whole, and it holds nothing secret.
