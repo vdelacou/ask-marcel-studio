@@ -38,7 +38,37 @@ Playwright probes. Commits await Vincent's go-ahead (rule 25); proposed split at
        with a menu holding Settings; the block rides every system prompt and tells the agent
        not to run my-quick-context again. Memory item joins the menu in Phase 3.
 
-## Phase 1b — R23: data belongs to the account it came from (NEXT)
+## Phase 1b — R23: data belongs to the account it came from — DONE
+
+Landed in 15b67e4 and 47e43f8. Layout now:
+
+```
+<userData>/current-account.json          which account is open
+<userData>/accounts/<key>/               conversations, workspaces, claude-config, memory
+<userData>/{settings.json,agents.json}   shared: providers, keys, helpers
+<userData>/{bin,npm-cache,pip-cache,py}  shared: shims and runtimes
+```
+
+The key is `<address-label>-<id-fingerprint>`, so it is readable and still survives an
+address change; the id half is what identifies the account, because an address gets
+reassigned to a new joiner.
+
+VERIFIED on the real data folder (backed up first to
+`~/Library/Application Support/ask-marcel-studio-backup-pre-accounts`, 492 MB, delete when
+happy): the existing installation moved under `accounts/vincent-delacourt-mdx86f` with 8
+conversations, 12 workspaces, 3 memory notes and 3 skills intact; settings stayed shared;
+the app relaunched itself once to claim the folder and opened normally after.
+
+Two gotchas found while doing it, both fixed: a stored quick context written before this
+change has no directory id, so it is refetched rather than trusted (otherwise the account
+cannot be identified for a week); and claiming a folder renames it under the open stores,
+so that case restarts the app like a switch does.
+
+Still open for a later slice: the renderer is not told the account changed (the restart
+covers it today), and there is no UI listing accounts. Neither is needed for the
+requirement as asked.
+
+## Phase 1b — original notes
 
 Requirement (2026-07-23, mid-run): conversations, memory and everything else derived from a
 Microsoft 365 account must be stored per account, keyed by the signed-in user's email, so
