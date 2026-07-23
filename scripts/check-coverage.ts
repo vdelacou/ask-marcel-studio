@@ -66,11 +66,15 @@ const BUN_TESTABLE_MAIN: ReadonlyArray<string> = [
   'src/main/services/agent/builtin-agents.ts',
   'src/main/services/skills/skills-service.ts',
   'src/main/services/office/office-service.ts',
+  'src/main/services/office/quick-context-service.ts',
+  // Which account's folder the app opens, and the two one-off moves that get it there.
+  'src/main/services/account/account-service.ts',
   'src/main/services/models/model-test-service.ts',
   'src/main/services/office/signature-service.ts',
   'src/main/services/python/python-service.ts',
-  // Pure agent-config value (import type only), so the bun runner covers it.
-  'src/main/services/agent/m365-reader.ts',
+  // Pure agent-config values (import type only), so the bun runner covers them.
+  'src/main/services/agent/doc-reader.ts',
+  'src/main/services/agent/mail-reader.ts',
   // The PreToolUse guard: import type only, so no SDK reaches the bun runner.
   'src/main/services/agent/agent-hooks.ts',
 ];

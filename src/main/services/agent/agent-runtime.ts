@@ -33,7 +33,11 @@ export type AgentRuntimeDeps = {
   // Started on the first turn that needs it, not at launch: an Anthropic-only user
   // never pays for a listening socket.
   readonly gateway: Gateway;
+  // The signed-in account's folder: its workspaces and its claude-config. Never the top
+  // data folder, or one account's turn would read another's notes.
   readonly userData: string;
+  // Where the shims live, shared by every account.
+  readonly toolsRoot: string;
   readonly now: () => string;
   readonly emit: (event: UIEvent) => void;
   // Parameterised so the composition root stays explicit and this never reads
@@ -116,7 +120,14 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
           abortController: controller,
           model,
           cwd: workspace,
-          env: buildSessionEnv({ provider, modelId, userData: deps.userData, inheritedEnv: deps.inheritedEnv, ...(gateway === undefined ? {} : { gateway }) }),
+          env: buildSessionEnv({
+            provider,
+            modelId,
+            configRoot: deps.userData,
+            toolsRoot: deps.toolsRoot,
+            inheritedEnv: deps.inheritedEnv,
+            ...(gateway === undefined ? {} : { gateway }),
+          }),
           // The M365 core rides `append` on the preset, not a CLAUDE.md: it loads on
           // every turn regardless of setting sources or cwd. The helpers are passed
           // programmatically for the same reason: settingSources: ['user'] loads no

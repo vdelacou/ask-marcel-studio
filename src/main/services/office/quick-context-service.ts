@@ -10,7 +10,7 @@
  * disk. Failure is silent by design, exactly like the signature service: an app that
  * cannot fetch this is an app that answers slightly less well, not one that stops.
  */
-import { isQuickContextStale, parseQuickContext, quickContextBlock } from '../../../shared/quick-context.ts';
+import { needsQuickContextRefresh, parseQuickContext, quickContextBlock } from '../../../shared/quick-context.ts';
 import type { QuickContext } from '../../../shared/quick-context.ts';
 import type { OfficeRun } from './office-service.ts';
 
@@ -45,7 +45,7 @@ export const createQuickContextService = (deps: QuickContextServiceDeps): QuickC
   };
 
   const refresh = async (force: boolean): Promise<void> => {
-    if (!force && !isQuickContextStale(cached?.fetchedAt, deps.now())) return;
+    if (!force && !needsQuickContextRefresh(cached, deps.now())) return;
     const outcome = await deps.run(['my-quick-context', '--output', 'json'], FETCH_TIMEOUT_MS);
     if (!outcome.ran) return;
     const context = parseQuickContext(outcome.stdout);

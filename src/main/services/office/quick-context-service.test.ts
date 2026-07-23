@@ -38,7 +38,7 @@ const harness = (
 
 const storedAt = (fetchedAt: string): StoredQuickContext => ({
   fetchedAt,
-  context: { displayName: 'Old Name', firstName: 'Old', email: 'old@x.com', ids: {} },
+  context: { userId: 'u-old', displayName: 'Old Name', firstName: 'Old', email: 'old@x.com', ids: {} },
 });
 
 describe('keeping the user’s quick context', () => {

@@ -7,7 +7,8 @@ const INHERITED = { PATH: '/usr/bin:/bin', HOME: '/Users/someone', LANG: 'en_US.
 
 const anthropic: Provider = { id: 'anthropic-work', kind: 'anthropic', label: 'Anthropic', apiKey: 'sk-ant-real', modelIds: ['claude-opus-4-8'] };
 
-const build = (provider: Provider, modelId = 'claude-opus-4-8'): Record<string, string> => buildSessionEnv({ provider, modelId, userData: USER_DATA, inheritedEnv: INHERITED });
+const build = (provider: Provider, modelId = 'claude-opus-4-8'): Record<string, string> =>
+  buildSessionEnv({ provider, modelId, configRoot: USER_DATA, toolsRoot: USER_DATA, inheritedEnv: INHERITED });
 
 describe('giving the agent what every conversation needs', () => {
   test('the agent loads its skills from the app config folder, not the developer own', () => {
@@ -25,13 +26,13 @@ describe('giving the agent what every conversation needs', () => {
   });
 
   test('an agent launched with no path at all still gets the shim', () => {
-    const env = buildSessionEnv({ provider: anthropic, modelId: 'm', userData: USER_DATA, inheritedEnv: { HOME: '/Users/someone' } });
+    const env = buildSessionEnv({ provider: anthropic, modelId: 'm', configRoot: USER_DATA, toolsRoot: USER_DATA, inheritedEnv: { HOME: '/Users/someone' } });
 
     expect(env['PATH']).toBe(`${USER_DATA}/bin`);
   });
 
   test('on windows the shim joins the inherited path with a semicolon', () => {
-    const env = buildSessionEnv({ provider: anthropic, modelId: 'm', userData: USER_DATA, inheritedEnv: { PATH: 'C:\\Windows' }, pathDelimiter: ';' });
+    const env = buildSessionEnv({ provider: anthropic, modelId: 'm', configRoot: USER_DATA, toolsRoot: USER_DATA, inheritedEnv: { PATH: 'C:\\Windows' }, pathDelimiter: ';' });
 
     expect(env['PATH']).toBe(`${USER_DATA}/bin;C:\\Windows`);
   });
@@ -46,7 +47,7 @@ describe('giving the agent what every conversation needs', () => {
   });
 
   test('an inherited variable with no value is dropped rather than passed as the text undefined', () => {
-    const env = buildSessionEnv({ provider: anthropic, modelId: 'm', userData: USER_DATA, inheritedEnv: { HOME: '/h', EMPTY: undefined } });
+    const env = buildSessionEnv({ provider: anthropic, modelId: 'm', configRoot: USER_DATA, toolsRoot: USER_DATA, inheritedEnv: { HOME: '/h', EMPTY: undefined } });
 
     expect('EMPTY' in env).toBe(false);
   });
@@ -92,7 +93,7 @@ describe('routing an openai-compatible provider through the local gateway', () =
   const GATEWAY = { baseUrl: 'http://127.0.0.1:51999', apiKey: 'gateway-run-key' };
 
   const viaGateway = (provider: Provider = openai, modelId = 'qwen2.5'): Record<string, string> =>
-    buildSessionEnv({ provider, modelId, userData: USER_DATA, inheritedEnv: INHERITED, gateway: GATEWAY });
+    buildSessionEnv({ provider, modelId, configRoot: USER_DATA, toolsRoot: USER_DATA, inheritedEnv: INHERITED, gateway: GATEWAY });
 
   test('the agent is pointed at the gateway, not at the real provider', () => {
     expect(viaGateway()['ANTHROPIC_BASE_URL']).toBe('http://127.0.0.1:51999');
@@ -121,7 +122,7 @@ describe('routing an openai-compatible provider through the local gateway', () =
   });
 
   test('an anthropic provider ignores the gateway and talks to the real api', () => {
-    const env = buildSessionEnv({ provider: anthropic, modelId: 'claude-opus-4-8', userData: USER_DATA, inheritedEnv: INHERITED, gateway: GATEWAY });
+    const env = buildSessionEnv({ provider: anthropic, modelId: 'claude-opus-4-8', configRoot: USER_DATA, toolsRoot: USER_DATA, inheritedEnv: INHERITED, gateway: GATEWAY });
 
     expect('ANTHROPIC_BASE_URL' in env).toBe(false);
     expect(env['ANTHROPIC_API_KEY']).toBe('sk-ant-real');
@@ -131,7 +132,7 @@ describe('routing an openai-compatible provider through the local gateway', () =
   });
 
   test('an openai provider with no gateway running falls back to its own endpoint rather than silently misrouting', () => {
-    const env = buildSessionEnv({ provider: openai, modelId: 'qwen2.5', userData: USER_DATA, inheritedEnv: INHERITED });
+    const env = buildSessionEnv({ provider: openai, modelId: 'qwen2.5', configRoot: USER_DATA, toolsRoot: USER_DATA, inheritedEnv: INHERITED });
 
     expect(env['ANTHROPIC_BASE_URL']).toBe('http://127.0.0.1:1234');
     expect(env['ANTHROPIC_MODEL']).toBe('qwen2.5');
@@ -163,7 +164,7 @@ describe('never letting the environment leak the wrong way', () => {
   test('the builder does not mutate the environment it was handed', () => {
     const inherited = { PATH: '/usr/bin', HOME: '/h' };
 
-    buildSessionEnv({ provider: anthropic, modelId: 'm', userData: USER_DATA, inheritedEnv: inherited });
+    buildSessionEnv({ provider: anthropic, modelId: 'm', configRoot: USER_DATA, toolsRoot: USER_DATA, inheritedEnv: inherited });
 
     // process.env is shared mutable state; the builder is pure and must copy.
     expect(inherited).toEqual({ PATH: '/usr/bin', HOME: '/h' });
@@ -173,7 +174,8 @@ describe('never letting the environment leak the wrong way', () => {
     const env = buildSessionEnv({
       provider: anthropic,
       modelId: 'm',
-      userData: USER_DATA,
+      configRoot: USER_DATA,
+      toolsRoot: USER_DATA,
       inheritedEnv: { ...INHERITED, ANTHROPIC_API_KEY: 'sk-ant-SOMEONE-ELSES', ANTHROPIC_BASE_URL: 'https://stale.example' },
     });
 
@@ -187,11 +189,26 @@ describe('never letting the environment leak the wrong way', () => {
     const env = buildSessionEnv({
       provider: anthropic,
       modelId: 'claude-opus-4-8',
-      userData: USER_DATA,
+      configRoot: USER_DATA,
+      toolsRoot: USER_DATA,
       inheritedEnv: { ...INHERITED, ANTHROPIC_MODEL: 'claude-3-haiku', ANTHROPIC_DEFAULT_HAIKU_MODEL: 'claude-3-haiku' },
     });
 
     expect(env['ANTHROPIC_MODEL']).toBe('claude-opus-4-8');
     expect(env['ANTHROPIC_DEFAULT_HAIKU_MODEL']).toBe('claude-opus-4-8');
+  });
+});
+
+describe('keeping one account out of another account’s session', () => {
+  test('the agent is pointed at the signed-in account’s own config, not the shared folder', () => {
+    const env = buildSessionEnv({ provider: anthropic, modelId: 'm', configRoot: `${USER_DATA}/accounts/vincent-x1`, toolsRoot: USER_DATA, inheritedEnv: INHERITED });
+
+    expect(env['CLAUDE_CONFIG_DIR']).toBe(`${USER_DATA}/accounts/vincent-x1/claude-config`);
+  });
+
+  test('the shims stay shared, because they are the machine’s tools and nobody’s data', () => {
+    const env = buildSessionEnv({ provider: anthropic, modelId: 'm', configRoot: `${USER_DATA}/accounts/vincent-x1`, toolsRoot: USER_DATA, inheritedEnv: INHERITED });
+
+    expect(env['PATH']?.startsWith(`${USER_DATA}/bin`)).toBe(true);
   });
 });

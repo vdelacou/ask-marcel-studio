@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { accountKeyFor } from './account-key.ts';
 import {
   binDir,
   claudeConfigDir,
@@ -15,6 +16,9 @@ import {
   signatureFilePath,
   voiceProfileFilePath,
   quickContextFilePath,
+  accountDir,
+  accountsDir,
+  currentAccountPath,
   npmPrefixDir,
   pipCacheDir,
   settingsFilePath,
@@ -145,5 +149,34 @@ describe('where the notes the app keeps live', () => {
 
   test('an imported file lands inside the conversation’s own workspace', () => {
     expect(importsDir(USER_DATA, ID).startsWith(workspaceDir(USER_DATA, ID))).toBe(true);
+  });
+});
+
+describe('keeping one account’s world out of another’s', () => {
+  test('each account has its own folder under the data folder', () => {
+    const one = accountKeyFor({ id: 'id-1', email: 'vincent@lvmh.com' });
+    const other = accountKeyFor({ id: 'id-2', email: 'someone@lvmh.com' });
+
+    expect(accountDir(USER_DATA, one)).not.toBe(accountDir(USER_DATA, other));
+    expect(accountDir(USER_DATA, one).startsWith(`${accountsDir(USER_DATA)}/`)).toBe(true);
+  });
+
+  test('an account folder never escapes the data folder', () => {
+    const key = accountKeyFor({ id: '../../etc', email: '../../../etc/passwd' });
+
+    expect(accountDir(USER_DATA, key).startsWith(`${USER_DATA}/accounts/`)).toBe(true);
+    expect(accountDir(USER_DATA, key)).not.toContain('..');
+  });
+
+  test('the record of which account is open sits above them all', () => {
+    expect(currentAccountPath(USER_DATA)).toBe(`${USER_DATA}/current-account.json`);
+  });
+
+  test('handing a store an account folder puts its conversations inside that account', () => {
+    // This is the whole mechanism: the stores keep taking a data folder, and the
+    // composition root hands them the account's one.
+    const key = accountKeyFor({ id: 'id-1', email: 'vincent@lvmh.com' });
+
+    expect(conversationsDir(accountDir(USER_DATA, key)).startsWith(accountDir(USER_DATA, key))).toBe(true);
   });
 });

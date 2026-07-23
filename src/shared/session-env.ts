@@ -26,7 +26,12 @@ export type SessionEnvInput = {
   readonly provider: Provider;
   // The bare model id, not the 'providerId::modelId' reference.
   readonly modelId: string;
-  readonly userData: string;
+  // Where this account's claude-config lives: the skills, notes and per-user files the
+  // agent reads. One account's must never be handed to another's session.
+  readonly configRoot: string;
+  // Where the shims live (node, npm, ask-marcel-office). Shared by every account: they are
+  // the machine's tooling, not anybody's data.
+  readonly toolsRoot: string;
   readonly inheritedEnv: Readonly<Record<string, string | undefined>>;
   // Where the local gateway is listening, and its per-run key. Required for an
   // openai provider; ignored for anthropic, which talks to the real API.
@@ -65,11 +70,11 @@ export const buildSessionEnv = (input: SessionEnvInput): Record<string, string> 
   const env = withoutUndefined(input.inheritedEnv);
   const inheritedPath = env['PATH'];
 
-  env['CLAUDE_CONFIG_DIR'] = claudeConfigDir(input.userData);
+  env['CLAUDE_CONFIG_DIR'] = claudeConfigDir(input.configRoot);
   // Prepended, not replaced: the agent still needs git and the rest. The separator is the
   // OS delimiter (':' on unix, ';' on Windows), so the shim resolves first on either.
   const pathSeparator = input.pathDelimiter ?? delimiter;
-  env['PATH'] = inheritedPath === undefined ? binDir(input.userData) : `${binDir(input.userData)}${pathSeparator}${inheritedPath}`;
+  env['PATH'] = inheritedPath === undefined ? binDir(input.toolsRoot) : `${binDir(input.toolsRoot)}${pathSeparator}${inheritedPath}`;
   env['NO_UPDATE_NOTIFIER'] = '1';
 
   // An openai provider never sees its own key or endpoint: the agent talks to the

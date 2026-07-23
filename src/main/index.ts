@@ -32,7 +32,7 @@ import { createVoiceProfileJob } from './services/background/voice-profile-job.t
 import { createSignatureService } from './services/office/signature-service.ts';
 import { parseAgentFileDoc } from '../shared/agent-files.ts';
 import { createModelTestService } from './services/models/model-test-service.ts';
-import { backgroundWorkspaceDir, quickContextFilePath, signatureFilePath, voiceProfileFilePath } from '../shared/paths.ts';
+import { accountDir, backgroundWorkspaceDir, quickContextFilePath, signatureFilePath, voiceProfileFilePath } from '../shared/paths.ts';
 import { parseStoredQuickContext } from '../shared/quick-context.ts';
 import { readJsonFile, writeJsonFileAtomic } from './services/store/json-file.ts';
 import { BUILTIN_AGENTS } from './services/agent/builtin-agents.ts';
@@ -41,6 +41,9 @@ import { err, ok } from '../shared/result.ts';
 import { createGateway } from './services/gateway/gateway-server.ts';
 import { createOfficeService } from './services/office/office-service.ts';
 import { createQuickContextService } from './services/office/quick-context-service.ts';
+import { createAccountService } from './services/account/account-service.ts';
+import type { AccountService } from './services/account/account-service.ts';
+import { createAccountFs } from './services/account/account-io.ts';
 import type { QuickContextService, StoredQuickContext } from './services/office/quick-context-service.ts';
 import { createOfficeRun, writeOfficeShim } from './services/office/office-io.ts';
 import { createOfficeCatalog } from './services/office/office-catalog-io.ts';
@@ -204,7 +207,8 @@ const hasContent = async (path: string): Promise<boolean> => {
 
 const buildRuntime = (
   emit: (event: UIEvent) => void,
-  emitMemory: (event: MemoryEvent) => void
+  emitMemory: (event: MemoryEvent) => void,
+  accounts: AccountService
 ): {
   agent: AgentRuntime;
   skills: SkillsService;
@@ -215,9 +219,15 @@ const buildRuntime = (
   conversations: ConversationsStore;
   quickContext: QuickContextService;
 } => {
-  const userData = app.getPath('userData');
+  const toolsRoot = app.getPath('userData');
+  // Everything the app learns from Microsoft 365 is read and written under the signed-in
+  // account's own folder. Handing the stores this instead of the top folder is the whole
+  // of the separation: none of them had to learn what an account is.
+  const userData = accountDir(toolsRoot, accounts.current().key);
   const now = (): string => new Date().toISOString();
-  const settings = createSettingsStore({ userData });
+  // Providers and their keys, and the helpers, stay shared: they are the person at the
+  // keyboard's tooling, not the mailbox's data.
+  const settings = createSettingsStore({ userData: toolsRoot });
   const conversations = createConversationsStore({ userData, now });
   const skills = createSkillsService({ userData, builtinSource: builtinSkillsSource(), builtinNames: BUILTIN_SKILLS, retiredBuiltinNames: RETIRED_BUILTIN_SKILLS });
   // Providers are read per request, not captured: a key changed in settings must take
@@ -229,7 +239,7 @@ const buildRuntime = (
     },
   });
   const officeCatalog = createOfficeCatalog(officeCatalogPath());
-  const agentsStore = createAgentsStore({ userData, builtins: BUILTIN_AGENTS });
+  const agentsStore = createAgentsStore({ userData: toolsRoot, builtins: BUILTIN_AGENTS });
   const agentFiles = createAgentFilesStore({ userData });
   const memory = createMemoryService({ userData, now, newId: () => crypto.randomUUID(), emit: emitMemory });
 
@@ -258,6 +268,7 @@ const buildRuntime = (
     gateway,
     officeCommandCategories: officeCatalog.commandCategories(),
     userData,
+    toolsRoot,
     now,
     emit,
     inheritedEnv: process.env,
@@ -280,11 +291,11 @@ const buildRuntime = (
   // Rewritten every launch: process.execPath and the cli.js path both move across
   // updates, so a stale shim would exec a binary that is gone. Not awaited, like the
   // skills seed: it lands long before the first turn could call ask-marcel-office.
-  void writeOfficeShim(userData, location);
+  void writeOfficeShim(toolsRoot, location);
   // Same reasoning for node/npm/npx: rewritten every launch, lands well before a turn.
-  void writeToolShims(userData, toolCliLocation());
+  void writeToolShims(toolsRoot, toolCliLocation());
   // Build the per-user Python venv in the background so python3 resolves offline.
-  startPython(userData);
+  startPython(toolsRoot);
 
   // Work the app does for the user without being asked: their signature, and how they
   // write. One at a time, never while the app is closing.
@@ -296,6 +307,7 @@ const buildRuntime = (
     settings,
     gateway,
     userData,
+    toolsRoot,
     workspaceDir: backgroundWorkspaceDir(userData),
     inheritedEnv: process.env,
     officeCommandCategories: officeCatalog.commandCategories(),
@@ -359,9 +371,14 @@ const buildRuntime = (
   return { agent, skills, gateway, background, idle, memory, conversations, quickContext };
 };
 
-void app.whenReady().then(() => {
+void app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.askmarcel.studio');
   app.on('browser-window-created', (_event, window) => optimizer.watchWindowShortcuts(window));
+
+  // Before any store exists: whose data is this? Resolving it here is what lets every
+  // store below stay ignorant of accounts and simply be handed a folder. An installation
+  // from before accounts existed is moved under its owner in the same step.
+  const accounts = await createAccountService(createAccountFs(app.getPath('userData')));
 
   const window = createWindow();
   // Events go to the window that exists now. There is one window in v1 (multi-window
@@ -384,7 +401,8 @@ void app.whenReady().then(() => {
     },
     (event) => {
       if (!window.isDestroyed()) window.webContents.send(MEMORY_EVENT, event);
-    }
+    },
+    accounts
   );
 
   // Re-seeded every launch so an app update ships an updated skill, and a folder the
@@ -394,7 +412,23 @@ void app.whenReady().then(() => {
   // Who the user is: read what was stored, then fetch again only if it has gone stale.
   // Not awaited, and silent on failure: the window opens either way, and the block is
   // simply absent from the prompt until it lands.
-  void quickContextRuntime.load().then(() => quickContextRuntime.refresh(false));
+  void quickContextRuntime
+    .load()
+    .then(() => quickContextRuntime.refresh(false))
+    .then(() => onAccountKnown());
+
+  // The stores were opened against the account the app knew about at launch, so anything
+  // that moves a folder underneath them has to be followed by starting again. Two cases
+  // do: signing in as somebody else, and a first sign-in claiming the folder that was
+  // being worked in while signed out. Both happen once and land before a turn can run.
+  const onAccountKnown = async (): Promise<void> => {
+    const context = quickContextRuntime.current();
+    if (context === undefined) return;
+    const outcome = await accounts.observe(context);
+    if (outcome === 'unchanged') return;
+    app.relaunch();
+    app.exit(0);
+  };
 
   // Not awaited, and nothing surfaces: the signature is a cheap CLI fetch and the voice
   // profile costs a few tokens once. Both skip themselves when there is nothing to do.

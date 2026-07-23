@@ -18,6 +18,7 @@ import { join } from 'node:path';
 import type { ConversationId } from './conversation-id.ts';
 import type { SkillFolderName } from './skill-name.ts';
 import type { MemoryFileName } from './memory-file-name.ts';
+import type { AccountKey } from './account-key.ts';
 
 // node:path is path manipulation, not IO, so it is allowed anywhere (rule 20).
 
@@ -38,6 +39,23 @@ export const workspaceDir = (userData: string, id: ConversationId): string => jo
 // Files the user dragged in or picked, copied into the conversation's workspace so the
 // agent can open them by a short relative path and they go when the conversation does.
 export const importsDir = (userData: string, id: ConversationId): string => join(workspaceDir(userData, id), 'imports');
+
+// Everything the app learns from one Microsoft 365 account lives under its own folder, so
+// signing in as somebody else opens their world and signing back in finds the first one
+// where it was left. What is NOT under here is the user's own tooling: providers and their
+// keys, and the helpers, which belong to the person at the keyboard rather than to the
+// mailbox they happen to be reading.
+//
+// Every store still takes a `userData` and derives its paths from it. The composition root
+// simply hands them the account's folder instead of the top one, which is why nothing
+// below this line had to learn what an account is.
+export const accountsDir = (userData: string): string => join(userData, 'accounts');
+
+export const accountDir = (userData: string, account: AccountKey): string => join(accountsDir(userData), account);
+
+// Which account the app opened last. At the top level, because it is what decides where
+// everything else is read from.
+export const currentAccountPath = (userData: string): string => join(userData, 'current-account.json');
 
 // CLAUDE_CONFIG_DIR for the agent subprocess. Its skills/ subfolder is what
 // settingSources: ['user'] loads.

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { isQuickContextStale, parseQuickContext, parseStoredQuickContext, quickContextBlock } from './quick-context.ts';
+import { isQuickContextStale, needsQuickContextRefresh, parseQuickContext, parseStoredQuickContext, quickContextBlock } from './quick-context.ts';
 
 const envelope = (data: unknown): string => JSON.stringify({ ok: true, data });
 
@@ -209,10 +209,19 @@ describe('the edges of reading back what was stored', () => {
   test('a stored context keeps the job title and timezone it was written with', () => {
     const parsed = parseStoredQuickContext({
       fetchedAt: '2026-07-20T00:00:00.000Z',
-      context: { displayName: 'Vincent DELACOURT', firstName: 'Vincent', email: 'v@x.com', jobTitle: 'CIO', tenantTimeZone: 'China Standard Time', ids: { inboxId: 'i1' } },
+      context: {
+        userId: 'u1',
+        displayName: 'Vincent DELACOURT',
+        firstName: 'Vincent',
+        email: 'v@x.com',
+        jobTitle: 'CIO',
+        tenantTimeZone: 'China Standard Time',
+        ids: { inboxId: 'i1' },
+      },
     });
 
     expect(parsed?.context).toEqual({
+      userId: 'u1',
       displayName: 'Vincent DELACOURT',
       firstName: 'Vincent',
       email: 'v@x.com',
@@ -223,9 +232,9 @@ describe('the edges of reading back what was stored', () => {
   });
 
   test('a stored context without a job title has no job title key, rather than an empty one', () => {
-    const parsed = parseStoredQuickContext({ fetchedAt: '2026-07-20T00:00:00.000Z', context: { displayName: 'Ada', firstName: 'Ada', email: 'a@x.com', ids: {} } });
+    const parsed = parseStoredQuickContext({ fetchedAt: '2026-07-20T00:00:00.000Z', context: { userId: 'u1', displayName: 'Ada', firstName: 'Ada', email: 'a@x.com', ids: {} } });
 
-    expect(parsed?.context).toEqual({ displayName: 'Ada', firstName: 'Ada', email: 'a@x.com', ids: {} });
+    expect(parsed?.context).toEqual({ userId: 'u1', displayName: 'Ada', firstName: 'Ada', email: 'a@x.com', ids: {} });
   });
 
   test('a stored context with no display name and no email says so with empty strings', () => {
@@ -261,5 +270,39 @@ describe('an answer that only looks successful', () => {
 
   test('an envelope whose user is a string is refused', () => {
     expect(parseQuickContext(JSON.stringify({ ok: true, data: { user: 'Ada' } }))).toBeUndefined();
+  });
+});
+
+describe('knowing which account this context belongs to', () => {
+  test('the directory id is kept, because it is what names the account’s folder', () => {
+    expect(parseQuickContext(envelope({ user: { id: 'u-9a1f', displayName: 'Ada' } }))?.userId).toBe('u-9a1f');
+  });
+
+  test('a stored context written before ids were kept reads as having none', () => {
+    expect(parseStoredQuickContext({ fetchedAt: '2026-07-20T00:00:00.000Z', context: { displayName: 'Ada' } })?.context.userId).toBe('');
+  });
+});
+
+describe('deciding whether to ask the cli again', () => {
+  test('a context stored before the app knew it needed the account id is fetched again', () => {
+    const stored = { fetchedAt: '2026-07-23T00:00:00.000Z', context: { userId: '', displayName: 'Ada', firstName: 'Ada', email: 'a@x.com', ids: {} } };
+
+    expect(needsQuickContextRefresh(stored, new Date('2026-07-24T00:00:00.000Z'))).toBe(true);
+  });
+
+  test('a fresh context that knows the account is left alone', () => {
+    const stored = { fetchedAt: '2026-07-23T00:00:00.000Z', context: { userId: 'u1', displayName: 'Ada', firstName: 'Ada', email: 'a@x.com', ids: {} } };
+
+    expect(needsQuickContextRefresh(stored, new Date('2026-07-24T00:00:00.000Z'))).toBe(false);
+  });
+
+  test('nothing stored means ask', () => {
+    expect(needsQuickContextRefresh(undefined, new Date('2026-07-24T00:00:00.000Z'))).toBe(true);
+  });
+
+  test('an old context is fetched again even when it knows the account', () => {
+    const stored = { fetchedAt: '2026-06-01T00:00:00.000Z', context: { userId: 'u1', displayName: 'Ada', firstName: 'Ada', email: 'a@x.com', ids: {} } };
+
+    expect(needsQuickContextRefresh(stored, new Date('2026-07-24T00:00:00.000Z'))).toBe(true);
   });
 });

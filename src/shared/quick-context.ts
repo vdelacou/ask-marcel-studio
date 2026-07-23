@@ -20,6 +20,9 @@ export type QuickContextIds = {
 };
 
 export type QuickContext = {
+  // The directory id: the one field the CLI guarantees, and the only stable name for this
+  // account. An address gets reassigned; this does not.
+  readonly userId: string;
   readonly displayName: string;
   // What to call them in the UI. Empty when the directory gave no display name.
   readonly firstName: string;
@@ -73,12 +76,14 @@ export const parseQuickContext = (stdout: string): QuickContext | undefined => {
   const user = data['user'];
   // Without the user block there is nothing worth storing: it is the one part the CLI
   // guarantees, so its absence means the call did not really succeed.
-  if (!isRecord(user) || stringOr(user['id']) === undefined) return undefined;
+  const userId = isRecord(user) ? stringOr(user['id']) : undefined;
+  if (!isRecord(user) || userId === undefined) return undefined;
 
   const displayName = stringOr(user['displayName']) ?? '';
   const jobTitle = stringOr(user['jobTitle']);
   const tenantTimeZone = stringOr(data['tenantTimeZone']);
   return {
+    userId,
     displayName,
     firstName: firstNameOf(displayName),
     email: stringOr(user['mail']) ?? stringOr(user['userPrincipalName']) ?? '',
@@ -120,6 +125,7 @@ export const parseStoredQuickContext = (value: unknown): { readonly fetchedAt: s
   return {
     fetchedAt,
     context: {
+      userId: stringOr(context['userId']) ?? '',
       displayName,
       firstName: stringOr(context['firstName']) ?? firstNameOf(displayName),
       email: stringOr(context['email']) ?? '',
@@ -129,6 +135,12 @@ export const parseStoredQuickContext = (value: unknown): { readonly fetchedAt: s
     },
   };
 };
+
+// Whether the app should ask the CLI again. Age is the usual reason; the other is a
+// context stored before the app knew it needed the directory id, which is the one field
+// that says which account this all belongs to. Without it the data cannot be filed.
+export const needsQuickContextRefresh = (stored: { readonly fetchedAt: string; readonly context: QuickContext } | undefined, now: Date): boolean =>
+  stored === undefined || stored.context.userId.length === 0 || isQuickContextStale(stored.fetchedAt, now);
 
 export const isQuickContextStale = (fetchedAt: string | undefined, now: Date): boolean => {
   if (fetchedAt === undefined) return true;

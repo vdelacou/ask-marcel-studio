@@ -35,6 +35,8 @@ export type BackgroundJobsDeps = {
   readonly voice: VoiceProfileJob;
   readonly memoryExtractor: MemoryExtractor;
   readonly userData: string;
+  // Shared shims, like the agent runtime's.
+  readonly toolsRoot: string;
   readonly workspaceDir: string;
   readonly inheritedEnv: Readonly<Record<string, string | undefined>>;
   readonly officeCommandCategories: ReadonlyMap<string, string>;
@@ -68,7 +70,14 @@ export const createBackgroundJobs = (deps: BackgroundJobsDeps): BackgroundJobs =
     return ok({
       model,
       cwd: deps.workspaceDir,
-      env: buildSessionEnv({ provider, modelId: parsed.value.modelId, userData: deps.userData, inheritedEnv: deps.inheritedEnv, ...(gateway === undefined ? {} : { gateway }) }),
+      env: buildSessionEnv({
+        provider,
+        modelId: parsed.value.modelId,
+        configRoot: deps.userData,
+        toolsRoot: deps.toolsRoot,
+        inheritedEnv: deps.inheritedEnv,
+        ...(gateway === undefined ? {} : { gateway }),
+      }),
       hooks: buildAgentHooks({ workspaceDir: deps.workspaceDir, disabledOfficeCategories, officeCommandCategories: deps.officeCommandCategories }),
     });
   };
