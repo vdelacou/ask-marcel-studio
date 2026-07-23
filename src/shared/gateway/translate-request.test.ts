@@ -55,6 +55,48 @@ describe('passing on what the agent asked', () => {
     if (!t.ok) return;
     expect(t.value.stream).toBe(false);
   });
+
+  test('a request that names no ceiling is sent without one, not with an empty field', () => {
+    const t = translateRequest({ model: 'lmstudio::qwen2.5', messages: [{ role: 'user', content: 'hi' }] });
+
+    expect(t.ok).toBe(true);
+    if (!t.ok) return;
+    expect('maxOutputTokens' in t.value).toBe(false);
+  });
+
+  test('a user turn keeps only the text blocks that carry something', () => {
+    const blocks = [{ type: 'text' }, { type: 'text', text: '' }, { type: 'text', text: 'the real question' }];
+    const t = translateRequest(ask({ messages: [{ role: 'user', content: blocks }] }));
+
+    expect(t.ok).toBe(true);
+    if (!t.ok) return;
+    expect(t.value.messages).toEqual([{ role: 'user', content: [{ type: 'text', text: 'the real question' }] }]);
+  });
+
+  test('a user block this wire does not define adds nothing, whatever it carries', () => {
+    // The body is whatever the caller posted: a block may be null, or shaped for some
+    // other vendor's schema. Reading one as text, or as a tool result because it happens
+    // to name an id, would put words in the user's mouth.
+    const blocks = [
+      null,
+      { type: 'input_text', text: 'from another schema' },
+      { type: 'function_result', tool_use_id: 'f1', content: 'out' },
+      { type: 'text', text: 'the real question' },
+    ];
+    const t = translateRequest(ask({ messages: [{ role: 'user', content: blocks }] }));
+
+    expect(t.ok).toBe(true);
+    if (!t.ok) return;
+    expect(t.value.messages).toEqual([{ role: 'user', content: [{ type: 'text', text: 'the real question' }] }]);
+  });
+
+  test('a message with no content at all adds nothing, rather than an empty turn', () => {
+    const t = translateRequest(ask({ messages: [{ role: 'user' }] }));
+
+    expect(t.ok).toBe(true);
+    if (!t.ok) return;
+    expect(t.value.messages).toEqual([]);
+  });
 });
 
 describe('carrying the system prompt across', () => {
@@ -76,6 +118,17 @@ describe('carrying the system prompt across', () => {
         ],
       })
     );
+
+    expect(t.ok).toBe(true);
+    if (!t.ok) return;
+    expect(t.value.system).toBe('First.\n\nSecond.');
+  });
+
+  test('only the system blocks holding text are joined, and nothing spaces out the gaps', () => {
+    // A block with no text must not leave an empty run in the prompt: the join is what
+    // the model reads as paragraph structure.
+    const system = ['loose', { type: 'text', text: 'First.' }, { type: 'text' }, { type: 'text', text: 'Second.' }];
+    const t = translateRequest(ask({ system }));
 
     expect(t.ok).toBe(true);
     if (!t.ok) return;
@@ -209,6 +262,55 @@ describe('replaying a tool call the agent already made', () => {
     expect(t.value.messages[1]).toMatchObject({ content: [{ output: { type: 'text', value: 'line one\nline two' } }] });
   });
 
+  test('only the tool output blocks holding text are flattened, and nothing lines the gaps', () => {
+    const content = ['loose', { type: 'text', text: 'line one' }, { type: 'text' }, { type: 'text', text: 'line two' }];
+    const t = translateRequest(
+      ask({
+        messages: [
+          { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'Read', input: {} }] },
+          { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content }] },
+        ],
+      })
+    );
+
+    expect(t.ok).toBe(true);
+    if (!t.ok) return;
+    expect(t.value.messages[1]).toMatchObject({ content: [{ output: { type: 'text', value: 'line one\nline two' } }] });
+  });
+
+  test('an assistant turn keeps only the text blocks that carry something', () => {
+    const blocks = [{ type: 'text' }, { type: 'text', text: '' }, { type: 'text', text: 'Here is what I found.' }];
+    const t = translateRequest(ask({ messages: [{ role: 'assistant', content: blocks }] }));
+
+    expect(t.ok).toBe(true);
+    if (!t.ok) return;
+    expect(t.value.messages).toEqual([{ role: 'assistant', content: [{ type: 'text', text: 'Here is what I found.' }] }]);
+  });
+
+  test('an assistant block this wire does not define adds nothing, whatever it carries', () => {
+    const blocks = [null, { type: 'input_text', text: 'from another schema' }, { type: 'text', text: 'Here is what I found.' }];
+    const t = translateRequest(ask({ messages: [{ role: 'assistant', content: blocks }] }));
+
+    expect(t.ok).toBe(true);
+    if (!t.ok) return;
+    expect(t.value.messages).toEqual([{ role: 'assistant', content: [{ type: 'text', text: 'Here is what I found.' }] }]);
+  });
+
+  test('a tool call Anthropic ran itself is not replayed as one the upstream made', () => {
+    // A server_tool_use block carries the same id, name and input as a tool_use, but the
+    // API ran it server side and no upstream reached through this gateway ever saw it.
+    // Replaying it would invent a call, and then a result that never comes.
+    const blocks = [
+      { type: 'server_tool_use', id: 'srvtoolu_1', name: 'web_search', input: { query: 'x' } },
+      { type: 'text', text: 'What the search turned up.' },
+    ];
+    const t = translateRequest(ask({ messages: [{ role: 'assistant', content: blocks }] }));
+
+    expect(t.ok).toBe(true);
+    if (!t.ok) return;
+    expect(t.value.messages).toEqual([{ role: 'assistant', content: [{ type: 'text', text: 'What the search turned up.' }] }]);
+  });
+
   test('a message carrying both a tool result and text splits, results first', () => {
     const t = translateRequest(
       ask({
@@ -260,15 +362,18 @@ describe('replaying a tool call the agent already made', () => {
 });
 
 describe('carrying a system message the sdk put in the array', () => {
-  // Caught live: the SDK sends system-role messages INSIDE messages, not only as the
-  // top-level `system` field. Refusing them 400s every real turn, which is exactly
-  // what the first gateway run did.
-  test('a system-role message becomes a system message rather than a bad request', () => {
+  // Caught live twice. The SDK sends system-role messages INSIDE messages, not only
+  // as the top-level `system` field; refusing them 400s every real turn. And
+  // forwarding them as system-role wiped the whole real system prompt on Google's
+  // OpenAI-compatible endpoint, which keeps a single systemInstruction: so they ride
+  // as user content behind a marker, and the top-level `system` stays the one and
+  // only system message upstream.
+  test('a system-role message becomes marked user content, never a second system message', () => {
     const t = translateRequest(ask({ messages: [{ role: 'system', content: [{ type: 'text', text: 'You are Claude Code.' }] }] }));
 
     expect(t.ok).toBe(true);
     if (!t.ok) return;
-    expect(t.value.messages).toEqual([{ role: 'system', content: 'You are Claude Code.' }]);
+    expect(t.value.messages).toEqual([{ role: 'user', content: [{ type: 'text', text: '<system-reminder>\nYou are Claude Code.\n</system-reminder>' }] }]);
   });
 
   test('a system message in several blocks is joined, and anything without text is dropped', () => {
@@ -277,7 +382,7 @@ describe('carrying a system message the sdk put in the array', () => {
 
     expect(t.ok).toBe(true);
     if (!t.ok) return;
-    expect(t.value.messages).toEqual([{ role: 'system', content: 'Rules.\n\nMore rules.' }]);
+    expect(t.value.messages).toEqual([{ role: 'user', content: [{ type: 'text', text: '<system-reminder>\nRules.\n\nMore rules.\n</system-reminder>' }] }]);
   });
 
   test('a system message given as a plain string is carried too', () => {
@@ -285,7 +390,7 @@ describe('carrying a system message the sdk put in the array', () => {
 
     expect(t.ok).toBe(true);
     if (!t.ok) return;
-    expect(t.value.messages).toEqual([{ role: 'system', content: 'Be terse.' }]);
+    expect(t.value.messages).toEqual([{ role: 'user', content: [{ type: 'text', text: '<system-reminder>\nBe terse.\n</system-reminder>' }] }]);
   });
 
   test('a system message keeps its place in the conversation order', () => {
@@ -300,7 +405,27 @@ describe('carrying a system message the sdk put in the array', () => {
 
     expect(t.ok).toBe(true);
     if (!t.ok) return;
-    expect(t.value.messages.map((m) => m.role)).toEqual(['system', 'user']);
+    expect(t.value.messages.map((m) => m.role)).toEqual(['user', 'user']);
+  });
+
+  test('the memory glossary in the top-level system survives a mid-array reminder', () => {
+    const t = translateRequest(
+      ask({
+        system: [
+          { type: 'text', text: 'PRESET.' },
+          { type: 'text', text: 'GLOSSARY: UCR means Unique Customer Reference.' },
+        ],
+        messages: [
+          { role: 'user', content: 'What UCR means?' },
+          { role: 'system', content: 'reminder' },
+        ],
+      })
+    );
+
+    expect(t.ok).toBe(true);
+    if (!t.ok) return;
+    expect(t.value.system).toContain('Unique Customer Reference');
+    expect(t.value.messages.some((m) => m.role === 'system')).toBe(false);
   });
 
   test('an empty system message is dropped rather than sent blank', () => {
@@ -382,6 +507,22 @@ describe('offering the agent tools', () => {
     expect(t.ok).toBe(true);
     if (!t.ok) return;
     expect(t.value.messages).toEqual([]);
+  });
+
+  test('an assistant tool_use with no name is skipped, since there would be nothing to call', () => {
+    const t = translateRequest(ask({ messages: [{ role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_1', input: {} }] }] }));
+
+    expect(t.ok).toBe(true);
+    if (!t.ok) return;
+    expect(t.value.messages).toEqual([]);
+  });
+
+  test('a null in the tool list is skipped rather than breaking the turn', () => {
+    const t = translateRequest(ask({ tools: [null, { name: 'Bash', description: 'd', input_schema: { type: 'object' } }] }));
+
+    expect(t.ok).toBe(true);
+    if (!t.ok) return;
+    expect(t.value.tools.map((x) => x.name)).toEqual(['Bash']);
   });
 
   test('a tool_result block with no id is skipped', () => {
@@ -480,5 +621,29 @@ describe('refusing a request that cannot be routed', () => {
     expect(t.ok).toBe(false);
     if (t.ok) return;
     expect(t.error.message).toBe('the request needs a model');
+  });
+
+  test('a body with no messages array names that field, and not the model', () => {
+    const t = translateRequest({ model: 'a::b' });
+
+    expect(t.ok).toBe(false);
+    if (t.ok) return;
+    expect(t.error.message).toBe('the request needs a messages array');
+  });
+
+  test('a message that is not an object says so, rather than blaming a role it never had', () => {
+    const t = translateRequest({ model: 'a::b', messages: ['hi'] });
+
+    expect(t.ok).toBe(false);
+    if (t.ok) return;
+    expect(t.error.message).toBe('every message must be an object');
+  });
+
+  test('an unknown role is named in the refusal, so the caller can see which one', () => {
+    const t = translateRequest({ model: 'a::b', messages: [{ role: 'wizard', content: 'x' }] });
+
+    expect(t.ok).toBe(false);
+    if (t.ok) return;
+    expect(t.error.message).toBe('unknown message role: wizard');
   });
 });

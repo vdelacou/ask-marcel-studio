@@ -22,7 +22,17 @@ export type ModelMessage =
 
 export type UserPart = { readonly type: 'text'; readonly text: string };
 export type AssistantPart =
-  { readonly type: 'text'; readonly text: string } | { readonly type: 'tool-call'; readonly toolCallId: string; readonly toolName: string; readonly input: unknown };
+  | { readonly type: 'text'; readonly text: string }
+  | {
+      readonly type: 'tool-call';
+      readonly toolCallId: string;
+      readonly toolName: string;
+      readonly input: unknown;
+      // Never set here: the Anthropic wire carries no thought signature, so translateRequest
+      // has none to give. `thought-signatures` puts it back before the call goes upstream,
+      // and `google` is the key the openai-compatible converter reads.
+      readonly providerOptions?: { readonly google: { readonly thoughtSignature: string } };
+    };
 export type ToolResultPart = {
   readonly type: 'tool-result';
   readonly toolCallId: string;
@@ -149,13 +159,17 @@ export const translateRequest = (raw: unknown): Result<TranslatedRequest, Gatewa
     if (role === 'user') messages.push(...translateUser(blocks, toolNames));
     else if (role === 'assistant') messages.push(...translateAssistant(blocks, toolNames));
     // The SDK really does put system-role messages in the array, alongside the
-    // top-level `system` field. Caught live: refusing them 400s every real turn.
+    // top-level `system` field. Caught live twice: refusing them 400s every real
+    // turn, and forwarding them as system-role wiped the whole real system prompt on
+    // Google's OpenAI-compatible endpoint, which keeps a single systemInstruction.
+    // So they ride as user content behind a marker, in place, and the top-level
+    // `system` stays the one and only system message upstream.
     else if (role === 'system') {
       const text = blocks
         .map((block) => (isRecord(block) ? (asString(block['text']) ?? '') : ''))
         .filter((x) => x.length > 0)
         .join('\n\n');
-      if (text.length > 0) messages.push({ role: 'system', content: text });
+      if (text.length > 0) messages.push({ role: 'user', content: [{ type: 'text', text: `<system-reminder>\n${text}\n</system-reminder>` }] });
     } else return badRequest(`unknown message role: ${String(role)}`);
   }
 
