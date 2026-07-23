@@ -21,6 +21,8 @@ import { appendTurn } from '../../../shared/conversation-doc.ts';
 import { rewriteSlashSkill } from '../../../shared/slash-skill.ts';
 import { formatError } from '../../../shared/utilities/format-error.ts';
 import { WITHDRAWN_TOOLS, withdrawnTaskRules } from '../../../shared/agents-doc.ts';
+import { createMemoryMcpServer } from './memory-mcp.ts';
+import type { MemoryStore } from '../../../shared/memory-store.ts';
 import type { SdkAgentDefinition } from '../../../shared/agents-doc.ts';
 import type { ChatError, ChatSendInput, UIEvent } from '../../../shared/ipc-contract.ts';
 import type { Conversation, Provider, Settings } from '../../../shared/types.ts';
@@ -70,6 +72,12 @@ export type AgentRuntimeDeps = {
   // by the app rather than by the agent, so a new conversation does not pay nine Graph
   // calls to learn it again. Empty until the first successful fetch.
   readonly quickContextBlock: () => string;
+  // The searchable memory the agent's tools reach. Passed as an in-process MCP server per
+  // send, scoped to this conversation so a memory it adds records where it came from.
+  readonly memoryStore: MemoryStore;
+  // The one always-on line telling the agent it HAS a memory and how to use it. Appended
+  // to the system prompt beside the core.
+  readonly memoryPreamble: string;
 };
 
 export type AgentRuntime = {
@@ -165,9 +173,10 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
           systemPrompt: {
             type: 'preset',
             preset: 'claude_code',
-            append: [deps.corePrompt, deps.quickContextBlock(), ...glossary].filter((block) => block.length > 0).join('\n\n'),
+            append: [deps.corePrompt, deps.memoryPreamble, deps.quickContextBlock(), ...glossary].filter((block) => block.length > 0).join('\n\n'),
           },
           agents,
+          mcpServers: { 'marcel-memory': createMemoryMcpServer(deps.memoryStore, conversation.id) },
           // The main agent otherwise gets the whole Claude Code toolset, helper
           // checkboxes notwithstanding. `disallowedTools` takes the withdrawn ones out
           // of the model's context altogether, so it never offers a search it cannot

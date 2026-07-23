@@ -121,6 +121,19 @@ const agentCoreSource = (): string => (app.isPackaged ? join(process.resourcesPa
 // The prompts for work the app does on its own. Same dev/packaged split.
 const backgroundPromptSource = (name: string): string => (app.isPackaged ? join(process.resourcesPath, 'background', name) : join(__dirname, '../../resources/background', name));
 
+// The always-on line that tells the agent it has a searchable memory. Kept short: it is
+// appended to every system prompt, and its whole job is to make the agent reach for
+// memory_search before claiming ignorance, and to add or forget only on request.
+const MEMORY_PREAMBLE = [
+  '## Your memory',
+  '',
+  "You have a searchable memory of this user's world: terms their organisation uses, who",
+  'people are, their preferences. Before you say you do not know a term, a person, or a',
+  'preference, call memory_search. Add something (memory_add) or forget something',
+  '(memory_forget) ONLY when the user asks you to; never on your own initiative. Everything',
+  'you remember shows on their Memory page, where they can edit or remove it.',
+].join('\n');
+
 // The two on-demand M365 skills the app now ships, carved by trigger (read vs draft).
 const BUILTIN_SKILLS = ['answer-from-m365', 'draft-outlook-email'];
 
@@ -284,6 +297,8 @@ const buildRuntime = (
     settings,
     // Who the user is, read per send so a sign-in mid-session reaches the next turn.
     quickContextBlock: () => quickContext.block(),
+    memoryStore,
+    memoryPreamble: MEMORY_PREAMBLE,
     glossary: () => memory.glossaryBlocks(),
     conversations,
     gateway,
