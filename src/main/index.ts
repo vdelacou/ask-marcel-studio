@@ -299,6 +299,11 @@ const buildRuntime = (
     quickContextBlock: () => quickContext.block(),
     memoryStore,
     memoryPreamble: MEMORY_PREAMBLE,
+    // What the user wrote about themselves, read per send from the global-context file.
+    aboutYou: async () => {
+      const read = await agentFiles.get('global-context');
+      return read.ok ? read.value : '';
+    },
     glossary: () => memory.glossaryBlocks(),
     conversations,
     gateway,
@@ -408,6 +413,9 @@ const buildRuntime = (
     regenerateAgentFile: async (doc) => {
       const checked = parseAgentFileDoc(doc);
       if (!checked.ok) return checked;
+      // Nothing regenerates the global context: the user writes it themselves, there is
+      // no background job that could, and asking for one is a mistake, not a wait.
+      if (checked.value === 'global-context') return err({ kind: 'unavailable', message: 'the global context is yours to write; there is nothing to regenerate' });
       const done = await background.enqueue(checked.value === 'signature' ? { kind: 'signature-prefill', force: true } : { kind: 'voice-profile', force: true });
       if (!done.ok) return err({ kind: done.error.kind === 'skipped' ? 'unavailable' : 'write-failed', message: done.error.message });
       return agentFiles.get(checked.value);

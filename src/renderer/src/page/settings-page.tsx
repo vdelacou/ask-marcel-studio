@@ -16,6 +16,7 @@ import { AgentsPanel } from '../components/organisms/agents-panel/index.tsx';
 import { AgentEditor } from '../components/organisms/agent-editor/index.tsx';
 import { SignaturePanel } from '../components/organisms/signature-panel/index.tsx';
 import { VoicePanel } from '../components/organisms/voice-panel/index.tsx';
+import { AboutYouPanel } from '../components/organisms/about-you-panel/index.tsx';
 import { MemoryPanel } from '../components/organisms/memory-panel/index.tsx';
 import type { MemoryNoteId } from '../components/organisms/memory-panel/index.tsx';
 import { DocumentEditor } from '../components/organisms/document-editor/index.tsx';
@@ -56,6 +57,7 @@ const NAV_GROUPS: readonly SettingsNavGroup[] = [
   {
     heading: 'About you',
     items: [
+      { id: 'about', label: 'About you', icon: 'memory' },
       { id: 'signature', label: 'Email signature', icon: 'signature' },
       { id: 'voice', label: 'Writing voice', icon: 'voice' },
     ],
@@ -85,6 +87,7 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
   const [skillAddMenuOpen, setSkillAddMenuOpen] = useState(false);
   const skills = useSkills();
   const agents = useAgents();
+  const about = useAgentFile('global-context');
   const signature = useAgentFile('signature');
   const voice = useAgentFile('voice-profile');
   const [isEditingSignature, setIsEditingSignature] = useState(false);
@@ -438,6 +441,23 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
           }}
           onRegenerate={signature.regenerate}
         />
+      )}
+
+      {section === 'about' && (
+        <AboutYouPanel>
+          <DocumentEditor
+            mode="rich"
+            richNode={<MarkdownEditor key={about.stored} defaultValue={about.draft} onChange={about.setDraft} />}
+            markdownValue={about.draft}
+            emptyHint="Nothing yet. Tell Marcel who you are, what you are responsible for, and anything it should always keep in mind."
+            isSaving={about.isSaving}
+            isDirty={about.isDirty}
+            {...(about.notice === undefined ? {} : { notice: about.notice })}
+            onChangeMarkdown={about.setDraft}
+            onSave={about.save}
+            onCancel={about.cancel}
+          />
+        </AboutYouPanel>
       )}
 
       {section === 'voice' && (

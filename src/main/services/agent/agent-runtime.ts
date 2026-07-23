@@ -22,6 +22,7 @@ import { rewriteSlashSkill } from '../../../shared/slash-skill.ts';
 import { formatError } from '../../../shared/utilities/format-error.ts';
 import { WITHDRAWN_TOOLS, withdrawnTaskRules } from '../../../shared/agents-doc.ts';
 import { createMemoryMcpServer } from './memory-mcp.ts';
+import { buildContextBlocks } from '../../../shared/context-blocks.ts';
 import type { MemoryStore } from '../../../shared/memory-store.ts';
 import type { SdkAgentDefinition } from '../../../shared/agents-doc.ts';
 import type { ChatError, ChatSendInput, UIEvent } from '../../../shared/ipc-contract.ts';
@@ -78,6 +79,9 @@ export type AgentRuntimeDeps = {
   // The one always-on line telling the agent it HAS a memory and how to use it. Appended
   // to the system prompt beside the core.
   readonly memoryPreamble: string;
+  // What the user wrote about themselves in Settings > About you, read per send so an edit
+  // applies from the next message.
+  readonly aboutYou: () => Promise<string>;
 };
 
 export type AgentRuntime = {
@@ -152,6 +156,8 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
       // all the real API has heard of.
       const model = gateway === undefined ? modelId : formatModelRef({ providerId: provider.id, modelId });
       const glossary = await deps.glossary();
+      const aboutYou = await deps.aboutYou();
+      const contextBlocks = buildContextBlocks({ aboutYou, quickContext: deps.quickContextBlock(), memoryPreamble: deps.memoryPreamble });
       const turn = query({
         prompt,
         options: {
@@ -173,7 +179,7 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
           systemPrompt: {
             type: 'preset',
             preset: 'claude_code',
-            append: [deps.corePrompt, deps.memoryPreamble, deps.quickContextBlock(), ...glossary].filter((block) => block.length > 0).join('\n\n'),
+            append: [deps.corePrompt, ...contextBlocks, ...glossary].filter((block) => block.length > 0).join('\n\n'),
           },
           agents,
           mcpServers: { 'marcel-memory': createMemoryMcpServer(deps.memoryStore, conversation.id) },
