@@ -7,7 +7,7 @@
  * no class string (rule 22); every decision it makes is a call into src/renderer/src/lib.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { DragEvent, FC } from 'react';
+import type { DragEvent, FC, ReactNode } from 'react';
 import { ChatThread } from '../components/organisms/chat-thread/index.tsx';
 import type { ThreadMessage } from '../components/organisms/chat-thread/index.tsx';
 import { Composer } from '../components/organisms/composer/index.tsx';
@@ -39,6 +39,9 @@ export type ChatPageProps = {
   // The app asks the user about things it noticed, and does it only when they are not
   // mid-sentence. This is how it knows.
   onComposerActivity: (hasText: boolean) => void;
+  // The conversation's sticky title bar, built by the app shell (it owns rename and
+  // delete, which the sidebar shares).
+  header?: ReactNode;
 };
 
 const MENU_ITEMS = [{ id: 'import-file', label: 'Attach a file…' }];
@@ -91,7 +94,7 @@ const toThreadMessage = (message: Message): ThreadMessage => {
   };
 };
 
-export const ChatPage: FC<ChatPageProps> = ({ conversationId, view, model, onHydrate, onSend, onCancel, onChangeModel, onComposerActivity }) => {
+export const ChatPage: FC<ChatPageProps> = ({ conversationId, view, model, onHydrate, onSend, onCancel, onChangeModel, onComposerActivity, header }) => {
   const [draft, setDraft] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [skills, setSkills] = useState<readonly SkillSuggestion[]>([]);
@@ -223,6 +226,7 @@ export const ChatPage: FC<ChatPageProps> = ({ conversationId, view, model, onHyd
         isStreaming={view.isStreaming}
         error={view.error}
         emptyHint="Ask anything. The agent can run commands and read files in this conversation's workspace."
+        {...(header === undefined ? {} : { header })}
       />
       <Composer
         value={draft}
