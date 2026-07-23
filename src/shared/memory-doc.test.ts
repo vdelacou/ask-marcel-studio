@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { listEntries, mergeMemoryEntries, normaliseTerm, parseMemoryDoc, serialiseMemoryDoc } from './memory-doc.ts';
 
-const parse = (markdown: string): ReturnType<typeof parseMemoryDoc> => parseMemoryDoc(markdown, 'Glossary');
+const parse = (markdown: string): ReturnType<typeof parseMemoryDoc> => parseMemoryDoc(markdown);
 
 describe('reading the notes the app keeps', () => {
   test('an entry is read as a term and what it means', () => {
@@ -17,12 +17,12 @@ describe('reading the notes the app keeps', () => {
     expect(listEntries(parse('- **Sync**: the 9:30 standup'))[0]?.detail).toBe('the 9:30 standup');
   });
 
-  test('the heading is kept', () => {
-    expect(parse('# Who is who\n\n- **Anna**: product').heading).toBe('Who is who');
+  test('a title left over from when notes had them is dropped, not kept as a stray line', () => {
+    expect(serialiseMemoryDoc(parse('# Who is who\n\n- **Anna**: product'))).toBe('- **Anna**: product\n');
   });
 
-  test('a file with no heading yet gets the default one', () => {
-    expect(parse('- **TLA**: acronym').heading).toBe('Glossary');
+  test('a note with no title reads exactly the same', () => {
+    expect(listEntries(parse('- **TLA**: acronym'))).toEqual([{ term: 'TLA', detail: 'acronym' }]);
   });
 
   test('an empty file reads as an empty set of notes', () => {
@@ -43,13 +43,13 @@ describe('reading the notes the app keeps', () => {
 
 describe('writing the notes back out', () => {
   test('a file round trips', () => {
-    const markdown = '# Glossary\n\n- **TLA**: three-letter acronym\n- **Sync**: the standup\n';
+    const markdown = '- **TLA**: three-letter acronym\n- **Sync**: the standup\n';
 
     expect(serialiseMemoryDoc(parse(markdown))).toBe(markdown);
   });
 
   test('a hand-written entry comes back in the app’s own form', () => {
-    expect(serialiseMemoryDoc(parse('- TLA: acronym'))).toBe('# Glossary\n\n- **TLA**: acronym\n');
+    expect(serialiseMemoryDoc(parse('- TLA: acronym'))).toBe('- **TLA**: acronym\n');
   });
 
   test('blank lines do not accumulate on every save', () => {
@@ -137,15 +137,20 @@ describe('reading a file however it was saved', () => {
     expect(listEntries(parse('# Glossary\r\n\r\n- **TLA**: acronym\r\n'))).toEqual([{ term: 'TLA', detail: 'acronym' }]);
   });
 
-  test('a heading that is not the first line is still the heading', () => {
-    expect(parse('\n# Who is who\n\n- **Anna**: product').heading).toBe('Who is who');
-  });
-
-  test('space around the heading is trimmed, so a saved file does not drift', () => {
-    expect(parse('#   Who is who   \n').heading).toBe('Who is who');
+  test('a title further down the file is dropped too, along with what preceded it', () => {
+    expect(listEntries(parse('\n# Who is who\n\n- **Anna**: product'))).toEqual([{ term: 'Anna', detail: 'product' }]);
   });
 
   test('a plain entry written without a space after the colon still reads', () => {
     expect(listEntries(parse('- TLA:acronym'))).toEqual([{ term: 'TLA', detail: 'acronym' }]);
+  });
+
+  test('entries bulleted with an asterisk or a plus are entries too, so they count as known', () => {
+    // Caught live: a hand-edited file used `*` bullets, the parser saw no entries, and
+    // the elicitation re-suggested a term the file already defined.
+    expect(listEntries(parse('* **UCR**: an interim database\n+ SEAO: a region'))).toEqual([
+      { term: 'UCR', detail: 'an interim database' },
+      { term: 'SEAO', detail: 'a region' },
+    ]);
   });
 });

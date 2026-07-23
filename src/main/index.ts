@@ -221,7 +221,7 @@ const buildRuntime = (
   const memory = createMemoryService({ userData, now, newId: () => crypto.randomUUID(), emit: emitMemory });
   const agent = createAgentRuntime({
     settings,
-    glossary: () => memory.glossaryBlock(),
+    glossary: () => memory.glossaryBlocks(),
     conversations,
     gateway,
     officeCommandCategories: officeCatalog.commandCategories(),

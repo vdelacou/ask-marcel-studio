@@ -7,8 +7,6 @@
  * matters more here than a tidy one: anything this cannot parse is kept exactly as it
  * was found and written back out unchanged, so an edit is never silently eaten.
  *
- *   # Glossary
- *
  *   - **TLA**: three-letter acronym, how finance labels quick wins
  *
  * Pure: zero electron imports, so `bun test` covers it.
@@ -20,14 +18,15 @@ export type MemoryEntry = { readonly term: string; readonly detail: string };
 type MemoryLine = { readonly kind: 'entry'; readonly entry: MemoryEntry } | { readonly kind: 'raw'; readonly text: string };
 
 export type MemoryDoc = {
-  readonly heading: string;
   readonly lines: readonly MemoryLine[];
 };
 
 // Bold form is what this writes; the plain form is accepted because someone editing by
 // hand will not reach for asterisks.
-const BOLD_ENTRY = /^- \*\*([^*]+)\*\*: ?(.*)$/;
-const PLAIN_ENTRY = /^- ([^:]+): ?(.*)$/;
+// Any CommonMark list marker: a hand-edited file bullets with `*` or `+` as readily as
+// `-`, and an entry the parser cannot see is a term the elicitation re-suggests forever.
+const BOLD_ENTRY = /^[-*+] \*\*([^*]+)\*\*: ?(.*)$/;
+const PLAIN_ENTRY = /^[-*+] ([^:]+): ?(.*)$/;
 
 export const normaliseTerm = (term: string): string => term.trim().toLowerCase().replace(/\s+/g, ' ');
 
@@ -42,20 +41,28 @@ const readEntry = (line: string): MemoryEntry | undefined => {
   return { term, detail: rawDetail.trim() };
 };
 
-export const parseMemoryDoc = (markdown: string, defaultHeading: string): MemoryDoc => {
+// A note no longer carries a title of its own: the screen already names it, and repeating
+// it inside cost a heading in the editor and a line in every prompt. Notes written before
+// that lose theirs on the way in, so an old file is cleaned by being opened rather than by
+// a migration, and nothing has to remember which shape it is looking at.
+export const withoutHeading = (markdown: string): string => {
   const lines = markdown.replace(/\r/g, '').split('\n');
-  const headingAt = lines.findIndex((line) => line.startsWith('# '));
-  const headingLine = headingAt === -1 ? undefined : lines[headingAt];
-  const heading = headingLine === undefined ? defaultHeading : headingLine.slice(2).trim();
+  // No branch for the no-title case: findIndex answers -1 there, and slice(-1 + 1) is
+  // slice(0), which is every line. Writing the two cases out separately reads as more
+  // careful and is in fact the same function, with a condition no test could tell apart.
+  return lines.slice(lines.findIndex((line) => line.startsWith('# ')) + 1).join('\n');
+};
 
-  const body = headingAt === -1 ? lines : lines.slice(headingAt + 1);
-  const read = body.map((line): MemoryLine => {
-    const entry = readEntry(line);
-    return entry === undefined ? { kind: 'raw', text: line } : { kind: 'entry', entry };
-  });
+export const parseMemoryDoc = (markdown: string): MemoryDoc => {
+  const read = withoutHeading(markdown)
+    .split('\n')
+    .map((line): MemoryLine => {
+      const entry = readEntry(line);
+      return entry === undefined ? { kind: 'raw', text: line } : { kind: 'entry', entry };
+    });
   // Blank lines around the entries are formatting, not content: they come back from
   // the serialiser anyway, and keeping them would grow the file on every save.
-  return { heading, lines: read.filter((line) => line.kind === 'entry' || line.text.trim().length > 0) };
+  return { lines: read.filter((line) => line.kind === 'entry' || line.text.trim().length > 0) };
 };
 
 export const listEntries = (doc: MemoryDoc): readonly MemoryEntry[] => doc.lines.flatMap((line) => (line.kind === 'entry' ? [line.entry] : []));
@@ -74,5 +81,5 @@ export const mergeMemoryEntries = (doc: MemoryDoc, additions: readonly MemoryEnt
 
 export const serialiseMemoryDoc = (doc: MemoryDoc): string => {
   const body = doc.lines.map((line) => (line.kind === 'entry' ? `- **${line.entry.term}**: ${line.entry.detail}` : line.text));
-  return `# ${doc.heading}\n\n${body.join('\n')}\n`;
+  return `${body.join('\n')}\n`;
 };

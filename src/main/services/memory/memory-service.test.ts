@@ -144,11 +144,6 @@ describe('the notes themselves', () => {
     expect(await service.read('team')).toEqual({ ok: true, value: '# My team\n\n- **Ben**: design\n' });
   });
 
-  test('a name that could reach a path is refused', async () => {
-    expect((await service.read('../../etc/passwd')).ok).toBe(false);
-    expect((await service.write('../escape', 'x')).ok).toBe(false);
-  });
-
   test('a note longer than the agent will read is refused, not trimmed', async () => {
     const tooLong = 'x'.repeat(NOTE_LIMIT + 1);
 
@@ -166,7 +161,7 @@ describe('the notes themselves', () => {
   });
 
   test('accepting a word into a note that is already full is refused, and the question stays', async () => {
-    await service.write('jargon', `# Words we use\n\n- **PAD**: ${'x'.repeat(NOTE_LIMIT - 60)}`);
+    await service.write('jargon', `- **PAD**: ${'x'.repeat(NOTE_LIMIT - 30)}`);
     await service.addCandidates([found({ term: 'SEAO', detail: 'Southeast Asia and Oceania' })], 'c1');
     const waiting = await service.pending();
     const id = waiting.ok ? waiting.value[0]?.id : undefined;
@@ -181,6 +176,11 @@ describe('the notes themselves', () => {
     expect(stillWaiting.ok && stillWaiting.value).toHaveLength(1);
   });
 
+  test('a name that could reach a path is refused', async () => {
+    expect((await service.read('../../etc/passwd')).ok).toBe(false);
+    expect((await service.write('../escape', 'x')).ok).toBe(false);
+  });
+
   test('a note that is not text is refused', async () => {
     expect((await service.write('team', 42)).ok).toBe(false);
   });
@@ -189,14 +189,16 @@ describe('the notes themselves', () => {
     await service.write('jargon', '- **QW**: quick win');
     await service.write('team', '- **Ben**: design');
 
-    const block = await service.glossaryBlock();
+    const blocks = await service.glossaryBlocks();
 
-    expect(block).toContain('QW');
-    expect(block).toContain('Ben');
+    // Two notes written, two blocks: they are handed over one by one, never merged.
+    expect(blocks).toHaveLength(2);
+    expect(blocks.join('\n')).toContain('QW');
+    expect(blocks.join('\n')).toContain('Ben');
   });
 
   test('nothing written yet adds nothing to the prompt', async () => {
-    expect(await service.glossaryBlock()).toBe('');
+    expect(await service.glossaryBlocks()).toEqual([]);
   });
 });
 

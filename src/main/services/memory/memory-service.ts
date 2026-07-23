@@ -14,7 +14,7 @@ import type { MemoryFileName } from '../../../shared/memory-file-name.ts';
 import { EMPTY_MEMORY_QUEUE, addCandidates, findCandidate, parseMemoryQueue, removeCandidate, serialiseMemoryQueue } from '../../../shared/memory-queue-doc.ts';
 import type { MemoryCandidate } from '../../../shared/memory-queue-doc.ts';
 import { EMPTY_MEMORY_STATE, markExtracted, needsExtraction, parseMemoryState, readSoFar, serialiseMemoryState } from '../../../shared/memory-state-doc.ts';
-import { buildGlossaryBlock, isNoteTooLong, NOTE_LIMIT } from '../../../shared/memory-glossary.ts';
+import { buildGlossaryBlocks, isNoteTooLong, NOTE_LIMIT } from '../../../shared/memory-glossary.ts';
 import type { RawCandidate } from '../../../shared/memory-extract.ts';
 import { memoryFilePath, memoryQueuePath, memoryStatePath } from '../../../shared/paths.ts';
 import { readJsonFile, readTextFile, writeTextFileAtomic } from '../store/json-file.ts';
@@ -36,17 +36,11 @@ export type MemoryService = {
   readonly read: (name: unknown) => Promise<Result<string, StoreError>>;
   readonly write: (name: unknown, contents: unknown) => Promise<Result<null, StoreError>>;
   // What rides along with every turn. Degrades to nothing rather than failing a turn.
-  readonly glossaryBlock: () => Promise<string>;
+  readonly glossaryBlocks: () => Promise<readonly string[]>;
   readonly addCandidates: (items: readonly RawCandidate[], conversationId: string) => Promise<Result<number, StoreError>>;
   readonly extractionDue: (conversationId: string, messageCount: number) => Promise<boolean>;
   readonly readSoFar: (conversationId: string) => Promise<number>;
   readonly markExtracted: (conversationId: string, messageCount: number) => Promise<void>;
-};
-
-const HEADINGS: Readonly<Record<MemoryFileName, string>> = {
-  jargon: 'Words we use',
-  team: 'My team',
-  people: 'People I work with',
 };
 
 export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
@@ -116,7 +110,7 @@ export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
       const detail = typeof draft.detail === 'string' ? draft.detail.trim() : '';
       if (detail.length === 0) return err({ kind: 'invalid', message: 'a note needs something written in it' });
 
-      const current = parseMemoryDoc(await readNote(candidate.kind), HEADINGS[candidate.kind]);
+      const current = parseMemoryDoc(await readNote(candidate.kind));
       const merged = serialiseMemoryDoc(mergeMemoryEntries(current, [{ term: candidate.term, detail }]));
       // The same limit the panel enforces. Accepting is the other door into these
       // notes, and a note filled past the cap through this one would be text nobody
@@ -137,7 +131,8 @@ export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
     return ok(next.items);
   };
 
-  const glossaryBlock = async (): Promise<string> => buildGlossaryBlock({ jargon: await readNote('jargon'), team: await readNote('team'), people: await readNote('people') });
+  const glossaryBlocks = async (): Promise<readonly string[]> =>
+    buildGlossaryBlocks({ jargon: await readNote('jargon'), team: await readNote('team'), people: await readNote('people') });
 
   const addFound = async (items: readonly RawCandidate[], conversationId: string): Promise<Result<number, StoreError>> => {
     const queue = await readQueue();
@@ -145,9 +140,9 @@ export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
 
     const known = new Set(
       [
-        ...listEntries(parseMemoryDoc(await readNote('jargon'), '')),
-        ...listEntries(parseMemoryDoc(await readNote('team'), '')),
-        ...listEntries(parseMemoryDoc(await readNote('people'), '')),
+        ...listEntries(parseMemoryDoc(await readNote('jargon'))),
+        ...listEntries(parseMemoryDoc(await readNote('team'))),
+        ...listEntries(parseMemoryDoc(await readNote('people'))),
       ].map((entry) => entry.term)
     );
     const at = deps.now();
@@ -191,5 +186,5 @@ export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
     await writeTextFileAtomic(memoryStatePath(deps.userData), serialiseMemoryState(markExtracted(state.value, conversationId, messageCount, deps.now())));
   };
 
-  return { pending, resolve, read, write, glossaryBlock, addCandidates: addFound, extractionDue, readSoFar: howFar, markExtracted: rememberRead };
+  return { pending, resolve, read, write, glossaryBlocks, addCandidates: addFound, extractionDue, readSoFar: howFar, markExtracted: rememberRead };
 };
