@@ -14,6 +14,7 @@ import {
   npmCacheDir,
   signatureFilePath,
   voiceProfileFilePath,
+  quickContextFilePath,
   npmPrefixDir,
   pipCacheDir,
   settingsFilePath,
@@ -109,6 +110,10 @@ describe('where the agent finds what the user wrote about themselves', () => {
 
   test('the voice profile sits beside it', () => {
     expect(voiceProfileFilePath('/data')).toBe(`${claudeConfigDir('/data')}/voice-profile.md`);
+  });
+
+  test('the quick context sits there too, because a skill may want an id the block left out', () => {
+    expect(quickContextFilePath('/data')).toBe(`${claudeConfigDir('/data')}/quick-context.json`);
   });
 });
 

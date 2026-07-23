@@ -52,6 +52,11 @@ export const signatureFilePath = (userData: string): string => join(claudeConfig
 // $CLAUDE_CONFIG_DIR/voice-profile.md.
 export const voiceProfileFilePath = (userData: string): string => join(claudeConfigDir(userData), 'voice-profile.md');
 
+// Who the user is, fetched once from `my-quick-context` and re-read on every turn.
+// Under claude-config on purpose: nothing in it is secret, and a skill that wants an id
+// the block did not carry can open the file itself.
+export const quickContextFilePath = (userData: string): string => join(claudeConfigDir(userData), 'quick-context.json');
+
 // What settingSources: ['user'] loads. One folder per skill, each with a SKILL.md.
 export const skillsDir = (userData: string): string => join(claudeConfigDir(userData), 'skills');
 
