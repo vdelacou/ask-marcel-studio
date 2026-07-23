@@ -24,6 +24,10 @@ export type ComposerProps = {
   // Open only while a "/" name is being typed; the page shell decides (lib/slash-suggest).
   suggestions: readonly SuggestItem[];
   activeSuggestion: number;
+  // True when the arrows should step through what was already sent rather than move the
+  // caret: the box is empty, or it already holds a recalled message. The shell decides
+  // (lib/message-history), so this component keeps no rule of its own.
+  canRecallHistory: boolean;
   model?: ComposerModel;
   onChange: (value: string) => void;
   onSend: () => void;
@@ -35,6 +39,8 @@ export type ComposerProps = {
   onMoveSuggestion: (delta: 1 | -1) => void;
   onHoverSuggestion: (index: number) => void;
   onDismissSuggestions: () => void;
+  // -1 is further back through what was sent, 1 is back towards what was being typed.
+  onRecall: (direction: 1 | -1) => void;
   onChangeModel: (value: string) => void;
 };
 
@@ -48,6 +54,7 @@ export const Composer: FC<ComposerProps> = ({
   menuItems,
   suggestions,
   activeSuggestion,
+  canRecallHistory,
   model,
   onChange,
   onSend,
@@ -59,6 +66,7 @@ export const Composer: FC<ComposerProps> = ({
   onMoveSuggestion,
   onHoverSuggestion,
   onDismissSuggestions,
+  onRecall,
   onChangeModel,
 }) => {
   const isSuggesting = suggestions.length > 0;
@@ -84,6 +92,14 @@ export const Composer: FC<ComposerProps> = ({
         return;
       }
     }
+    // Only when the shell says so, which is never while there is text of the user's own in
+    // the box: a multi-line draft needs the arrows for the caret, the way any text area
+    // does.
+    if (canRecallHistory && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+      event.preventDefault();
+      onRecall(event.key === 'ArrowUp' ? -1 : 1);
+      return;
+    }
     if (event.key !== 'Enter' || event.shiftKey) return;
     event.preventDefault();
     if (canSend) onSend();
@@ -100,7 +116,7 @@ export const Composer: FC<ComposerProps> = ({
       {/* The box holds the message. Everything you press sits under it, on its own
           row, so the writing area is only writing. Both popovers hang off this
           wrapper rather than off the box, so they clear the whole composer. */}
-      <div className="relative mx-auto flex w-full max-w-3xl flex-col gap-y-2">
+      <div className="relative mx-auto flex w-full max-w-reading flex-col gap-y-2">
         {menuOpen && <ComposerMenu items={menuItems} onPick={onPickMenu} />}
         {isSuggesting && <SuggestPopover items={suggestions} activeIndex={activeSuggestion} onPick={onPickSuggestion} onHover={onHoverSuggestion} />}
 

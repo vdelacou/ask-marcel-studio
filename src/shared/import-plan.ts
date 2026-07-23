@@ -66,9 +66,24 @@ export const resolveCollision = (existing: readonly string[], name: string): str
 // Appended to the message so the agent knows the files exist and where. Written as
 // plain instructions rather than a marker syntax: the model reads it as English, and
 // the user sees nothing (the transcript keeps their own text).
+// Shared so the two functions below cannot drift: one writes the paragraph, the other
+// finds it again.
+const SUFFIX_OPENING = '\n\nThe user attached ';
+
 export const attachmentSuffix = (files: readonly { readonly relativePath: string }[]): string => {
   if (files.length === 0) return '';
   const list = files.map((file) => `- ${file.relativePath}`).join('\n');
   const noun = files.length === 1 ? 'this file' : 'these files';
-  return `\n\nThe user attached ${noun}. They are in your working directory:\n${list}`;
+  return `${SUFFIX_OPENING}${noun}. They are in your working directory:\n${list}`;
+};
+
+// The message as the user typed it. What was sent, and therefore what the transcript
+// keeps, carries the paragraph above; putting that back in the box when they press up
+// would have them re-send a claim about files that are no longer attached.
+//
+// Last occurrence, not first: the paragraph is always last, so a message that happens to
+// quote the same words keeps them.
+export const withoutAttachmentSuffix = (text: string): string => {
+  const opening = text.lastIndexOf(SUFFIX_OPENING);
+  return opening === -1 ? text : text.slice(0, opening);
 };
