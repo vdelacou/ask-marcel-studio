@@ -56,6 +56,8 @@ bun run dev     # opens the app with renderer HMR
 | `bun run dev` | electron-vite dev server + launches Electron, renderer HMR |
 | `bun run build` | production build into `out/` |
 | `bun run start` | launch Electron against the production build |
+| `bun run dist` | build + package an unsigned x64 macOS DMG into `release/` (see Packaging) |
+| `bun run dist:dir` | same, but an unpacked `.app` (faster; for a quick launch test) |
 | `bun test` | unit tests (pure modules only — see Testing) |
 | `bun run lint` | fast ESLint, 0 warnings tolerated |
 | `bun run lint:strict` | adds type-aware rules (~25s); what pre-commit gate 5 runs |
@@ -67,6 +69,29 @@ bun run dev     # opens the app with renderer HMR
 
 Delete `reports/stryker-incremental.json` before trusting a mutation score you just tried to
 improve: the incremental cache reports stale survivors after a test change.
+
+## Packaging
+
+`bun run dist` produces an unsigned x64 macOS DMG in `release/`. Two things have to be in
+place first, because they ride into the bundle as `extraResources` and the build stops if
+they are missing:
+
+```bash
+bun run fetch:python   # the embedded CPython runtime, into vendor/python/<triple>
+bun run fetch:wheels   # the seed wheels, into vendor/wheels
+bun run rebuild:native # rebuild better-sqlite3 against Electron's ABI
+bun run dist           # electron-vite build, then electron-builder --mac --x64
+```
+
+The build is **unsigned** (no Apple certificate on this project), so the first launch is
+gated by Gatekeeper: right-click the app and choose Open once, and macOS remembers it. For
+the same reason there is no silent autoupdate. The app checks GitHub's latest release once a
+day and, when a newer one exists, shows a banner linking the DMG; installing it is manual.
+
+Scope is deliberately narrow: **x64 only** (the dev machine is Intel; arm64 needs real Apple
+Silicon to build and test on), and `asar: false` (the agent SDK spawns its own CLI and
+better-sqlite3 loads a native `.node`, both of which want real files, not an archive). The
+running version shows under the settings nav.
 
 ## Layout
 

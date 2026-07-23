@@ -1,0 +1,43 @@
+# Packaging for Ask Marcel Studio. Manual step (bun run dist), not part of any gate.
+#
+# Unsigned x64 macOS only: the dev machine is Intel, and signing/notarisation needs an Apple
+# Developer certificate this project does not have. That is also why there is no autoupdate:
+# macOS refuses to silently replace an unsigned app, so the app only ever notices a newer
+# release and links the DMG (see services/update). arm64, signing and notarisation wait for
+# real hardware and a certificate.
+#
+# asar: false on purpose. The Claude Agent SDK spawns its own CLI and better-sqlite3 loads a
+# native .node; both want real files on disk, not an archive. The cost is a fatter, browsable
+# app bundle, which for a personal tool is a fair trade.
+appId: com.askmarcel.studio
+productName: Ask Marcel Studio
+directories:
+  output: release
+asar: false
+files:
+  - out/**
+  - package.json
+  - node_modules/**
+# Everything the agent reads at runtime rides alongside the app, resolved from
+# process.resourcesPath (see the *Source helpers and pythonProvision in main/index.ts). The
+# python runtime and wheels must be fetched first (bun run fetch:python && fetch:wheels), or
+# these from-paths do not exist and the build stops.
+extraResources:
+  - from: resources/agent-core
+    to: agent-core
+  - from: resources/builtin-skills
+    to: builtin-skills
+  - from: resources/background
+    to: background
+  - from: vendor/python/x86_64-apple-darwin
+    to: python-runtime
+  - from: vendor/wheels
+    to: python-wheels
+mac:
+  target:
+    - target: dmg
+      arch: x64
+  category: public.app-category.productivity
+  icon: resources/icons/icon.icns
+  # Unsigned: no certificate. Gatekeeper will ask the user to right-click Open the first time.
+  identity: null

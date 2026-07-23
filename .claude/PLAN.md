@@ -154,16 +154,19 @@ overhaul, 12 command-list redesign.
 
 ## Phase 4 — Ops, branding, packaging, update
 
-1. [ ] File logger (R11a): log-line.ts + file-logger.ts (5MB, one rotation, silent-on-error);
+1. [x] File logger (R11a): log-line.ts + file-logger.ts (5MB, one rotation, silent-on-error);
        inject runner/runtime/office. No PII: events, ids, kinds, counts only; 200-char clamp.
-2. [ ] Transcript retention (R11b): sdkProjectDirName + transcript-sweep.ts + launch sweep;
-       remove() also rms transcript dir. Live conversations never age-capped.
-3. [ ] Icon pipeline (R4): resources/icons/logo.svg + scripts/make-icons.sh (sips/iconutil) to
-       build/icon.icns + 512 PNG + renderer asset.
-4. [ ] electron-builder (R21a): electron-builder.yml (x64, unsigned, asar:false,
-       extraResources incl. python), dist scripts, README packaging section.
-5. [ ] Update check + version (R21c/d): update-check.ts + update-checker.ts (10s deadline,
+       Landed ed2c9fa, 6a319aa.
+2. [x] Transcript retention (R11b): sdkProjectDirName + transcript-sweep.ts + launch sweep;
+       remove() also rms transcript dir. Live conversations never age-capped. Landed 038c89a.
+3. [x] Icon pipeline (R4): resources/icons/logo.svg + scripts/make-icons.sh (sips/iconutil) to
+       icon.icns + 512 PNG + renderer asset. Landed c18218b.
+4. [x] electron-builder (R21a): electron-builder.yml (x64, unsigned, asar:false,
+       extraResources incl. python), dist scripts, README packaging section. Config landed;
+       electron-vite build green; full DMG is the manual gate (needs fetch:python+wheels).
+5. [x] Update check + version (R21c/d): update-check.ts + update-checker.ts (10s deadline,
        24h, cache, silent degrade), update:status IPC, banner + settings version line.
+       Backend landed; renderer banner + version line next commit.
 
 ## Verification
 
