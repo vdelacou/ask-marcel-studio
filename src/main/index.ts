@@ -29,6 +29,7 @@ import { createIdleWatcher } from './services/memory/idle-watcher.ts';
 import { createBackgroundJobs } from './services/background/background-jobs.ts';
 import { createRunAgentText } from './services/background/background-agent-io.ts';
 import { createVoiceProfileJob } from './services/background/voice-profile-job.ts';
+import { createTitleJob } from './services/background/title-job.ts';
 import { createSignatureService } from './services/office/signature-service.ts';
 import { parseAgentFileDoc } from '../shared/agent-files.ts';
 import { createModelTestService } from './services/models/model-test-service.ts';
@@ -271,6 +272,8 @@ const buildRuntime = (
     toolsRoot,
     now,
     emit,
+    // A conversation earns its name once it has had an exchange worth naming.
+    onFirstTurnSaved: (conversationId) => void background.enqueue({ kind: 'conversation-title', conversationId }),
     inheritedEnv: process.env,
     corePrompt: readAgentCore(agentCoreSource()),
     // Read per send, not captured: a skill added in settings applies from the next
@@ -323,6 +326,12 @@ const buildRuntime = (
       runAgentText: createRunAgentText(),
       prompt: readBundledText(backgroundPromptSource('memory-extract-prompt.md')),
       session: () => jobs.session(),
+    }),
+    title: createTitleJob({
+      runAgentText: createRunAgentText(),
+      conversations,
+      session: (preferredModel) => jobs.session(preferredModel),
+      onTitle: (conversationId, title) => emit({ type: 'title', conversationId, title }),
     }),
     voice: createVoiceProfileJob({
       runAgentText: createRunAgentText(),

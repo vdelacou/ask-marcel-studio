@@ -60,6 +60,7 @@ const BUN_TESTABLE_MAIN: ReadonlyArray<string> = [
   'src/main/services/store/agents-store.ts',
   'src/main/services/background/background-runner.ts',
   'src/main/services/background/voice-profile-job.ts',
+  'src/main/services/background/title-job.ts',
   'src/main/services/memory/idle-watcher.ts',
   'src/main/services/memory/memory-service.ts',
   // Pure value derived from the built-in agent definitions (import type only).

@@ -60,6 +60,9 @@ export type AgentRuntimeDeps = {
   // The user's own vocabulary, read per send. Small local files, and a glossary edited
   // in settings should apply from the next message like everything else.
   readonly glossary: () => Promise<readonly string[]>;
+  // Fired once per conversation, when its first turn has been written: the cue for the
+  // background job that names it. Optional so a test runtime need not care.
+  readonly onFirstTurnSaved?: (conversationId: string) => void;
   // Who the user is: name, job, tenant timezone and the ids every command needs. Fetched
   // by the app rather than by the agent, so a new conversation does not pay nine Graph
   // calls to learn it again. Empty until the first successful fetch.
@@ -210,7 +213,11 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
       return;
     }
     deps.emit({ type: 'turn-saved', conversationId: snapshot.id });
-    if (titleChanged) deps.emit({ type: 'title', conversationId: snapshot.id, title: conversation.title });
+    if (!titleChanged) return;
+    deps.emit({ type: 'title', conversationId: snapshot.id, title: conversation.title });
+    // The title just changed from the placeholder to the one derived from the first
+    // message, which is exactly the moment there is an exchange worth naming properly.
+    deps.onFirstTurnSaved?.(snapshot.id);
   };
 
   const send = async (input: ChatSendInput): Promise<Result<null, ChatError>> => {

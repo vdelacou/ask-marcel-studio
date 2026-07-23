@@ -17,7 +17,8 @@ import { err } from '../../../shared/result.ts';
 export type BackgroundJob =
   | { readonly kind: 'signature-prefill'; readonly force?: boolean }
   | { readonly kind: 'voice-profile'; readonly force?: boolean }
-  | { readonly kind: 'memory-extract'; readonly conversationId: string };
+  | { readonly kind: 'memory-extract'; readonly conversationId: string }
+  | { readonly kind: 'conversation-title'; readonly conversationId: string };
 
 //   skipped  nothing to do (already there, not signed in, no model configured)
 //   failed   it was tried and did not work

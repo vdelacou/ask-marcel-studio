@@ -10,11 +10,12 @@
  */
 import { buildAgentHooks } from '../agent/agent-hooks.ts';
 import { buildSessionEnv } from '../../../shared/session-env.ts';
-import { formatModelRef, parseModelRef } from '../../../shared/model-ref.ts';
+import { formatModelRef, modelRefIsConfigured, parseModelRef } from '../../../shared/model-ref.ts';
 import type { Options } from '@anthropic-ai/claude-agent-sdk';
 import type { BackgroundJob, BackgroundJobError } from './background-runner.ts';
 import type { SignatureService } from '../office/signature-service.ts';
 import type { VoiceProfileJob } from './voice-profile-job.ts';
+import type { TitleJob } from './title-job.ts';
 import type { MemoryExtractor } from '../memory/memory-extractor.ts';
 import type { Gateway } from '../gateway/gateway-server.ts';
 import type { SettingsStore } from '../store/settings-store.ts';
@@ -33,6 +34,7 @@ export type BackgroundJobsDeps = {
   readonly gateway: Gateway;
   readonly signature: SignatureService;
   readonly voice: VoiceProfileJob;
+  readonly title: TitleJob;
   readonly memoryExtractor: MemoryExtractor;
   readonly userData: string;
   // Shared shims, like the agent runtime's.
@@ -45,15 +47,20 @@ export type BackgroundJobsDeps = {
 export type BackgroundJobs = {
   readonly run: (job: BackgroundJob, signal: AbortSignal) => Promise<Result<null, BackgroundJobError>>;
   // Handed to the model-backed jobs so they never resolve a model themselves.
-  readonly session: () => Promise<Result<BackgroundSession, string>>;
+  // preferredModel lets a job about one conversation run on that conversation's model.
+  readonly session: (preferredModel?: string) => Promise<Result<BackgroundSession, string>>;
 };
 
 export const createBackgroundJobs = (deps: BackgroundJobsDeps): BackgroundJobs => {
-  const session = async (): Promise<Result<BackgroundSession, string>> => {
+  // preferredModel is a conversation's own model: a job about one conversation should
+  // run on the model that conversation is using, not on whatever was last chosen
+  // elsewhere. It falls back when that provider is gone.
+  const session = async (preferredModel?: string): Promise<Result<BackgroundSession, string>> => {
     const settings = await deps.settings.get();
     if (!settings.ok) return err(settings.error.message);
 
-    const reference = settings.value.defaultModel ?? defaultReference(settings.value.providers);
+    const configured = preferredModel !== undefined && modelRefIsConfigured(settings.value.providers, preferredModel) ? preferredModel : undefined;
+    const reference = configured ?? settings.value.defaultModel ?? defaultReference(settings.value.providers);
     if (reference === undefined) return err('no model is set up yet');
 
     const parsed = parseModelRef(reference);
@@ -85,6 +92,7 @@ export const createBackgroundJobs = (deps: BackgroundJobsDeps): BackgroundJobs =
   const run = (job: BackgroundJob, signal: AbortSignal): Promise<Result<null, BackgroundJobError>> => {
     if (job.kind === 'signature-prefill') return deps.signature.prefill(job.force === true);
     if (job.kind === 'voice-profile') return deps.voice.run(job.force === true, signal);
+    if (job.kind === 'conversation-title') return deps.title.run(job.conversationId, signal);
     return deps.memoryExtractor.extract(job.conversationId, signal);
   };
 
