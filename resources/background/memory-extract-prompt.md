@@ -18,6 +18,13 @@ clear:
 
 ## What is never worth remembering
 
+- **The user themselves.** They know who they are, and being asked "is this someone on
+  your team?" about their own name is the app not recognising the person using it. Their
+  name is all over their own mail as sender, forwarder and recipient, so it is the name
+  you are most likely to reach for: resolve who they are with
+  `ask-marcel-office get-current-user` before you propose any person, and drop the
+  candidate if it is them under any spelling, a surname on its own, or an email alias of
+  theirs. When the lookup fails, drop the person rather than guess.
 - Anything the user asked to keep private, or that reads as sensitive: health, pay,
   performance, personal circumstances.
 - Passwords, keys, account numbers, or anything that looks like a credential.
@@ -29,12 +36,17 @@ clear:
 For a **team** or **people** candidate, look the person up before you answer so the user
 is confirming a fact rather than a guess. The `ask-marcel-office` CLI is on your PATH:
 
+- `ask-marcel-office get-current-user` — who the user is. Run this first, once, and hold
+  the answer: every person you find has to be checked against it before you propose them.
 - `ask-marcel-office list-relevant-people --search "<name>"`
 - `ask-marcel-office get-user --user-id <email>`
 - `ask-marcel-office get-my-manager`
 
-Put whatever you find (job title, email, who they report to) in `enrichment`. If the
-lookup fails, or the user is not signed in, carry on without it: this is optional.
+Put whatever you find (job title, email, who they report to) in `enrichment`. If that
+lookup fails, or the user is not signed in, carry on without it: the enrichment is
+optional. The identity check above is not, and it fails the other way: no answer from
+`get-current-user` means you cannot tell the user apart from their colleagues, so propose
+no person at all that run. Jargon is unaffected either way.
 
 ## Answer
 

@@ -132,19 +132,25 @@ Sources:
 - [Document name](webUrl?web=1), last modified YYYY-MM-DD, p.4: "the phrase you used"
 - Email: "subject", from Sender, YYYY-MM-DD, what it contributed
 - [A file you could NOT open](webUrl?web=1), inaccessible, request access to confirm
+- Words we use: "the entry you read, quoted"
 ```
 
 Every document link must end with `web=1` so it opens in the browser (`?web=1`, or `&web=1`
 when the URL already has a `?`). List sources you could not open too, marked inaccessible, so
 the user sees the gap.
 
+Cite one of the user's own notes by the name they see on it in the app: **Words we use**,
+**My team**, or **People I work with**. Never a filename, a path, or the heading this prompt
+gives it. The user named these notes and has them open in Settings, so a citation invents a
+file they have never seen unless it uses one of those three names.
+
 ## What the user's own words mean
 
 The app keeps notes on this user: the words their organisation uses, who is on their team,
 and the people they deal with. Each note that has anything in it is appended to this prompt
 whole, as its own block under its own heading, so what you are given is the notes
-themselves and not a summary of them. They live at `$CLAUDE_CONFIG_DIR/memory/jargon.md`,
-`team.md` and `people.md`. Never contradict them without saying so.
+themselves and not a summary of them. There is nothing to open and no path to quote: what
+is here is the whole note. Never contradict one without saying so.
 
 The app also keeps `$CLAUDE_CONFIG_DIR/signature.html` and `$CLAUDE_CONFIG_DIR/voice-profile.md`
 for drafting. The draft skill says when to use each.
