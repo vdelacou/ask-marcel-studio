@@ -115,15 +115,15 @@ Design (to confirm while implementing):
        at launch.
 7. [x] Prompt hardening (R8b/d, R9): Grep probe first; core.md Command discipline (numbered) +
        toolset truth; draft skill "Identify and confirm before any work" (numbered, STOP).
-8. [ ] Skills pure layer (R13/14): serialiseSkillMd + single-line folding + round-trip tests;
+8. [x] Skills pure layer (R13/14): serialiseSkillMd + single-line folding + round-trip tests;
        renderer skill-form.ts, slugify.ts.
-9. [ ] Skills persistence (R14): skills:create IPC; skillsPolicy.disabledFolders parse +
+9. [x] Skills persistence (R14): skills:create IPC; skillsPolicy.disabledFolders parse +
        main-side filtering (runtime + suggestions).
-10. [ ] Skills UI (R13/14): skill-detail form, built-ins read-only + Active toggle, Add menu
+10. [x] Skills UI (R13/14): skill-detail form, built-ins read-only + Active toggle, Add menu
         (scratch/import), Off badge.
-11. [ ] Agents overhaul (R15): rename Helpers to Agents, wrapping description, drop
+11. [x] Agents overhaul (R15): rename Helpers to Agents, wrapping description, drop
         ToolChecklist, rich Instructions, friendly name to slug.
-12. [ ] Command list redesign (R18a/c): single-column details accordion; meta split display
+12. [x] Command list redesign (R18a/c): single-column details accordion; meta split display
         (Local files / Search / Account), policyName stays meta.
 13. [x] Tool labels + stats display (R22, R10-UI): "Ask Marcel Command" badge +
         formatTurnStats faint line. DONE with the turn-stats commit.
