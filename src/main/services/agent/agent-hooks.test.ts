@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { buildAgentHooks } from './agent-hooks.ts';
 import type { HookInput } from '@anthropic-ai/claude-agent-sdk';
+import { commandCategoryIndex, parseOfficeCatalog } from '../../../shared/office-catalog.ts';
 
 const WORKSPACE = '/data/workspaces/conv-1';
 
@@ -66,5 +67,52 @@ describe('gating the agent’s shell', () => {
     const input = { ...(bashInput('rm -rf ~') as unknown as Record<string, unknown>), hook_event_name: 'PostToolUse' } as unknown as HookInput;
 
     expect(await run(input)).toEqual({});
+  });
+});
+
+describe('the settings toggle actually reaches the shell', () => {
+  // The real chain, from the catalog the CLI ships to the deny at the hook: parse a
+  // catalog shaped like the CLI's own, index it, feed a disabled category to the hook.
+  const catalog = parseOfficeCatalog({
+    commands: [
+      { name: 'list-events', category: 'calendar', summary: 'List events.' },
+      { name: 'list-mail-messages', category: 'mail', summary: 'List mail.' },
+      { name: 'my-quick-context', category: 'meta', summary: 'Discovery.' },
+    ],
+  });
+  if (!catalog.ok) throw new Error('fixture catalog should parse');
+  const index = commandCategoryIndex(catalog.value);
+
+  const hookWith = (disabled: readonly string[], failing: readonly string[] = []): ReturnType<typeof buildAgentHooks> =>
+    buildAgentHooks({ workspaceDir: WORKSPACE, disabledOfficeCategories: disabled, officeCommandCategories: index, repeatedlyFailedCommands: () => failing });
+
+  const runWith = async (hooksToUse: ReturnType<typeof buildAgentHooks>, command: string): Promise<Record<string, unknown>> => {
+    const callback = hooksToUse.PreToolUse?.[0]?.hooks[0];
+    if (callback === undefined) throw new Error('no hook');
+    return await callback(bashInput(command), 't1', { signal: new AbortController().signal });
+  };
+
+  test('switching calendar off refuses a calendar command end to end', async () => {
+    const output = await runWith(hookWith(['calendar']), 'ask-marcel-office list-events --top 5');
+
+    expect(output['hookSpecificOutput']).toMatchObject({ permissionDecision: 'deny' });
+  });
+
+  test('with calendar off, a mail command still runs', async () => {
+    expect(await runWith(hookWith(['calendar']), 'ask-marcel-office list-mail-messages --top 5')).toEqual({});
+  });
+
+  test('the always-on meta category cannot be switched off, even by a hand-tampered settings file', async () => {
+    expect(await runWith(hookWith(['meta']), 'ask-marcel-office my-quick-context')).toEqual({});
+  });
+
+  test('a command that already failed twice is refused the third time', async () => {
+    const output = await runWith(hookWith([], ['ask-marcel-office list-mail-messages --nope']), 'ask-marcel-office list-mail-messages --nope');
+
+    expect(output['hookSpecificOutput']).toMatchObject({ permissionDecision: 'deny' });
+  });
+
+  test('a command that has failed only once is not yet refused', async () => {
+    expect(await runWith(hookWith([], ['something --else']), 'ask-marcel-office list-mail-messages --nope')).toEqual({});
   });
 });

@@ -12,6 +12,9 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { buildAgentHooks } from './agent-hooks.ts';
 import { emptyFold, foldSdkMessage } from '../../../shared/sdk-event-fold.ts';
+import { evaluateBashCommand } from '../../../shared/bash-guard.ts';
+import { emptyFailures, recordFailure, repeatedlyFailed } from '../../../shared/command-failures.ts';
+import type { CommandFailures } from '../../../shared/command-failures.ts';
 import { buildSessionEnv } from '../../../shared/session-env.ts';
 import { formatModelRef, parseModelRef } from '../../../shared/model-ref.ts';
 import { appendTurn } from '../../../shared/conversation-doc.ts';
@@ -75,6 +78,8 @@ export type AgentRuntime = {
   readonly cancelAll: () => void;
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+
 const newMessageId = (): string => crypto.randomUUID();
 
 const resolveProvider = (settings: Settings, modelRef: string): Result<{ provider: Provider; modelId: string }, ChatError> => {
@@ -89,6 +94,9 @@ const resolveProvider = (settings: Settings, modelRef: string): Result<{ provide
 export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
   // One in-flight run per conversation. The value is how we stop it.
   const running = new Map<string, AbortController>();
+  // Commands that have failed in each conversation, so an identical third attempt can be
+  // refused. Runtime-lifetime, not persisted: a fresh launch is a fresh chance.
+  const failures = new Map<string, CommandFailures>();
 
   // `text` is what the user typed and what gets persisted; `prompt` is what the model
   // is asked. They differ only when the message invoked a skill by name: the transcript
@@ -108,6 +116,24 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
     const startedAt = Date.parse(deps.now());
     let fold = emptyFold(messageId);
     deps.emit({ type: 'turn-start', conversationId: conversation.id, messageId });
+
+    // A Bash command that errored is a candidate for the repeat-failure guard, but only
+    // if it was the command failing on its own terms. A guard denial (a category switched
+    // off, a login, a destructive shape) also surfaces as an errored result, and counting
+    // those would keep refusing a category the user might re-enable. So the command is
+    // re-checked against the base policy WITHOUT the failure list, and recorded only if
+    // that allows it.
+    const noteFailure = (event: UIEvent): void => {
+      if (event.type !== 'tool-result' && event.type !== 'subagent-tool-result') return;
+      if (!event.isError) return;
+      const part = fold.parts.find((candidate) => candidate.type === 'tool' && candidate.toolUseId === event.toolUseId);
+      if (part?.type !== 'tool' || part.name !== 'Bash') return;
+      const command = isRecord(part.input) ? part.input['command'] : undefined;
+      if (typeof command !== 'string') return;
+      const base = evaluateBashCommand(command, { workspaceDir: workspace, disabledOfficeCategories, officeCommandCategories: deps.officeCommandCategories });
+      if (!base.allow) return;
+      failures.set(conversation.id, recordFailure(failures.get(conversation.id) ?? emptyFailures(), command));
+    };
 
     try {
       // Lazy: an openai provider needs the loopback gateway, an anthropic one does not.
@@ -153,7 +179,12 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
           // short-circuits regardless of the permission mode, which is what lets the
           // handful of irreversible commands be refused without a dialog appearing in
           // front of someone who cannot judge it.
-          hooks: buildAgentHooks({ workspaceDir: workspace, disabledOfficeCategories, officeCommandCategories: deps.officeCommandCategories }),
+          hooks: buildAgentHooks({
+            workspaceDir: workspace,
+            disabledOfficeCategories,
+            officeCommandCategories: deps.officeCommandCategories,
+            repeatedlyFailedCommands: () => repeatedlyFailed(failures.get(conversation.id) ?? emptyFailures()),
+          }),
           permissionMode: 'bypassPermissions',
           includePartialMessages: true,
           ...(conversation.sdkSessionId === undefined ? {} : { resume: conversation.sdkSessionId }),
@@ -163,7 +194,10 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
       for await (const message of turn) {
         const step = foldSdkMessage(fold, message, conversation.id);
         fold = step.state;
-        for (const event of step.events) deps.emit(event);
+        for (const event of step.events) {
+          noteFailure(event);
+          deps.emit(event);
+        }
       }
     } catch (e) {
       // An abort throws here. It is a user action, not a failure, and must not

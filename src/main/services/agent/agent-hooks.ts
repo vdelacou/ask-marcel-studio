@@ -16,6 +16,10 @@ export type AgentHooksInput = {
   readonly workspaceDir: string;
   readonly disabledOfficeCategories: readonly string[];
   readonly officeCommandCategories: ReadonlyMap<string, string>;
+  // Read at evaluation time, not at build time: a command fails partway through a turn,
+  // and the very next attempt in the same turn must see it. A thunk so the hook closes
+  // over the live state rather than a snapshot from when it was built.
+  readonly repeatedlyFailedCommands?: () => readonly string[];
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -39,6 +43,7 @@ export const buildAgentHooks = (input: AgentHooksInput): NonNullable<Options['ho
             workspaceDir: input.workspaceDir,
             disabledOfficeCategories: input.disabledOfficeCategories,
             officeCommandCategories: input.officeCommandCategories,
+            ...(input.repeatedlyFailedCommands === undefined ? {} : { repeatedlyFailedCommands: input.repeatedlyFailedCommands() }),
           });
           if (verdict.allow) return Promise.resolve({});
           return Promise.resolve({ hookSpecificOutput: { hookEventName: 'PreToolUse' as const, permissionDecision: 'deny' as const, permissionDecisionReason: verdict.reason } });
