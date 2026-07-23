@@ -17,6 +17,7 @@ import {
   voiceProfileFilePath,
   quickContextFilePath,
   cliCheatsheetPath,
+  memoryDbPath,
   accountDir,
   accountsDir,
   currentAccountPath,
@@ -185,5 +186,12 @@ describe('keeping one account’s world out of another’s', () => {
 describe('where the agent finds the flags it should not guess', () => {
   test('the cheat-sheet sits in the folder the agent already reads', () => {
     expect(cliCheatsheetPath('/data')).toBe(`${claudeConfigDir('/data')}/cli-cheatsheet.md`);
+  });
+});
+
+describe('where the searchable memory keeps its database', () => {
+  test('the memory db is bookkeeping, so it sits outside the agent-readable folder', () => {
+    expect(memoryDbPath('/data')).toBe('/data/memory/memory.db');
+    expect(memoryDbPath('/data').startsWith(claudeConfigDir('/data'))).toBe(false);
   });
 });

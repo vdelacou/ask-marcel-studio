@@ -24,6 +24,10 @@ import { createAgentsStore } from './services/store/agents-store.ts';
 import { createAgentFilesStore } from './services/store/agent-files-store.ts';
 import { createBackgroundRunner } from './services/background/background-runner.ts';
 import { createMemoryService } from './services/memory/memory-service.ts';
+import { createSqliteMemoryStore } from './services/memory/sqlite-memory-store.ts';
+import type { Embedder } from './services/memory/sqlite-memory-store.ts';
+import { createEmbedder } from './services/memory/embedder-io.ts';
+import type { MemoryStore } from '../shared/memory-store.ts';
 import { createMemoryExtractor } from './services/memory/memory-extractor.ts';
 import { createIdleWatcher } from './services/memory/idle-watcher.ts';
 import { createBackgroundJobs } from './services/background/background-jobs.ts';
@@ -33,7 +37,7 @@ import { createTitleJob } from './services/background/title-job.ts';
 import { createSignatureService } from './services/office/signature-service.ts';
 import { parseAgentFileDoc } from '../shared/agent-files.ts';
 import { createModelTestService } from './services/models/model-test-service.ts';
-import { accountDir, backgroundWorkspaceDir, quickContextFilePath, signatureFilePath, voiceProfileFilePath } from '../shared/paths.ts';
+import { accountDir, backgroundWorkspaceDir, memoryDbPath, quickContextFilePath, signatureFilePath, voiceProfileFilePath } from '../shared/paths.ts';
 import { parseStoredQuickContext } from '../shared/quick-context.ts';
 import { readJsonFile, writeJsonFileAtomic } from './services/store/json-file.ts';
 import { BUILTIN_AGENTS } from './services/agent/builtin-agents.ts';
@@ -244,6 +248,22 @@ const buildRuntime = (
   const agentFiles = createAgentFilesStore({ userData });
   const memory = createMemoryService({ userData, now, newId: () => crypto.randomUUID(), emit: emitMemory });
 
+  // The searchable memory: a native sqlite store behind the port when an embedding
+  // provider is configured, and a not-set-up store otherwise. The embedder reads its
+  // provider from settings per call, so changing it in settings applies without a restart.
+  const memoryStore = ((): MemoryStore => {
+    const embed: Embedder = async (text) => {
+      const current = await settings.get();
+      const config = current.ok ? current.value.memory : undefined;
+      if (config === undefined) return err('memory is not set up');
+      const provider = current.ok ? current.value.providers.find((candidate) => candidate.id === config.providerId) : undefined;
+      if (provider === undefined || provider.kind !== 'openai') return err('the memory provider is not configured');
+      const one = createEmbedder((url, init) => fetch(url, init), { baseUrl: provider.baseUrl, apiKey: provider.apiKey, model: config.embeddingModelId });
+      return one(text);
+    };
+    return createSqliteMemoryStore({ dbPath: memoryDbPath(userData), embed, now, newId: () => crypto.randomUUID() });
+  })();
+
   const location = officeCliLocation();
   const officeRun = createOfficeRun(location, process.env);
   const office = createOfficeService(officeRun);
@@ -367,6 +387,7 @@ const buildRuntime = (
     agentsStore,
     agentFiles,
     memory,
+    memoryStore,
     // Rebuilding a document is the same job the app runs on its own, asked for
     // explicitly. It resolves with the new contents so the panel shows them at once.
     regenerateAgentFile: async (doc) => {

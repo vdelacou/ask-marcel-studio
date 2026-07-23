@@ -17,6 +17,7 @@ import type { AgentView, SubAgent } from './agents-doc.ts';
 import type { ModelTestTarget, ModelTestVerdict } from './model-test.ts';
 import type { OfficeCategory } from './office-catalog.ts';
 import type { OfficeStatus } from './office-status.ts';
+import type { MemoryItem, MemoryHistoryEntry, MemoryStoreError } from './memory-store.ts';
 import type { QuickContext } from './quick-context.ts';
 import type { Result } from './result.ts';
 
@@ -58,6 +59,12 @@ export const CHANNEL = {
   memoryResolve: 'memory:resolve',
   memoryRead: 'memory:read',
   memoryWrite: 'memory:write',
+  memoryList: 'memory:list',
+  memoryAdd: 'memory:add',
+  memoryUpdate: 'memory:update',
+  memoryDelete: 'memory:delete',
+  memoryClearAll: 'memory:clearAll',
+  memoryHistory: 'memory:history',
 } as const;
 
 // The one main-to-renderer stream. Everything the UI learns during a turn arrives here.
@@ -303,6 +310,13 @@ export type StudioApi = {
     readonly resolve: (input: MemoryResolveInput) => Promise<Result<readonly MemoryCandidate[], StoreError>>;
     readonly read: (name: MemoryFileName) => Promise<Result<string, StoreError>>;
     readonly write: (input: { readonly name: MemoryFileName; readonly contents: string }) => Promise<Result<null, StoreError>>;
+    // The searchable memory (Mem0-style), separate from the notes above.
+    readonly list: () => Promise<Result<readonly MemoryItem[], MemoryStoreError>>;
+    readonly add: (text: string) => Promise<Result<MemoryItem, MemoryStoreError>>;
+    readonly update: (input: { readonly id: string; readonly text: string }) => Promise<Result<MemoryItem, MemoryStoreError>>;
+    readonly remove: (id: string) => Promise<Result<null, MemoryStoreError>>;
+    readonly clearAll: () => Promise<Result<null, MemoryStoreError>>;
+    readonly history: (id: string) => Promise<Result<readonly MemoryHistoryEntry[], MemoryStoreError>>;
     readonly onEvent: (listener: (event: MemoryEvent) => void) => () => void;
   };
   readonly agentFiles: {
