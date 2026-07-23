@@ -14,7 +14,7 @@ export const SettingsLayout: FC<SettingsLayoutProps> = ({ nav, children }) => (
     <div className="flex-1 overflow-y-auto">
       {/* The column stays a reading width even when the dialog grows: a form field
           stretched to a metre wide is harder to fill in, not easier. */}
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-y-12 px-10 py-10">{children}</div>
+      <div className="mx-auto flex w-full max-w-reading flex-col gap-y-12 px-10 py-10">{children}</div>
     </div>
   </div>
 );

@@ -29,6 +29,14 @@
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --radius-panel: 0.75rem;
+
+  /* How wide a column is allowed to get. Everything that holds words (the thread, the
+     composer under it, the settings panels) grows with the window and stops here, so a
+     maximised app fills its screen instead of leaving a narrow strip in the middle, and
+     a sentence still ends before the eye loses the start of the next line. One token,
+     not three literals, because the thread and the composer must land on the same two
+     edges or the column visibly steps in and out at the fold. */
+  --container-reading: 87.5rem;
 }
 
 /*
@@ -45,5 +53,33 @@ html,
 body,
 #root {
   height: 100%;
+}
+
+/*
+ * Milkdown Crepe, cut down to panel proportions.
+ *
+ * Its own reset (@milkdown/crepe/theme/common/reset.css) sets `.ProseMirror { padding:
+ * 60px 120px }`, which is right for the full-page writing canvas the library is built for
+ * and wrong inside a settings panel: it put 60px of nothing above the first line and
+ * indented every line 120px from a border sitting a few pixels away.
+ *
+ * The class is doubled deliberately. Crepe's rule is `.milkdown .ProseMirror` (0,2,0) and
+ * its stylesheet is imported by the editor component, so it lands AFTER this file (which
+ * main.tsx imports first) and would win a tie on source order. Repeating the class makes
+ * this (0,3,0), so it wins on specificity and does not depend on how the bundler happens
+ * to order two stylesheets. That is also why it is not an !important.
+ */
+.milkdown .ProseMirror.ProseMirror {
+  padding: 0.5rem 0.75rem;
+}
+
+/*
+ * The gap above the first line is mostly NOT padding: Crepe gives every heading a top
+ * margin to separate it from whatever precedes it (`h1 { margin-top: 32px }`), and applies
+ * it to the opening heading too, where nothing precedes it. Zeroed for the first block
+ * only, so headings further down keep the breathing room they are there for.
+ */
+.milkdown .ProseMirror.ProseMirror > :first-child {
+  margin-top: 0;
 }
 

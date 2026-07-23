@@ -11,15 +11,11 @@ export type SettingsOverlayProps = {
 export const SettingsOverlay: FC<SettingsOverlayProps> = ({ onClose, children }) => (
   <div className="fixed inset-0 z-40 flex items-center justify-center p-6 sm:p-10">
     <button type="button" aria-label="Close settings" onClick={onClose} className="absolute inset-0 cursor-default bg-black/30" />
-    {/* Takes the window it is given, up to a point. h-full and w-full make it track the
-        window; the caps stop a maximised app from turning settings into a near-empty
-        sheet a metre wide, since the panels inside read at a fixed column width. */}
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Settings"
-      className="relative z-10 flex h-full max-h-[60rem] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-surface shadow-2xl"
-    >
+    {/* Takes the window it is given, less the padding above. The sheet itself is a frame,
+        so it has no cap of its own: the column inside it stops at the reading width, which
+        is where the near-empty-sheet problem actually lives. Capping the frame instead
+        left settings as a fixed box in the middle of a maximised window. */}
+    <div role="dialog" aria-modal="true" aria-label="Settings" className="relative z-10 flex h-full w-full flex-col overflow-hidden rounded-2xl bg-surface shadow-2xl">
       <button
         type="button"
         onClick={onClose}
