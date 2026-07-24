@@ -20,8 +20,13 @@ export const AppFrame: FC<AppFrameProps> = ({ sidebar, children, reopenControl }
         and pushes the sidebar off screen instead of scrolling inside its column. relative:
         anchors the reopen chip to this column's top-left. */}
     <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-      {reopenControl !== undefined && <div className="absolute left-[5.5rem] top-0 z-30 flex h-12 items-center [-webkit-app-region:no-drag]">{reopenControl}</div>}
       {children}
+      {/* Last in the DOM on purpose. -webkit-app-region regions resolve by document order,
+          not z-index: the conversation header (and the empty-state canvas) are draggable, and
+          a no-drag chip painted over one of them only wins the OS hit-test, and stays
+          clickable, when it is collected AFTER that drag region. First in the DOM, the header
+          overrode it and the OS swallowed the click as a window drag. */}
+      {reopenControl !== undefined && <div className="absolute left-[5.5rem] top-0 z-30 flex h-12 items-center [-webkit-app-region:no-drag]">{reopenControl}</div>}
     </main>
   </div>
 );
