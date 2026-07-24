@@ -443,3 +443,48 @@ been a genuine corruption had the real note lived there.
 Rule for next time: before reporting anything as missing, read the path helper that resolves
 it, and never write a reconstruction of a user's own content into their data on the strength
 of an absence.
+
+## [gotcha] `bun run dist` makes the lint gate hang, because eslint walks `release/` (2026-07-24)
+
+The first commit attempted after packaging timed out twice, once at two minutes and once at
+five. Nothing in the diff was slow: it was two doc files and a `package.json` field. `bun
+test` finished in a second, coverage in a second, typecheck in seven. `lint:strict` never
+came back.
+
+electron-builder writes the entire packaged app into `release/`, `node_modules` and all, and
+eslint's flat config ignored `out/`, `dist/` and `vendor/` but not `release/`. With no path
+argument eslint lints the whole working directory, so the type-aware pass was trying to build
+a program over a 295 MB app bundle. It presents as a mysterious pre-commit timeout with no
+error, which is the worst possible symptom, and it only appears on the first commit after a
+packaging run.
+
+Fixed by adding `release/**` to the ignores block in `eslint.config.js`. Rule for next time:
+any new build-output directory has to be added to eslint's ignores in the same change that
+creates it, not the first time it bites.
+
+## [gotcha] Bun's global `fetch` has a `preconnect` method, so `typeof fetch` is not a usable dep type (2026-07-24)
+
+Typing an injected dependency as `readonly fetch: typeof fetch` looks like the obvious way to
+say "give me a fetch", and it typechecks in isolation. It fails at the composition root:
+`fetch: (url, init) => fetch(url, init)` is not assignable, because under Bun the global
+carries a `preconnect` property that a plain arrow wrapper does not have. The error names a
+missing property nobody wrote, which reads as nonsense until you know.
+
+The repo already had the answer in `model-test-service.ts`: declare a narrow slice of the
+call shape actually used (`ModelTestFetch`), not the whole global. `update-checker.ts` now
+does the same with `UpdateFetch`. The slice is also the better seam, since a test fake only
+has to satisfy the one call the adapter makes.
+
+## [decision] unsigned build means the app informs about updates and never installs them (2026-07-24)
+
+There is no Apple Developer certificate for this project, so the DMG ships unsigned, and
+macOS refuses to let an unsigned app silently replace itself. electron-updater and any
+autoupdate flow are therefore off the table, not deferred for effort reasons.
+
+What ships instead: a daily unauthenticated check of the GitHub releases API, a 10 second
+deadline, silent degradation to the last known answer on any failure, and a dismissable
+banner that links the DMG. Installing is a manual download. Two consequences bind future
+work. The update path is inert until a GitHub release actually exists, since the API returns
+404 for a repo with none. And the banner only appears when the published release is strictly
+higher than the running version, so a release tagged at the version already installed is
+correct behaviour showing nothing, not a bug.

@@ -3,14 +3,53 @@
 Full plan: `~/.claude/plans/i-will-give-a-precious-dusk.md`. Four phases, slice-per-commit
 (≤10 files / ≤300 prod lines, all 8 gates green per commit).
 
-## STATUS: ALL FOUR PHASES COMPLETE AND COMMITTED (2026-07-24)
+## STATUS: ALL FOUR PHASES COMPLETE, COMMITTED AND PUSHED (2026-07-24)
 
-Every requirement R1-R23 landed. Latest work: R11 file logger + transcript sweep, R4 icons,
-R21c/d update check + version, R21a electron-builder. A real x64 DMG built and verified
-(release/Ask Marcel Studio-0.1.0.dmg, 295 MB: correct name, icon, and all extraResources).
-1810 tests green. Deferred by decision (need Vincent's sign-off, not blockers):
-- Delete memory-glossary.ts + tests (rule 24 needs his ok; plan holds it one release anyway).
-- scripts/eval-memory.ts optional manual eval harness (rule 32 gate, real key).
+Every requirement R1-R23 landed. Working tree clean, 1810 tests green, all 8 gates passing.
+Vincent launched the packaged DMG on 2026-07-24 and confirmed it runs, which closes the last
+open verification item in the plan. Nothing in the 22-requirement plan is outstanding.
+
+### THE ONE THING NOT DONE YET: publish a GitHub release
+
+Vincent chose "push only" on 2026-07-24, so the commits are on origin/main but no release
+exists. This matters because the update feature (R21c) is inert until one does: the checker
+calls `repos/vdelacou/ask-marcel-studio/releases/latest`, which 404s on a repo with no
+releases, and degrades silently by design. To make it live:
+
+```bash
+bun run dist   # only if release/ was cleaned; the DMG is gitignored
+gh release create v0.1.0 "release/Ask Marcel Studio-0.1.0.dmg" --title "v0.1.0" --notes "..."
+```
+
+Version subtlety, so a future session does not chase a non-bug: the banner appears only when
+the published release is STRICTLY higher than the running version. Releasing v0.1.0 while
+0.1.0 is installed correctly shows nothing. The banner first appears on the next real
+version bump. See the [decision] entry in LESSONS.md.
+
+### Deferred by decision (need Vincent's sign-off, not blockers)
+
+- Delete memory-glossary.ts + tests (rule 24 needs his ok; plan holds it one release anyway,
+  so "do nothing yet" remains a valid answer).
+- scripts/eval-memory.ts, the optional manual eval harness (rule 32 gate, needs a real key).
+  Only worth building if the memory preamble or embedder gets tuned again.
+
+### Disk left behind, safe to delete when he says so
+
+- `release/` : the DMG plus the unpacked bundle, roughly 900 MB, gitignored.
+- `~/Library/Application Support/ask-marcel-studio-backup-pre-accounts` : 492 MB, the
+  pre-R23 data snapshot taken before the per-account migration. The migration was verified
+  against the real data folder, so this is a belt-and-braces copy.
+
+### Operational facts a fresh session needs
+
+- Packaging needs three things first or it fails: `bun run fetch:python`, `bun run
+  fetch:wheels`, `bun run rebuild:native`. Then `bun run dist`. Both vendor dirs are present
+  on this machine.
+- `better-sqlite3` is currently built for the Electron ABI (rebuild:native was run). `bun
+  test` is unaffected: nothing it loads imports the native module.
+- `release/` is in eslint's ignores. It has to stay there or `lint:strict` hangs walking the
+  packaged node_modules, which surfaces as an unexplained pre-commit timeout (see LESSONS).
+- The build is unsigned, so first launch needs right-click then Open past Gatekeeper.
 
 ## Phase 1 — UI foundation and auth — COMPLETE
 
