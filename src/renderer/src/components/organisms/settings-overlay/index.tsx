@@ -4,11 +4,11 @@ import type { FC, ReactNode } from 'react';
 // open state and the Escape key (a component holds no hooks). The backdrop is a real
 // button so clicking outside closes without a static-div click handler.
 //
-// no-drag on the root: the window has no title bar, so the app frame paints a draggable
-// band across its top 36px. Chromium hands that strip to the OS, which swallowed every
-// click landing on the part of this backdrop underneath it, and clicking there dragged the
-// window instead of closing settings. Declaring no-drag on the overlay gives those clicks
-// back for as long as it is open.
+// no-drag on the root: the window has no title bar, so the sidebar strip and the
+// conversation header are draggable window-move surfaces. This overlay covers them, and
+// Chromium hands a drag surface to the OS, which swallowed every click landing on the part
+// of this backdrop over one of them, dragging the window instead of closing settings.
+// Declaring no-drag on the overlay gives those clicks back for as long as it is open.
 export type SettingsOverlayProps = {
   onClose: () => void;
   children: ReactNode;

@@ -209,6 +209,7 @@ export const App: FC = () => {
         isEditing={conversations.editingId === id && renameSurface === 'header'}
         draftTitle={conversations.draftTitle}
         {...(menu === undefined ? {} : { menu })}
+        insetForWindowControls={sidebarLayout.isCollapsed}
         onToggleMenu={() => setHeaderMenuOpen((open) => !open)}
         onDraftChange={conversations.changeDraft}
         onCommitRename={conversations.commitRename}
@@ -303,7 +304,7 @@ export const App: FC = () => {
         sidebar={sidebarLayout.isCollapsed ? undefined : sidebar}
         {...(sidebarLayout.isCollapsed
           ? {
-              bandControl: (
+              reopenControl: (
                 <IconButton label="Show the sidebar" onClick={sidebarLayout.toggleCollapse} size="md">
                   <PanelIcon />
                 </IconButton>
@@ -316,6 +317,7 @@ export const App: FC = () => {
             version={update.latest ?? ''}
             {...(update.downloadUrl === undefined ? {} : { downloadUrl: update.downloadUrl })}
             {...(update.releaseUrl === undefined ? {} : { releaseUrl: update.releaseUrl })}
+            insetForWindowControls={sidebarLayout.isCollapsed}
             onDismiss={() => setUpdateDismissed(true)}
           />
         )}

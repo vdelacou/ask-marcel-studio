@@ -7,9 +7,9 @@ export type PopoverPlacement = 'up-start' | 'up-end' | 'down-start' | 'down-end'
 // real button because a component holds no listeners of its own (rule 21): the page shell
 // owns the open state and gets the dismissal as a callback.
 //
-// no-drag matters: the window has no title bar, so the app frame paints a draggable band
-// across its top. Anything overlaying that band has to hand the clicks back, or the OS
-// swallows them and the backdrop never fires.
+// no-drag matters: the window has no title bar, so the sidebar strip and the conversation
+// header are draggable window-move surfaces. A backdrop overlaying one of them has to hand
+// the clicks back, or the OS swallows them and the backdrop never fires.
 export type PopoverProps = {
   placement: PopoverPlacement;
   dismissLabel: string;

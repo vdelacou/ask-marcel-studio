@@ -1,16 +1,22 @@
 import type { FC, ReactNode } from 'react';
 import { IconButton } from '../../atoms/icon-button/index.tsx';
 
-// The title bar of the open conversation. It sits inside the thread's scroll container and
-// sticks to its top, so the title stays readable while the transcript runs under it: hence
-// the translucent background and the blur, which keep the text legible over whatever
-// scrolls beneath without hiding that something is moving.
+// The title bar of the open conversation, and the content column's top strip. It sits inside
+// the thread's scroll container and sticks to its top, so the title stays readable while the
+// transcript runs under it: hence the translucent background and the blur, which keep the
+// text legible over whatever scrolls beneath without hiding that something is moving. It
+// doubles as the window-move surface (there is no title bar), so the strip is draggable and
+// the interactive controls opt out.
 export type ConversationHeaderProps = {
   title: string;
   isEditing: boolean;
   draftTitle: string;
   // The actions menu, built by the shell so this stays prop-pure.
   menu?: ReactNode;
+  // When the sidebar is collapsed the OS traffic lights overlay this strip's left, so the
+  // title has to start clear of them. When the sidebar is open the lights sit over it
+  // instead and the strip uses its normal padding.
+  insetForWindowControls?: boolean;
   onToggleMenu: () => void;
   onDraftChange: (title: string) => void;
   onCommitRename: () => void;
@@ -23,8 +29,20 @@ const DotsIcon: FC = () => (
   </svg>
 );
 
-export const ConversationHeader: FC<ConversationHeaderProps> = ({ title, isEditing, draftTitle, menu, onToggleMenu, onDraftChange, onCommitRename, onCancelRename }) => (
-  <header className="sticky top-0 z-10 -mx-6 flex items-center gap-x-2 border-b border-border-subtle/60 bg-surface/80 px-6 py-2.5 backdrop-blur">
+export const ConversationHeader: FC<ConversationHeaderProps> = ({
+  title,
+  isEditing,
+  draftTitle,
+  menu,
+  insetForWindowControls,
+  onToggleMenu,
+  onDraftChange,
+  onCommitRename,
+  onCancelRename,
+}) => (
+  <header
+    className={`sticky top-0 z-10 -mx-6 flex h-12 items-center gap-x-2 bg-surface/80 backdrop-blur [-webkit-app-region:drag] ${insetForWindowControls === true ? 'pl-[8.5rem] pr-6' : 'px-6'}`}
+  >
     <div className="mx-auto flex w-full min-w-0 max-w-reading items-center gap-x-2">
       {isEditing ? (
         <input
@@ -37,12 +55,12 @@ export const ConversationHeader: FC<ConversationHeaderProps> = ({ title, isEditi
             if (event.key === 'Enter') onCommitRename();
             if (event.key === 'Escape') onCancelRename();
           }}
-          className="min-w-0 flex-1 rounded border border-border-subtle bg-surface px-1.5 py-0.5 text-sm font-medium text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+          className="min-w-0 flex-1 rounded border border-border-subtle bg-surface px-1.5 py-0.5 text-sm font-medium text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent [-webkit-app-region:no-drag]"
         />
       ) : (
         <h1 className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{title}</h1>
       )}
-      <div className="relative shrink-0">
+      <div className="relative shrink-0 [-webkit-app-region:no-drag]">
         <IconButton label="Conversation actions" onClick={onToggleMenu} size="md" isActive={menu !== undefined}>
           <DotsIcon />
         </IconButton>

@@ -63,7 +63,7 @@ const GearIcon: FC = () => (
   </svg>
 );
 
-const menuItem = 'flex w-full items-center gap-x-2 rounded-md px-2 py-1.5 text-sm transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+const menuItem = 'flex w-full items-center gap-x-2 rounded-md px-2 py-1 text-sm transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 
 const healthDot: Record<SidebarProps['officeHealth'], string> = {
   checking: 'bg-border-subtle',
@@ -99,14 +99,21 @@ export const Sidebar: FC<SidebarProps> = ({
   onStartDelete,
 }) => (
   <aside style={{ width }} className="relative flex shrink-0 flex-col border-r border-border-subtle bg-surface shadow-[4px_0_16px_-8px_rgba(0,0,0,0.08)]">
-    <div className="flex items-center gap-x-1 px-2 pb-1 pt-2">
+    {/* Top strip: the window-move surface, so the OS traffic lights overlay its left. The
+        collapse control sits at the right, opted out of the drag region or the OS eats its
+        click. */}
+    <div className="flex h-12 shrink-0 items-center justify-end px-2 [-webkit-app-region:drag]">
+      <div className="[-webkit-app-region:no-drag]">
+        <IconButton label="Hide the sidebar" onClick={onCollapse} size="md">
+          <PanelIcon />
+        </IconButton>
+      </div>
+    </div>
+    <div className="px-2 pb-1">
       <button type="button" onClick={onNew} className={`${menuItem} font-medium text-ink hover:bg-surface-raised`}>
         <PlusIcon />
         New conversation
       </button>
-      <IconButton label="Hide the sidebar" onClick={onCollapse} size="md">
-        <PanelIcon />
-      </IconButton>
     </div>
 
     <div className="flex flex-1 flex-col overflow-y-auto px-2 pb-2">
@@ -179,13 +186,14 @@ export const Sidebar: FC<SidebarProps> = ({
       </div>
     </div>
 
-    {/* The drag handle. Pointer-only by design: the collapse button beside "New
-        conversation" is the keyboard path to the same outcome. */}
+    {/* The drag handle. Pointer-only by design: the collapse button in the top strip is the
+        keyboard path to the same outcome. It straddles the top strip, so it must opt out of
+        the window-drag region or a grab near the top moves the window instead of resizing. */}
     <div
       role="presentation"
       onPointerDown={(event) => onStartResize(event.clientX)}
       onDoubleClick={onCollapse}
-      className="absolute inset-y-0 -right-1 z-10 w-2 cursor-col-resize transition hover:bg-accent/20"
+      className="absolute inset-y-0 -right-1 z-10 w-2 cursor-col-resize transition hover:bg-accent/20 [-webkit-app-region:no-drag]"
     />
   </aside>
 );

@@ -90,7 +90,12 @@ const createWindow = (): BrowserWindow => {
     minHeight: 480,
     show: false,
     autoHideMenuBar: true,
+    // The window has no title bar: the sidebar surface runs to the top and the traffic
+    // lights sit over its first row. Position them to the vertical centre of that 48px
+    // strip. If a future Electron ignores the position under 'hiddenInset', switch this
+    // to 'hidden' (the lights then need explicit positioning, which this already gives).
     titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 18, y: 18 },
     webPreferences: {
       // .mjs, not .js: this package is "type": "module" (hard rule 9), so
       // electron-vite emits the preload as index.mjs. The upstream scaffold says

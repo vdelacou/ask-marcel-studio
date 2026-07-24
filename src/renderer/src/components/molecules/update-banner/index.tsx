@@ -15,11 +15,17 @@ export type UpdateBannerProps = {
   version: string;
   downloadUrl?: string;
   releaseUrl?: string;
+  // When the sidebar is collapsed this strip is the topmost thing in the window and the OS
+  // traffic lights overlay its left, so its text has to start clear of them.
+  insetForWindowControls?: boolean;
   onDismiss: () => void;
 };
 
-export const UpdateBanner: FC<UpdateBannerProps> = ({ version, downloadUrl, releaseUrl, onDismiss }) => (
-  <div role="status" className="flex shrink-0 items-center gap-x-3 border-b border-border-subtle bg-surface-raised px-4 py-2 text-xs text-ink [-webkit-app-region:no-drag]">
+export const UpdateBanner: FC<UpdateBannerProps> = ({ version, downloadUrl, releaseUrl, insetForWindowControls, onDismiss }) => (
+  <div
+    role="status"
+    className={`flex shrink-0 items-center gap-x-3 border-b border-border-subtle bg-surface-raised py-2 text-xs text-ink [-webkit-app-region:no-drag] ${insetForWindowControls === true ? 'pl-[8.5rem] pr-4' : 'px-4'}`}
+  >
     <span className="flex-1">
       Version {version} is available.{' '}
       {downloadUrl !== undefined && (
