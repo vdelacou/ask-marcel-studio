@@ -8,9 +8,13 @@ Two commits, each green through the gates.
 ## STATUS: DONE, COMMITTED (2026-07-24)
 
 Landed in two slices: `eedbb2a` (fold the band) and `0762562` (tighter rows, draggable
-empty states). All 8 pre-commit gates green on each. Verified in the BUILT app via a
-Playwright geometry+screenshot probe and a main-process probe (scratchpad, deleted).
-Not pushed (parity with the previous run's "push only on Vincent's say-so"). Evidence below.
+empty states), plus two post-verification fixes: `dade666` (menu dismissable, blur off the
+header box) and `3d2e993` (reopen chip last in DOM so its click survives the drag
+hit-test). All 8 pre-commit gates green on each. Verified in the BUILT app via a
+Playwright geometry+screenshot probe and a main-process probe (scratchpad, deleted);
+re-verified at HEAD after the fixes with a 16-check chrome probe, all green (see
+post-verification fixes below). Not pushed (parity with the previous run's "push only on
+Vincent's say-so"). Evidence below.
 
 ### Commit 1 — `feat(ui): fold the title band into the columns`
 
@@ -19,13 +23,15 @@ Not pushed (parity with the previous run's "push only on Vincent's say-so"). Evi
        hiddenInset, hedge not needed); `bounds === contentBounds` (lights overlay content,
        no native title bar); y-center 24 = midline of the 48px strip.
 2. [x] `app-frame`: band deleted; root flex row; `<main>` relative, keeps `min-h-0 min-w-0`;
-       `bandControl` → `reopenControl` as main's first child.
+       `bandControl` → `reopenControl` as main's first child (moved to LAST child by
+       `3d2e993`, see post-verification fixes).
        VERIFIED: aside top:0 left:0 (was 36), main top:0 relative, no band.
 3. [x] `sidebar`: `h-12 justify-end px-2` drag strip holds the collapse button (no-drag
        wrapper); New conversation full-width; resize handle now no-drag; `menuItem` py-1.
        VERIFIED: strip top:0 h:48 region=drag.
 4. [x] `conversation-header`: `sticky top-0 h-12 bg-surface/80 backdrop-blur` drag, border-b
        dropped; `insetForWindowControls?` (pl-[8.5rem] pr-6 | px-6); no-drag on input + menu.
+       Blur later moved to an aria-hidden child layer by `dade666` (see below).
        VERIFIED: header top:0 h:48 region=drag borderBottom:0 backdrop:blur(8px);
        paddingLeft 24px open / 136px collapsed.
 5. [x] `update-banner`: `insetForWindowControls?` → pl-[8.5rem].
@@ -54,11 +60,27 @@ exists). Scrollbar thumb near the top 48px falls in the header drag rect (tiny t
 after scrolling (low risk) → move drag to an `absolute inset-x-0 top-0 h-12` sibling outside
 the scroller inside the relative `<main>`, drop drag from the header.
 
-### Out of scope, follow-up ticket
+### Post-verification fixes (2026-07-24, both landed and re-verified)
 
-`backdrop-blur` makes the header a containing block, so the header menu popover's `fixed
-inset-0` dismiss backdrop is confined to the header box and Escape does not close
-`headerMenuOpen`. Pre-existing, not worsened here.
+- `dade666` fixed the follow-up ticket noted at plan time (`backdrop-blur` made the header
+  a containing block, confining the menu popover's `fixed inset-0` dismiss backdrop to the
+  header box; Escape did not close `headerMenuOpen`): the blur now lives on an aria-hidden
+  `-z-10` child layer so the header box carries no filter, and the shell's Escape handler
+  knows `headerMenuOpen`. No open ticket remains here.
+- `3d2e993` moved the reopen chip to main's LAST child: `-webkit-app-region` hit-testing
+  resolves by document order, not z-index, so first-in-DOM the chip's no-drag lost to the
+  header's drag rect and the OS swallowed the click as a window drag. Tradeoff accepted:
+  the plan's tab-order-parity rationale is gone (the chip is now focused after the content
+  column).
+
+Chrome probe at HEAD (16 checks, all green; script + shots scratchpad, deleted): lights
+`{x:18,y:18}`, `bounds === contentBounds`; header sticky h:48 region=drag, box
+`backdrop-filter:none`, child layer `blur(8px)`; menu opens, its dismiss backdrop spans
+the full 1200x800 window, outside click and Escape both close it; collapsed: chip left:88
+top:0 h:48 region=no-drag, last child of `<main>`, after the header in document order
+while overlapping its drag rect, header inset 136px; chip click reopens the sidebar
+(renderer-level click; the OS hit-test follows from region + document order, the exact
+mechanism `3d2e993` corrects). Frosted strip confirmed legible over scrolled transcript.
 
 ---
 
