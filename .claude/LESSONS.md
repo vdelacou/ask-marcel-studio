@@ -6,6 +6,30 @@ Each entry is one of `[mistake]`, `[decision]`, or `[gotcha]`. Newest first.
 
 ---
 
+## [gotcha] 2026-07-24 | hiddenInset honours trafficLightPosition; verify chrome from the main process, not a screenshot
+
+Folding the empty title band away needed the macOS traffic lights re-centred in the new
+48px sidebar strip via a `trafficLightPosition: { x: 18, y: 18 }` constructor option. The
+open question was whether `titleBarStyle: 'hiddenInset'` even honours a custom position, or
+whether it silently ignores it and forces a fall back to `'hidden'`. It honours it: verified
+without any OS screenshot by launching the BUILT app under Playwright and reading the real
+BrowserWindow from the MAIN process with `app.evaluate(({ BrowserWindow }) => BrowserWindow
+.getAllWindows()[0].getWindowButtonPosition())`, which returned `{ x: 18, y: 18 }`;
+`getBounds()` equalled `getContentBounds()`, confirming the lights overlay the web contents
+with no native title bar reserving space.
+
+Two capture dead-ends that wasted time first: a Playwright `page.screenshot()` shows only the
+web contents, never the OS-drawn traffic lights, so it cannot prove where they sit; and
+`screencapture` grabbed only the empty desktop because the detached app window opened on a
+different macOS Space, while `osascript` to read the window bounds failed with "not allowed
+assistive access" (the session lacks accessibility permission and cannot grant it).
+
+Rule for next time: to check window-chrome geometry, drive the built app with Playwright and
+read the truth from the main process via `app.evaluate`, rather than trying to photograph OS
+chrome. The renderer-side layout (drag regions, insets, sticky header) is separately
+measurable with a `page.evaluate` returning `getBoundingClientRect` + `getComputedStyle`,
+including `-webkit-app-region`.
+
 ## [decision] 2026-07-20 | embedded runtimes: node/npm reuse ELECTRON_RUN_AS_NODE, python is vendored
 
 M8 gives the agent language runtimes with no install on the user's machine. node/npm/npx cost nothing extra: Electron IS Node under `ELECTRON_RUN_AS_NODE=1`, so a shim execs the app's own binary, and only the pure-JS `npm` package is vendored (its bin scripts run through that same binary). Python has no equivalent hiding in Electron, so it needs a real vendored runtime: a python-build-standalone `install_only` tarball (pinned by tag + sha256 in `scripts/fetch-python.ts`), extracted to a `python/` folder, plus a first-launch venv under `<userData>/py` seeded offline from bundled wheels (`pip install --no-index --find-links`). The venv is stamped with the runtime build and rebuilt when that changes, because a venv embeds its interpreter's absolute prefix and cannot survive a runtime bump. The shims (`src/shared/tool-shims.ts`) and paths (`src/shared/python-paths.ts`) are pure and platform-keyed so the Windows branch is unit-tested on macOS via `path.win32.join`.
