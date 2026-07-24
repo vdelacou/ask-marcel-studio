@@ -27,7 +27,7 @@ const DotsIcon: FC = () => (
   </svg>
 );
 
-const rowBase = 'group relative flex items-center gap-x-1 rounded-md px-2 py-1.5 text-sm';
+const rowBase = 'group relative flex items-center gap-x-1 rounded-md px-2 py-1 text-sm';
 
 export const ConversationItem: FC<ConversationItemProps> = ({
   title,
