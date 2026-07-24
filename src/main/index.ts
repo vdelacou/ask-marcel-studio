@@ -481,6 +481,12 @@ void app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.askmarcel.studio');
   app.on('browser-window-created', (_event, window) => optimizer.watchWindowShortcuts(window));
 
+  // A dev run is the stock Electron binary, so the Dock shows Electron's own icon: the
+  // .icns electron-builder bakes into Contents/Resources exists in a packaged bundle only.
+  // Point the Dock at the same artwork so dev looks like the real app. macOS only, hence
+  // the optional call: app.dock is undefined everywhere else.
+  if (!app.isPackaged) app.dock?.setIcon(join(__dirname, '../../resources/icons/icon.png'));
+
   // Before any store exists: whose data is this? Resolving it here is what lets every
   // store below stay ignorant of accounts and simply be handed a folder. An installation
   // from before accounts existed is moved under its owner in the same step.
