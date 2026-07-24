@@ -1,20 +1,77 @@
-# Current run: 22-requirement improvement plan (approved 2026-07-23)
+# Current run: fold the title band into the columns (approved 2026-07-24)
 
-Full plan: `~/.claude/plans/i-will-give-a-precious-dusk.md`. Four phases, slice-per-commit
-(≤10 files / ≤300 prod lines, all 8 gates green per commit).
+Full plan: `~/.claude/plans/modular-weaving-flurry.md`. Claude Desktop-style chrome: remove
+the empty full-width 36px drag band, run the sidebar surface to the window top with the
+traffic lights over it, move the conversation title into the content column's top strip.
+Two commits, each green through the gates.
 
-## STATUS: ALL FOUR PHASES COMPLETE, COMMITTED AND PUSHED (2026-07-24)
+## STATUS: DONE, COMMITTED (2026-07-24)
 
-Every requirement R1-R23 landed. Working tree clean, 1810 tests green, all 8 gates passing.
-Vincent launched the packaged DMG on 2026-07-24 and confirmed it runs, which closes the last
-open verification item in the plan. Nothing in the 22-requirement plan is outstanding.
+Landed in two slices: `eedbb2a` (fold the band) and `0762562` (tighter rows, draggable
+empty states). All 8 pre-commit gates green on each. Verified in the BUILT app via a
+Playwright geometry+screenshot probe and a main-process probe (scratchpad, deleted).
+Not pushed (parity with the previous run's "push only on Vincent's say-so"). Evidence below.
 
-### THE ONE THING NOT DONE YET: publish a GitHub release
+### Commit 1 — `feat(ui): fold the title band into the columns`
+
+1. [x] `src/main/index.ts`: added `trafficLightPosition: { x: 18, y: 18 }`; kept `hiddenInset`.
+       VERIFIED: `getWindowButtonPosition()` returns `{x:18,y:18}` (Electron honored it under
+       hiddenInset, hedge not needed); `bounds === contentBounds` (lights overlay content,
+       no native title bar); y-center 24 = midline of the 48px strip.
+2. [x] `app-frame`: band deleted; root flex row; `<main>` relative, keeps `min-h-0 min-w-0`;
+       `bandControl` → `reopenControl` as main's first child.
+       VERIFIED: aside top:0 left:0 (was 36), main top:0 relative, no band.
+3. [x] `sidebar`: `h-12 justify-end px-2` drag strip holds the collapse button (no-drag
+       wrapper); New conversation full-width; resize handle now no-drag; `menuItem` py-1.
+       VERIFIED: strip top:0 h:48 region=drag.
+4. [x] `conversation-header`: `sticky top-0 h-12 bg-surface/80 backdrop-blur` drag, border-b
+       dropped; `insetForWindowControls?` (pl-[8.5rem] pr-6 | px-6); no-drag on input + menu.
+       VERIFIED: header top:0 h:48 region=drag borderBottom:0 backdrop:blur(8px);
+       paddingLeft 24px open / 136px collapsed.
+5. [x] `update-banner`: `insetForWindowControls?` → pl-[8.5rem].
+6. [x] `app.tsx`: `reopenControl`; `insetForWindowControls={isCollapsed}` into header + banner.
+       VERIFIED collapsed: chip top:0 left:88 w:28 region=no-drag; header inset 136.
+7. [x] Stale comment sweep: settings-overlay, popover, panel-icon.
+8. [x] This PLAN.md rewrite.
+
+### Commit 2 — `feat(ui): tighter rows and draggable empty states`
+
+9.  [x] `conversation-item`: rowBase py-1.
+        VERIFIED: sidebar rows 32px (was 36).
+10. [x] `empty-conversations` + `no-provider-notice`: full-size drag section, card no-drag.
+        Verified by construction (lint/typecheck green); not re-screenshotted (trivial wrap).
+
+### Accepted edge cases (do not chase as bugs)
+
+Collapsed+memory / collapsed+boot-loading: no drag surface until the sidebar reopens (parity
+with the settings overlay). Collapsed + >~1560px content: header inner box 56px right of the
+thread column (cosmetic). Fullscreen keeps light-clearance padding (no fullscreen branching
+exists). Scrollbar thumb near the top 48px falls in the header drag rect (tiny target).
+
+### Runtime hedges
+
+`hiddenInset` ignores `trafficLightPosition` → switch to `hidden`. Sticky-header drag stale
+after scrolling (low risk) → move drag to an `absolute inset-x-0 top-0 h-12` sibling outside
+the scroller inside the relative `<main>`, drop drag from the header.
+
+### Out of scope, follow-up ticket
+
+`backdrop-blur` makes the header a containing block, so the header menu popover's `fixed
+inset-0` dismiss backdrop is confined to the header box and Escape does not close
+`headerMenuOpen`. Pre-existing, not worsened here.
+
+---
+
+# Handoff from the previous run (22-requirement plan, all four phases COMPLETE 2026-07-24)
+
+Full history in git and `.claude/LESSONS.md`. What is still live:
+
+## THE ONE THING NOT DONE YET: publish a GitHub release
 
 Vincent chose "push only" on 2026-07-24, so the commits are on origin/main but no release
-exists. This matters because the update feature (R21c) is inert until one does: the checker
-calls `repos/vdelacou/ask-marcel-studio/releases/latest`, which 404s on a repo with no
-releases, and degrades silently by design. To make it live:
+exists. The update feature (R21c) is inert until one does: the checker calls
+`repos/vdelacou/ask-marcel-studio/releases/latest`, which 404s on a repo with no releases,
+and degrades silently by design. To make it live:
 
 ```bash
 bun run dist   # only if release/ was cleaned; the DMG is gitignored
@@ -23,24 +80,24 @@ gh release create v0.1.0 "release/Ask Marcel Studio-0.1.0.dmg" --title "v0.1.0" 
 
 Version subtlety, so a future session does not chase a non-bug: the banner appears only when
 the published release is STRICTLY higher than the running version. Releasing v0.1.0 while
-0.1.0 is installed correctly shows nothing. The banner first appears on the next real
-version bump. See the [decision] entry in LESSONS.md.
+0.1.0 is installed correctly shows nothing. The banner first appears on the next real version
+bump. See the [decision] entry in LESSONS.md.
 
-### Deferred by decision (need Vincent's sign-off, not blockers)
+## Deferred by decision (need Vincent's sign-off, not blockers)
 
 - Delete memory-glossary.ts + tests (rule 24 needs his ok; plan holds it one release anyway,
   so "do nothing yet" remains a valid answer).
 - scripts/eval-memory.ts, the optional manual eval harness (rule 32 gate, needs a real key).
   Only worth building if the memory preamble or embedder gets tuned again.
 
-### Disk left behind, safe to delete when he says so
+## Disk left behind, safe to delete when he says so
 
 - `release/` : the DMG plus the unpacked bundle, roughly 900 MB, gitignored.
-- `~/Library/Application Support/ask-marcel-studio-backup-pre-accounts` : 492 MB, the
-  pre-R23 data snapshot taken before the per-account migration. The migration was verified
-  against the real data folder, so this is a belt-and-braces copy.
+- `~/Library/Application Support/ask-marcel-studio-backup-pre-accounts` : 492 MB, the pre-R23
+  data snapshot taken before the per-account migration. The migration was verified against
+  the real data folder, so this is a belt-and-braces copy.
 
-### Operational facts a fresh session needs
+## Operational facts a fresh session needs
 
 - Packaging needs three things first or it fails: `bun run fetch:python`, `bun run
   fetch:wheels`, `bun run rebuild:native`. Then `bun run dist`. Both vendor dirs are present
@@ -51,174 +108,7 @@ version bump. See the [decision] entry in LESSONS.md.
   packaged node_modules, which surfaces as an unexplained pre-commit timeout (see LESSONS).
 - The build is unsigned, so first launch needs right-click then Open past Gatekeeper.
 
-## Phase 1 — UI foundation and auth — COMPLETE
-
-All seven slices committed, gates green, verified in the built app with Playwright probes.
-
-1. [x] Primitives + drag fix (R5): IconButton, Popover, Menu, ConfirmDialog, PanelIcon;
-       no-drag on SettingsOverlay + MemoryConfirmDialog roots.
-       VERIFIED: probe clicked the top 36px strip with Settings open, modal closed. The
-       no-drag-on-overlay approach works; the AppFrame suppressDrag fallback was not needed.
-2. [x] Office logout + popover overhaul (R3): office:logout channel end to end;
-       popoverViewFromStatus / loginErrorMessage / dotLabel in lib/office-health.ts; popover
-       rebuilt on Popover.
-       VERIFIED: popover reads "Part of your sign-in has expired... Marcel cannot: look up
-       colleague details / read your Teams chats", plus the no-full-sign-in reassurance,
-       Refresh sign-in + Sign out, no Open settings, dismissed by an outside click. The dot's
-       tooltip no longer leaks the CLI's raw reason string.
-3. [x] M365 panel status control (R17): Refresh sign-in (force) + Sign out when in, Sign in
-       when out, degraded note listing what stopped working, warning-toned status line.
-4. [x] Sidebar row menus + centered delete confirm (R12b/c).
-       VERIFIED: 3-dots menu shows Rename / Delete, Delete opens the centered dialog naming
-       the conversation, Cancel leaves it alone.
-5. [x] Sidebar resize/collapse + muted colors (R12d/e).
-       VERIFIED: hide empties the column, the band button brings it back at the same width,
-       240 default persisted in localStorage. Recents label + idle rows on --color-ink-faint.
-6. [x] Sticky conversation header + Crepe font override (R12a, R16).
-       VERIFIED: header renders the title with its ... menu; Crepe body now 0.875rem with a
-       scaled heading ladder.
-7. [x] Quick context + user menu (R2 partial).
-       VERIFIED: quick-context.json written once at launch (Vincent DELACOURT, CIO Fashion
-       Group Greater China, China Standard Time, 5 ids); sidebar button became "V Vincent"
-       with a menu holding Settings; the block rides every system prompt and tells the agent
-       not to run my-quick-context again. Memory item joins the menu in Phase 3.
-
-## Phase 1b — R23: data belongs to the account it came from — DONE
-
-Landed in 15b67e4 and 47e43f8. Layout now:
-
-```
-<userData>/current-account.json          which account is open
-<userData>/accounts/<key>/               conversations, workspaces, claude-config, memory
-<userData>/{settings.json,agents.json}   shared: providers, keys, helpers
-<userData>/{bin,npm-cache,pip-cache,py}  shared: shims and runtimes
-```
-
-The key is `<address-label>-<id-fingerprint>`, so it is readable and still survives an
-address change; the id half is what identifies the account, because an address gets
-reassigned to a new joiner.
-
-VERIFIED on the real data folder (backed up first to
-`~/Library/Application Support/ask-marcel-studio-backup-pre-accounts`, 492 MB, delete when
-happy): the existing installation moved under `accounts/vincent-delacourt-mdx86f` with 8
-conversations, 12 workspaces, 3 memory notes and 3 skills intact; settings stayed shared;
-the app relaunched itself once to claim the folder and opened normally after.
-
-Two gotchas found while doing it, both fixed: a stored quick context written before this
-change has no directory id, so it is refetched rather than trusted (otherwise the account
-cannot be identified for a week); and claiming a folder renames it under the open stores,
-so that case restarts the app like a switch does.
-
-Still open for a later slice: the renderer is not told the account changed (the restart
-covers it today), and there is no UI listing accounts. Neither is needed for the
-requirement as asked.
-
-## Phase 1b — original notes
-
-Requirement (2026-07-23, mid-run): conversations, memory and everything else derived from a
-Microsoft 365 account must be stored per account, keyed by the signed-in user's email, so
-signing out, signing in as someone else, and coming back restores the first account's world
-untouched. Nothing of one account's is ever readable in another's session.
-
-Lands BEFORE Phase 3, because the Mem0 store, the memory page and the global context all
-need to know which account they belong to; retrofitting the partition afterwards would mean
-migrating a database as well as files.
-
-Design (to confirm while implementing):
-- Account key: the signed-in user's id from quick context (immutable), with the email kept
-  alongside for display. An email can be reassigned; a directory id cannot. Fall back to a
-  reserved key for "nobody signed in yet" so the app works before a first sign-in.
-- Per account: conversations/, workspaces/, memory (notes today, the Mem0 db in Phase 3),
-  quick-context.json, signature.html, voice-profile.md, the SDK transcript dirs, and the
-  defaultModel/last-used-model preference.
-- Shared across accounts: providers and their sealed API keys, skills, agents, the office
-  policy, the sidebar layout. These are the user's tooling, not their employer's data.
-- Migration: on first launch after this change, the existing single-account tree moves under
-  the current account's key. One-shot, marker file, never destructive.
-- Switching: signing out stops the app reading the old account's data; signing in as someone
-  else opens their own (empty on first sight) world. The window reloads its lists on the
-  account change rather than mixing two.
-1. [x] paths.ts takes an account key; pure, tested, every derived path under it.
-2. [x] Account service: resolve the current key from quick context, expose it to main,
-       notify the renderer when it changes.
-3. [x] Migration of the existing tree, one shot, marker, tested against a fake filesystem.
-4. [x] Stores and services take the key; renderer reloads on account change.
-5. [x] Verify: two accounts, two worlds, switch back and forth, nothing crosses.
-
-## Phase 2 — Agent quality, skills, agents UI — COMPLETE
-
-1. [x] Skill display names (R6): displayName frontmatter + humanize fallback; popover inserts
-       FOLDER token. DoD: "/" list shows friendly names; insert matches rewriteSlashSkill.
-2. [x] Titles groundwork (R7): userRenamed flag, slash-stripped interim title,
-       title-generation.ts (prompt + sanitizer), setGeneratedTitle. Landed 991157f.
-3. [x] Title job wiring: conversation-title background job on conversation's model,
-       onFirstTurnSaved trigger, {type:'title'} emit. Landed f89ec92.
-4. [x] Turn stats capture (R10b): Message.stats {durationMs,toolCalls,toolErrors}. Landed 6018f7d.
-5. [x] Repeat-failure guard + enforcement tests (R8c, R18b): command-failures.ts ring buffer,
-       bash-guard deny, runtime recording (guard-denials excluded), hook e2e. Landed de2ba01.
-6. [x] CLI cheat-sheet (R8a): generator from commands.json → claude-config/cli-cheatsheet.md
-       at launch.
-7. [x] Prompt hardening (R8b/d, R9): Grep probe first; core.md Command discipline (numbered) +
-       toolset truth; draft skill "Identify and confirm before any work" (numbered, STOP).
-8. [x] Skills pure layer (R13/14): serialiseSkillMd + single-line folding + round-trip tests;
-       renderer skill-form.ts, slugify.ts.
-9. [x] Skills persistence (R14): skills:create IPC; skillsPolicy.disabledFolders parse +
-       main-side filtering (runtime + suggestions).
-10. [x] Skills UI (R13/14): skill-detail form, built-ins read-only + Active toggle, Add menu
-        (scratch/import), Off badge.
-11. [x] Agents overhaul (R15): rename Helpers to Agents, wrapping description, drop
-        ToolChecklist, rich Instructions, friendly name to slug.
-12. [x] Command list redesign (R18a/c): single-column details accordion; meta split display
-        (Local files / Search / Account), policyName stays meta.
-13. [x] Tool labels + stats display (R22, R10-UI): "Ask Marcel Command" badge +
-        formatTurnStats faint line. DONE with the turn-stats commit.
-
-Phase 2 complete: all 13 slices landed and committed.
-
-## Phase 3 — Memory and context
-
-1. [x] Deps + rebuild: mem0ai, better-sqlite3, zod, @electron/rebuild, trustedDependencies,
-       rebuild:native script, README.
-2. [x] Spike: pin Mem0 config/API via electron-as-node scratch; exit = add, restart, search,
-       history round-trip config. Decide built-in store vs hand-rolled sqlite vector table.
-3. [x] MemoryStore port + fake (shared, 100%).
-4. [x] Settings.memory schema (OpenAI-compatible provider required).
-5. [x] Mem0 adapter: mem0-config.ts (pure), mem0-store.ts (FromApi seam), mem0-io.ts (only
-       native importer, lazy, Result), wiring, coverage entry.
-6. [x] CRUD service + IPC: memory:list/add/update/delete/clearAll/history + preload.
-7. [x] MCP tools + preamble (R20): memory-tools-core.ts, memory-mcp.ts (marcel-memory server),
-       runtime mcpServers, core.md "Your memory".
-8. [x] Global context + injection switch (R1): agent-files 'global-context', context-blocks.ts,
-       glossary to contextBlocks, core.md edit, About-you settings field.
-9. [x] Extraction accept writes to Mem0 + migration (source tags, marker, dedupe).
-10. [x] Removal map: delete memory-glossary.ts (+tests, needs Vincent's rule-24 sign-off);
-        hold memory:read/write + note files one release.
-11. [x] Memory page UI + user-menu Memory item; "What it remembers" leaves Settings.
-12. [x] Eval harness scripts/eval-memory.ts (manual rule-32 gate).
-
-## Phase 4 — Ops, branding, packaging, update — COMPLETE
-
-1. [x] File logger (R11a): log-line.ts + file-logger.ts (5MB, one rotation, silent-on-error);
-       inject runner/runtime/office. No PII: events, ids, kinds, counts only; 200-char clamp.
-       Landed ed2c9fa, 6a319aa.
-2. [x] Transcript retention (R11b): sdkProjectDirName + transcript-sweep.ts + launch sweep;
-       remove() also rms transcript dir. Live conversations never age-capped. Landed 038c89a.
-3. [x] Icon pipeline (R4): resources/icons/logo.svg + scripts/make-icons.sh (sips/iconutil) to
-       icon.icns + 512 PNG + renderer asset. Landed c18218b.
-4. [x] electron-builder (R21a): electron-builder.yml (x64, unsigned, asar:false,
-       extraResources incl. python), dist scripts, README packaging section. Config landed;
-       electron-vite build green; full DMG is the manual gate (needs fetch:python+wheels).
-5. [x] Update check + version (R21c/d): update-check.ts + update-checker.ts (10s deadline,
-       24h, cache, silent degrade), update:status IPC, banner + settings version line.
-       Backend landed; renderer banner + version line next commit.
-
-## Verification
-
-Per slice: bun test, lint:strict, typecheck, coverage, mutate:staged (rm
-reports/stryker-incremental.json first). Per phase: run-studio scenarios + manual checklist in
-the full plan.
-
-## Carried over from the previous run (still open)
+## Carried over, still open
 
 - [ ] The `\&` escaping returns on every save through the rich editor (Milkdown serialiser).
 - [ ] flash-lite omits the Sources footer on note-only answers. Pre-existing.
