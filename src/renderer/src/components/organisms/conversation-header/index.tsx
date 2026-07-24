@@ -40,9 +40,13 @@ export const ConversationHeader: FC<ConversationHeaderProps> = ({
   onCommitRename,
   onCancelRename,
 }) => (
-  <header
-    className={`sticky top-0 z-10 -mx-6 flex h-12 items-center gap-x-2 bg-surface/80 backdrop-blur [-webkit-app-region:drag] ${insetForWindowControls === true ? 'pl-[8.5rem] pr-6' : 'px-6'}`}
-  >
+  <header className={`sticky top-0 z-10 -mx-6 flex h-12 items-center gap-x-2 [-webkit-app-region:drag] ${insetForWindowControls === true ? 'pl-[8.5rem] pr-6' : 'px-6'}`}>
+    {/* The frosted background lives on its own layer, not on the header box. An element with
+        backdrop-blur becomes a containing block for its position:fixed descendants, and the
+        actions menu (a Popover) dismisses via a fixed inset-0 backdrop: on the header itself
+        the blur would shrink that backdrop to this 48px strip, so a click in the transcript
+        never lands on it and the menu cannot be closed. Behind the content (-z-10), decorative. */}
+    <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-surface/80 backdrop-blur" />
     <div className="mx-auto flex w-full min-w-0 max-w-reading items-center gap-x-2">
       {isEditing ? (
         <input

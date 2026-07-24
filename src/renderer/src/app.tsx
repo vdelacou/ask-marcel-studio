@@ -110,6 +110,9 @@ export const App: FC = () => {
   const memory = useMemory({ composerEmpty, settingsOpen });
   const [officeOpen, setOfficeOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  // The conversation header's actions menu. Declared here, above the Escape handler, so that
+  // handler can close it like every other overlay.
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
   // Which surface fills the main column: the conversation, or the full Memory page.
   const [view, setView] = useState<'chat' | 'memory'>('chat');
   const update = useUpdate();
@@ -159,13 +162,14 @@ export const App: FC = () => {
       if (event.key !== 'Escape') return;
       if (confirmingDeleteId !== undefined) return cancelDelete();
       if (menuOpenId !== undefined) return toggleRowMenu(menuOpenId);
+      if (headerMenuOpen) return setHeaderMenuOpen(false);
       if (officeOpen) return setOfficeOpen(false);
       if (settingsOpen) return closeSettings();
       return undefined;
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [confirmingDeleteId, cancelDelete, menuOpenId, toggleRowMenu, officeOpen, settingsOpen, closeSettings]);
+  }, [confirmingDeleteId, cancelDelete, menuOpenId, toggleRowMenu, headerMenuOpen, officeOpen, settingsOpen, closeSettings]);
 
   const isReady = boot.step === 'ready';
   // Only worth a picker when there is a choice to make.
@@ -182,7 +186,6 @@ export const App: FC = () => {
   const activeConversation = list.conversations.find((c) => c.id === activeId);
   // The header's own rename input and the sidebar row's are the same rename: only one of
   // them shows at a time, decided by which surface started it.
-  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
   const buildConversationHeader = (): ReactNode => {
     if (activeConversation === undefined) return undefined;
     const { id, title } = activeConversation;
