@@ -25,12 +25,6 @@ export type ToolCallCardProps = {
   steps?: readonly ToolStep[];
 };
 
-const statusStyles: Record<ToolCallStatus, string> = {
-  running: 'border-border-subtle text-ink-muted',
-  done: 'border-border-subtle text-ink-muted',
-  error: 'border-danger text-danger',
-};
-
 const statusLabel: Record<ToolCallStatus, string> = {
   running: 'Working on it…',
   done: 'Done',
@@ -78,14 +72,14 @@ const summaryStatus = (status: ToolCallStatus, steps: readonly ToolStep[]): stri
 // Native <details>: the interactivity ladder's first rung. Collapsing a tool call
 // needs no state, no hook and no prop plumbing (rule 21).
 export const ToolCallCard: FC<ToolCallCardProps> = ({ label, name, input, result, status, steps = [] }) => (
-  <details className={`group rounded-md border bg-surface ${status === 'error' ? statusStyles.error : statusStyles.done}`}>
+  <details className="group border-b border-border-subtle">
     <summary className="flex cursor-pointer list-none items-center gap-x-2 px-3 py-2 text-xs">
       <span aria-hidden="true" className="transition group-open:rotate-90">
         ›
       </span>
       <span className="min-w-0 truncate font-medium text-ink">{label}</span>
       <span className="shrink-0 font-mono text-[10px] text-ink-muted">{name}</span>
-      <span className="ml-auto shrink-0 pl-2">{summaryStatus(status, steps)}</span>
+      <span className="ml-auto shrink-0 pl-2 text-ink-muted">{summaryStatus(status, steps)}</span>
     </summary>
     <div className="flex flex-col gap-y-2 border-t border-border-subtle px-3 py-2">
       {steps.length > 0 && (
