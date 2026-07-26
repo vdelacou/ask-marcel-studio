@@ -132,7 +132,9 @@ bump. See the [decision] entry in LESSONS.md.
 
 ## Carried over, still open
 
-- [ ] The `\&` escaping returns on every save through the rich editor (Milkdown serialiser).
-- [ ] flash-lite omits the Sources footer on note-only answers. Pre-existing.
+- [x] The `\&` escaping returning on every save through the rich editor (Milkdown
+      serialiser): fixed 2026-07-26, `src/renderer/src/lib/markdown-ampersands.ts`.
+- [x] flash-lite omitting the Sources footer on note-only answers: accepted as a known
+      weak-model instruction-adherence gap, not a code defect. See LESSONS.
 - [ ] No CI, deliberate. The staged-tree hook is the only gate.
 - [ ] Optional: shell-guard hardening, README line for run-studio, jq vendoring for Windows.

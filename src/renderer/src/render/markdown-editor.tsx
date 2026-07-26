@@ -17,6 +17,7 @@ import type { FC } from 'react';
 import { Crepe } from '@milkdown/crepe';
 import '@milkdown/crepe/theme/common/style.css';
 import '@milkdown/crepe/theme/frame.css';
+import { unescapeAmpersands } from '../lib/markdown-ampersands.ts';
 
 export type MarkdownEditorProps = {
   defaultValue: string;
@@ -42,7 +43,7 @@ export const MarkdownEditor: FC<MarkdownEditorProps> = ({ defaultValue, onChange
 
     const crepe = new Crepe({ root, defaultValue: initial.current });
     crepe.on((listener) => {
-      listener.markdownUpdated((_context, markdown) => latest.current(markdown));
+      listener.markdownUpdated((_context, markdown) => latest.current(unescapeAmpersands(markdown)));
     });
     void crepe.create();
     return () => {

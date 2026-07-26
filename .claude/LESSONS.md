@@ -6,6 +6,39 @@ Each entry is one of `[mistake]`, `[decision]`, or `[gotcha]`. Newest first.
 
 ---
 
+## [decision] 2026-07-26 | flash-lite's missing Sources footer is accepted, not fixed
+
+The agent's answer format requires a trailing Sources footer (`resources/agent-core/core.md`,
+"Always end an answer with a Sources footer"). gemini-3.5-flash-lite, already documented
+elsewhere in this file as the weakest pinned model, sometimes drops it on note-only answers
+(answers citing only the user's own notes, no documents or emails). This is instruction-
+adherence drift in a specific weak model, not a code defect: no app logic builds or checks the
+footer, so there is nothing in `src/**` to patch. Decision: accept it as a known limitation of
+that model rather than adding app-level enforcement (a client-side fallback footer, or a
+stronger prompt) for a gap that is model-specific and already flagged as the honest floor for
+prompt-doctrine checks.
+Applies to: any future report of a stronger model dropping the footer, which would upgrade
+this from "known weak-model gap" to a real prompt or app defect worth revisiting.
+
+## [gotcha] 2026-07-26 | mdast-util-to-markdown escapes bare `&` before a letter, every save
+
+The rich editor (`@milkdown/crepe`, `src/renderer/src/render/markdown-editor.tsx`) serialises
+through `mdast-util-to-markdown`, which escapes any `&` immediately followed by `#` or an ASCII
+letter (`node_modules/mdast-util-to-markdown/lib/unsafe.js`: `{character: '&', after:
+'[#A-Za-z]', inConstruct: 'phrasing'}`), guarding against the next parse reading it as the
+start of a character reference like `&amp;`. Confirmed by direct repro (`remark().use(remark-
+gfm)` on `"AT&T"` produced `"AT\&T"`; `"Ben & Jerry"`, space after the ampersand, was left
+alone) before writing the fix, rather than guessing at the pattern. Real character references
+essentially never appear in this app's prose (skill files, voice profile), so the escape was
+pure noise, reappearing on every save. Fixed by reversing exactly that pattern post-serialise:
+`src/renderer/src/lib/markdown-ampersands.ts`, wired into the editor's `markdownUpdated`
+callback before the markdown reaches the caller.
+Known narrow gap, accepted rather than engineered around: the reversal is a blind string
+replace, so a fenced code block or inline code span containing a literal `\&letter` sequence
+(someone typing about this exact escape, for instance) would also get unescaped. Low
+likelihood given the prose use case; revisit with a proper mdast-scoped fix (an `unsafe`
+override passed to the serialiser, not a post-process regex) if it ever bites.
+
 ## [gotcha] 2026-07-24 | hiddenInset honours trafficLightPosition; verify chrome from the main process, not a screenshot
 
 Folding the empty title band away needed the macOS traffic lights re-centred in the new
