@@ -44,23 +44,27 @@ describe('reporting whether Microsoft 365 is working', () => {
   test('one tier gone needs attention, even though mail still works', () => {
     // The quiet failure: looking a colleague up starts failing while everything else
     // carries on, and nothing else in the app would say so.
-    expect(healthFromStatus(signedIn({ tiers: { elevated: tier({ available: false }) } })).health).toBe('attention');
+    expect(healthFromStatus(signedIn({ tiers: { elevated: tier({ available: false, refresh: 'interactive' }) } })).health).toBe('attention');
   });
 
   test('the reason the CLI gave is what the user is told', () => {
-    const view = healthFromStatus(signedIn({ tiers: { elevated: tier({ available: false, reason: 'the people directory needs a fresh sign-in' }) } }));
+    const view = healthFromStatus(signedIn({ tiers: { elevated: tier({ available: false, refresh: 'interactive', reason: 'the people directory needs a fresh sign-in' }) } }));
 
     expect(view.message).toBe('the people directory needs a fresh sign-in');
   });
 
   test('a tier gone with no reason still says something useful', () => {
-    const view = healthFromStatus(signedIn({ tiers: { ic3: tier({ available: false }) } }));
+    const view = healthFromStatus(signedIn({ tiers: { elevated: tier({ available: false, refresh: 'interactive' }) } }));
 
-    expect(view.message).toContain('expired');
+    expect(view.message).toContain('quick refresh');
   });
 
   test('a healthy tier alongside a broken one does not hide it', () => {
-    expect(healthFromStatus(signedIn({ tiers: { elevated: tier(), ic3: tier({ available: false }) } })).health).toBe('attention');
+    expect(healthFromStatus(signedIn({ tiers: { elevated: tier({ available: false, refresh: 'interactive' }), ic3: tier() } })).health).toBe('attention');
+  });
+
+  test('a Teams substrate token gone on its own is not attention-worthy, because it self-heals from the shared refresh token', () => {
+    expect(healthFromStatus(signedIn({ tiers: { chatsvcagg: tier({ available: false }), ic3: tier({ available: false }) } })).health).toBe('healthy');
   });
 });
 
@@ -74,23 +78,36 @@ describe('what the sign-in popover says', () => {
   });
 
   test('a dead elevated token says colleague details stopped working', () => {
-    const view = popoverViewFromStatus(signedIn({ tiers: { elevated: tier({ available: false }) } }));
+    const view = popoverViewFromStatus(signedIn({ tiers: { elevated: tier({ available: false, refresh: 'interactive' }) } }));
 
     expect(view.health).toBe('attention');
     expect(view.unavailable).toEqual(['Look up colleague details like phone numbers, offices and managers']);
   });
 
   test('a degraded sign-in promises the user will not have to sign in again from scratch', () => {
-    const view = popoverViewFromStatus(signedIn({ tiers: { elevated: tier({ available: false }) } }));
+    const view = popoverViewFromStatus(signedIn({ tiers: { elevated: tier({ available: false, refresh: 'interactive' }) } }));
 
     expect(view.reassurance).toContain('will not need to sign in again');
     expect(view.action).toBe('refresh');
   });
 
-  test('both Teams tokens gone is one thing that stopped working, not two', () => {
+  test('both Teams substrate tokens looking stale does not raise an alarm, because they self-heal on the next real call', () => {
     const view = popoverViewFromStatus(signedIn({ tiers: { chatsvcagg: tier({ available: false }), ic3: tier({ available: false }) } }));
 
-    expect(view.unavailable).toEqual(['Read your Teams chats']);
+    expect(view.health).toBe('healthy');
+    expect(view.unavailable).toEqual([]);
+  });
+
+  test('a healthy elevated token tells the user roughly how long it is good for', () => {
+    const view = popoverViewFromStatus(signedIn({ tiers: { elevated: tier({ expiresInSeconds: 2700 }) } }));
+
+    expect(view.renewalNote).toContain('45');
+  });
+
+  test('a broken elevated token gets the reassurance, not a countdown', () => {
+    const view = popoverViewFromStatus(signedIn({ tiers: { elevated: tier({ available: false, refresh: 'interactive' }) } }));
+
+    expect(view.renewalNote).toBeUndefined();
   });
 
   test('an expired sign-in asks for a new one and offers no sign-out', () => {
@@ -99,6 +116,32 @@ describe('what the sign-in popover says', () => {
     expect(view.action).toBe('sign-in');
     expect(view.canSignOut).toBe(false);
     expect(view.headline).toContain('sign in again');
+  });
+
+  test('a healthy sign-in does not offer a refresh, because nothing needs one', () => {
+    expect(popoverViewFromStatus(signedIn()).canRefresh).toBe(false);
+  });
+
+  test('a degraded sign-in offers the refresh that would fix it', () => {
+    const view = popoverViewFromStatus(signedIn({ tiers: { elevated: tier({ available: false, refresh: 'interactive' }) } }));
+
+    expect(view.canRefresh).toBe(true);
+  });
+
+  test('a fully signed-out user gets the one button that helps: sign in', () => {
+    expect(popoverViewFromStatus({ signedIn: false, message: 'not authenticated' }).canRefresh).toBe(true);
+  });
+
+  test('a signed-in user gets the fuller breakdown for the dot to show on hover', () => {
+    expect(popoverViewFromStatus(signedIn()).dotDetail).toContain('Mail, calendar, files');
+  });
+
+  test('a signed-out user has no per-token breakdown to hover', () => {
+    expect(popoverViewFromStatus({ signedIn: false, message: 'not authenticated' }).dotDetail).toBeUndefined();
+  });
+
+  test('nothing to click while the check is still running either', () => {
+    expect(popoverViewFromStatus(undefined, true).canRefresh).toBe(false);
   });
 
   test('while the check is still running nothing is claimed to be broken', () => {
@@ -129,7 +172,7 @@ describe('explaining why a sign-in did not finish', () => {
 
 describe('what the dot says on hover', () => {
   test('a degraded sign-in is described in words, not in the cli’s own reason string', () => {
-    expect(dotLabel('attention')).toBe('Part of your Microsoft 365 sign-in has expired');
+    expect(dotLabel('attention')).toBe('Part of your Microsoft 365 sign-in needs a quick refresh');
   });
 
   test('every state has something to say', () => {
