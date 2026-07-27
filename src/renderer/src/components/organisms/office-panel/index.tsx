@@ -24,7 +24,15 @@ export type OfficeScopeRow = { readonly scope: string; readonly label: string };
 // costing the sign-in: `unavailable` is what stopped working, empty when all is well.
 export type OfficeView =
   | { readonly kind: 'loading' }
-  | { readonly kind: 'signed-in'; readonly summary: string; readonly scopes: readonly OfficeScopeRow[]; readonly unavailable: readonly string[] }
+  | {
+      readonly kind: 'signed-in';
+      readonly summary: string;
+      readonly scopes: readonly OfficeScopeRow[];
+      readonly unavailable: readonly string[];
+      // How long the elevated token is still good for, when that is known and worth
+      // saying. Same wording as the sidebar popover, same source.
+      readonly renewalNote?: string;
+    }
   | { readonly kind: 'signed-out' };
 
 export type OfficePanelProps = {
@@ -58,6 +66,9 @@ const statusTone = (view: OfficeView): string => {
   return view.unavailable.length > 0 ? 'text-warning' : 'text-success';
 };
 
+// False while healthy: nothing is broken, so there is nothing for the button to fix.
+const canRefresh = (view: OfficeView): boolean => view.kind === 'signed-out' || (view.kind === 'signed-in' && view.unavailable.length > 0);
+
 export const OfficePanel: FC<OfficePanelProps> = ({
   view,
   isLoggingIn,
@@ -77,12 +88,15 @@ export const OfficePanel: FC<OfficePanelProps> = ({
       <div className="flex flex-col gap-y-1">
         <h2 className="text-lg font-semibold tracking-tight text-ink">Microsoft 365</h2>
         <p className={`text-sm ${statusTone(view)}`}>{statusLine(view)}</p>
+        {view.kind === 'signed-in' && view.renewalNote !== undefined && <p className="text-xs text-ink-muted">{view.renewalNote}</p>}
       </div>
       {view.kind !== 'loading' && (
         <div className="flex shrink-0 items-center gap-x-2">
-          <Button variant={view.kind === 'signed-in' ? 'secondary' : 'primary'} onClick={onLogin} disabled={isLoggingIn || isSigningOut}>
-            {buttonLabel(view, isLoggingIn)}
-          </Button>
+          {canRefresh(view) && (
+            <Button variant={view.kind === 'signed-in' ? 'secondary' : 'primary'} onClick={onLogin} disabled={isLoggingIn || isSigningOut}>
+              {buttonLabel(view, isLoggingIn)}
+            </Button>
+          )}
           {view.kind === 'signed-in' && (
             <Button variant="secondary" onClick={onSignOut} disabled={isLoggingIn || isSigningOut}>
               {isSigningOut ? 'Signing out…' : 'Sign out'}
@@ -94,7 +108,7 @@ export const OfficePanel: FC<OfficePanelProps> = ({
 
     {view.kind === 'signed-in' && view.unavailable.length > 0 && (
       <div className="flex flex-col gap-y-1 rounded-panel border border-border-subtle bg-surface-raised p-3">
-        <p className="text-sm text-ink">Part of your sign-in has expired. Until you refresh it, Marcel cannot:</p>
+        <p className="text-sm text-ink">One part of your sign-in needs a quick refresh. Until then, Marcel cannot:</p>
         <ul className="flex list-disc flex-col gap-y-0.5 pl-5 text-sm text-ink-muted">
           {view.unavailable.map((entry) => (
             <li key={entry}>{entry}</li>

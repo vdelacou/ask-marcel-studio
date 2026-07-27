@@ -38,8 +38,6 @@ import type { OfficePolicy } from '../../../shared/types.ts';
 import { useModelTest } from '../hooks/use-model-test.ts';
 import { rowForTest } from '../lib/model-test-view.ts';
 import { useSkills } from '../hooks/use-skills.ts';
-import { useMemoryConfig } from '../hooks/use-memory-config.ts';
-import { MemoryConfigPanel } from '../components/organisms/memory-config-panel/index.tsx';
 import { useAgents } from '../hooks/use-agents.ts';
 import { slugify } from '../lib/slugify.ts';
 import { useAgentFile } from '../hooks/use-agent-file.ts';
@@ -90,7 +88,6 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
   const [defaultModel, setDefaultModel] = useState<string | undefined>(undefined);
   const [notice, setNotice] = useState<PanelNotice | undefined>(undefined);
   const [skillAddMenuOpen, setSkillAddMenuOpen] = useState(false);
-  const memoryConfig = useMemoryConfig();
   const update = useUpdate();
   const skills = useSkills();
   const agents = useAgents();
@@ -121,11 +118,18 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
         setOfficeView({ kind: 'signed-out' });
         return;
       }
-      setOfficeView(
-        status.value.signedIn
-          ? { kind: 'signed-in', summary: scopesSummary(status.value.scopes), scopes: scopeRows(status.value.scopes), unavailable: popoverViewFromStatus(status.value).unavailable }
-          : { kind: 'signed-out' }
-      );
+      if (!status.value.signedIn) {
+        setOfficeView({ kind: 'signed-out' });
+        return;
+      }
+      const popover = popoverViewFromStatus(status.value);
+      setOfficeView({
+        kind: 'signed-in',
+        summary: scopesSummary(status.value.scopes),
+        scopes: scopeRows(status.value.scopes),
+        unavailable: popover.unavailable,
+        ...(popover.renewalNote === undefined ? {} : { renewalNote: popover.renewalNote }),
+      });
     })();
   }, []);
 
@@ -450,20 +454,6 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
             setIsEditingSignature(false);
           }}
           onRegenerate={signature.regenerate}
-        />
-      )}
-
-      {section === 'memory' && (
-        <MemoryConfigPanel
-          providers={memoryConfig.providers}
-          hasAnthropicOnly={memoryConfig.hasAnthropicOnly}
-          providerId={memoryConfig.providerId}
-          embeddingModelId={memoryConfig.embeddingModelId}
-          isSaving={memoryConfig.isSaving}
-          {...(memoryConfig.notice === undefined ? {} : { notice: memoryConfig.notice })}
-          onChangeProvider={memoryConfig.changeProvider}
-          onChangeModel={memoryConfig.changeModel}
-          onSave={memoryConfig.save}
         />
       )}
 

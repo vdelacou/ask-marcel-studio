@@ -12,6 +12,7 @@ export type OfficeStatusPopoverProps = {
   headline: string;
   unavailable: readonly string[];
   action: 'refresh' | 'sign-in';
+  canRefresh: boolean;
   canSignOut: boolean;
   isRefreshing: boolean;
   isSigningOut: boolean;
@@ -19,6 +20,7 @@ export type OfficeStatusPopoverProps = {
   onSignOut: () => void;
   onDismiss: () => void;
   reassurance?: string;
+  renewalNote?: string;
   error?: string;
 };
 
@@ -32,6 +34,7 @@ export const OfficeStatusPopover: FC<OfficeStatusPopoverProps> = ({
   headline,
   unavailable,
   action,
+  canRefresh,
   canSignOut,
   isRefreshing,
   isSigningOut,
@@ -39,28 +42,34 @@ export const OfficeStatusPopover: FC<OfficeStatusPopoverProps> = ({
   onSignOut,
   onDismiss,
   reassurance,
+  renewalNote,
   error,
 }) => (
-  <Popover placement="up-start" dismissLabel="Close sign-in details" onDismiss={onDismiss}>
+  <Popover placement="up-end" dismissLabel="Close sign-in details" onDismiss={onDismiss}>
     <div className="flex w-72 flex-col gap-y-2 p-2">
-      <p className={`text-sm ${health === 'signed-out' ? 'text-danger' : 'text-ink'}`}>{headline}</p>
-      {unavailable.length > 0 && (
-        <ul className="flex list-disc flex-col gap-y-1 pl-4 text-xs text-ink-muted">
-          {unavailable.map((entry) => (
-            <li key={entry}>{entry}</li>
-          ))}
-        </ul>
-      )}
-      {reassurance !== undefined && <p className="text-xs text-ink-muted">{reassurance}</p>}
+      <div role="status" className="flex flex-col gap-y-2">
+        <p className="text-sm text-ink">{headline}</p>
+        {unavailable.length > 0 && (
+          <ul className="flex list-disc flex-col gap-y-1 pl-4 text-xs text-ink-muted">
+            {unavailable.map((entry) => (
+              <li key={entry}>{entry}</li>
+            ))}
+          </ul>
+        )}
+        {reassurance !== undefined && <p className="text-xs text-ink-muted">{reassurance}</p>}
+        {renewalNote !== undefined && <p className="text-xs text-ink-muted">{renewalNote}</p>}
+      </div>
       {error !== undefined && (
         <p role="alert" className="rounded-md border border-danger bg-danger-wash px-2 py-1 text-xs text-danger">
           {error}
         </p>
       )}
       <div className="flex items-center justify-between gap-x-2 pt-1">
-        <Button variant={health === 'healthy' ? 'secondary' : 'primary'} onClick={onRefresh} disabled={isRefreshing || isSigningOut}>
-          {refreshLabel(action, isRefreshing)}
-        </Button>
+        {canRefresh && (
+          <Button variant={health === 'healthy' ? 'secondary' : 'primary'} onClick={onRefresh} disabled={isRefreshing || isSigningOut}>
+            {refreshLabel(action, isRefreshing)}
+          </Button>
+        )}
         {canSignOut && (
           <Button variant="secondary" onClick={onSignOut} disabled={isRefreshing || isSigningOut}>
             {isSigningOut ? 'Signing out…' : 'Sign out'}

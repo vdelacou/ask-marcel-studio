@@ -30,8 +30,6 @@ import { useChatViews } from './hooks/use-chat-views.ts';
 import { useOfficeHealth } from './hooks/use-office-health.ts';
 import { useSidebarLayout } from './hooks/use-sidebar-layout.ts';
 import { useUserIdentity } from './hooks/use-user-identity.ts';
-import { useMemoryStore } from './hooks/use-memory-store.ts';
-import { MemoryPage } from './components/organisms/memory-page/index.tsx';
 import { IconButton } from './components/atoms/icon-button/index.tsx';
 import { PanelIcon } from './components/atoms/panel-icon/index.tsx';
 import { useMemory } from './hooks/use-memory.ts';
@@ -85,7 +83,6 @@ export const App: FC = () => {
   const conversations = useConversations(boot.step === 'ready' ? boot.defaultModel : undefined, evict);
   const list = conversations.view;
   const { create } = conversations;
-  const backToChat = useCallback((): void => setView('chat'), []);
   const activeId = list.activeId;
 
   const hydrateActive = useCallback((): void => {
@@ -113,15 +110,18 @@ export const App: FC = () => {
   // The conversation header's actions menu. Declared here, above the Escape handler, so that
   // handler can close it like every other overlay.
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
-  // Which surface fills the main column: the conversation, or the full Memory page.
-  const [view, setView] = useState<'chat' | 'memory'>('chat');
   const update = useUpdate();
   const [updateDismissed, setUpdateDismissed] = useState(false);
-  const memoryStore = useMemoryStore();
   const [settingsSection, setSettingsSection] = useState<string | undefined>(undefined);
 
   const openSettings = useCallback((): void => {
     setSettingsSection(undefined);
+    setSettingsOpen(true);
+  }, []);
+  // The notes the agent reads before every message live in Settings, so the menu item
+  // opens that section rather than a surface of its own.
+  const openNotes = useCallback((): void => {
+    setSettingsSection('memory');
     setSettingsOpen(true);
   }, []);
   const { reload: reloadOffice } = office;
@@ -236,6 +236,7 @@ export const App: FC = () => {
       isSettingsActive={settingsOpen}
       officeHealth={office.popover.health}
       officeLabel={dotLabel(office.popover.health)}
+      {...(office.popover.dotDetail === undefined ? {} : { officeDetail: office.popover.dotDetail })}
       {...(officeOpen
         ? {
             officePopover: (
@@ -244,8 +245,10 @@ export const App: FC = () => {
                 headline={office.popover.headline}
                 unavailable={office.popover.unavailable}
                 action={office.popover.action}
+                canRefresh={office.popover.canRefresh}
                 canSignOut={office.popover.canSignOut}
                 {...(office.popover.reassurance === undefined ? {} : { reassurance: office.popover.reassurance })}
+                {...(office.popover.renewalNote === undefined ? {} : { renewalNote: office.popover.renewalNote })}
                 isRefreshing={office.isRefreshing}
                 isSigningOut={office.isSigningOut}
                 {...(office.error === undefined ? {} : { error: office.error })}
@@ -259,15 +262,12 @@ export const App: FC = () => {
       width={sidebarLayout.width}
       onStartResize={sidebarLayout.startResize}
       onCollapse={sidebarLayout.toggleCollapse}
-      onToggleOfficeStatus={() => setOfficeOpen((open) => !open)}
-      onNew={() => {
-        setView('chat');
-        create();
+      onToggleOfficeStatus={() => {
+        if (!officeOpen) office.reload();
+        setOfficeOpen((open) => !open);
       }}
-      onSelect={(id) => {
-        setView('chat');
-        conversations.select(id);
-      }}
+      onNew={create}
+      onSelect={conversations.select}
       {...(identity.context === undefined || identity.context.firstName.length === 0 ? {} : { userName: identity.context.firstName })}
       {...(userMenuOpen
         ? {
@@ -280,7 +280,7 @@ export const App: FC = () => {
                   ]}
                   onPick={(id) => {
                     setUserMenuOpen(false);
-                    if (id === 'memory') return setView('memory');
+                    if (id === 'memory') return openNotes();
                     return openSettings();
                   }}
                 />
@@ -326,26 +326,7 @@ export const App: FC = () => {
         )}
         {boot.step === 'no-provider' && <NoProviderNotice onOpenSettings={openSettings} />}
         {boot.step === 'failed' && <NoProviderNotice onOpenSettings={openSettings} />}
-        {view === 'memory' && (
-          <MemoryPage
-            rows={memoryStore.items.map((item) => ({ id: item.id, text: item.text, source: item.source }))}
-            {...(memoryStore.notice === undefined ? {} : { notice: memoryStore.notice })}
-            isLoading={memoryStore.isLoading}
-            {...(memoryStore.editingId === undefined ? {} : { editingId: memoryStore.editingId })}
-            draft={memoryStore.draft}
-            newText={memoryStore.newText}
-            onBack={backToChat}
-            onStartEdit={memoryStore.startEdit}
-            onChangeDraft={memoryStore.changeDraft}
-            onSaveEdit={memoryStore.saveEdit}
-            onCancelEdit={memoryStore.cancelEdit}
-            onRemove={memoryStore.remove}
-            onChangeNew={memoryStore.changeNew}
-            onAddNew={memoryStore.addNew}
-            onClearAll={memoryStore.askClear}
-          />
-        )}
-        {view === 'chat' && isReady && activeId !== undefined && (
+        {isReady && activeId !== undefined && (
           // Keyed so the composer draft resets between conversations. The transcript no
           // longer lives in this component, so remounting costs nothing.
           <ChatPage
@@ -361,7 +342,7 @@ export const App: FC = () => {
             {...(conversationHeader === undefined ? {} : { header: conversationHeader })}
           />
         )}
-        {view === 'chat' && isReady && activeId === undefined && <EmptyConversations onNew={create} />}
+        {isReady && activeId === undefined && <EmptyConversations onNew={create} />}
       </AppFrame>
       {settingsOpen && (
         <SettingsOverlay onClose={closeSettings}>
@@ -395,15 +376,6 @@ export const App: FC = () => {
           confirmLabel="Delete"
           onConfirm={conversations.confirmDelete}
           onCancel={conversations.cancelDelete}
-        />
-      )}
-      {memoryStore.isConfirmingClear && (
-        <ConfirmDialog
-          title="Forget everything?"
-          body="Marcel will forget every fact on this page. This can't be undone."
-          confirmLabel="Forget everything"
-          onConfirm={memoryStore.confirmClear}
-          onCancel={memoryStore.cancelClear}
         />
       )}
       {conversations.error !== undefined && <Toast message={conversations.error} onDismiss={conversations.dismissError} />}

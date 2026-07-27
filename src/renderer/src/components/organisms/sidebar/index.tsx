@@ -22,6 +22,9 @@ export type SidebarProps = {
   // rendered here when it is open, so the sidebar stays free of any refresh wiring.
   officeHealth: 'checking' | 'healthy' | 'attention' | 'signed-out';
   officeLabel: string;
+  // The fuller per-token breakdown, shown on hover. Falls back to officeLabel when there
+  // is nothing more to say (signed out, still checking).
+  officeDetail?: string;
   officePopover?: ReactNode;
   // The user's own first name once Microsoft 365 has told the app what it is. Until then
   // the button says Settings, which is what it used to say and what it still does.
@@ -69,7 +72,7 @@ const healthDot: Record<SidebarProps['officeHealth'], string> = {
   checking: 'bg-border-subtle',
   healthy: 'bg-success',
   attention: 'bg-warning',
-  'signed-out': 'bg-ink-muted',
+  'signed-out': 'bg-danger',
 };
 
 export const Sidebar: FC<SidebarProps> = ({
@@ -81,6 +84,7 @@ export const Sidebar: FC<SidebarProps> = ({
   isSettingsActive,
   officeHealth,
   officeLabel,
+  officeDetail,
   officePopover,
   userName,
   userMenu,
@@ -178,7 +182,7 @@ export const Sidebar: FC<SidebarProps> = ({
           type="button"
           onClick={onToggleOfficeStatus}
           aria-label={officeLabel}
-          title={officeLabel}
+          title={officeDetail ?? officeLabel}
           className="shrink-0 rounded-md p-2 transition hover:bg-surface-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
           <span aria-hidden="true" className={`block h-2 w-2 rounded-full ${healthDot[officeHealth]}`} />
@@ -193,7 +197,7 @@ export const Sidebar: FC<SidebarProps> = ({
       role="presentation"
       onPointerDown={(event) => onStartResize(event.clientX)}
       onDoubleClick={onCollapse}
-      className="absolute inset-y-0 -right-1 z-10 w-2 cursor-col-resize transition hover:bg-accent/20 [-webkit-app-region:no-drag]"
+      className="absolute inset-y-0 -right-1 z-10 w-2 cursor-col-resize [-webkit-app-region:no-drag]"
     />
   </aside>
 );
