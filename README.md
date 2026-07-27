@@ -31,16 +31,10 @@ Electron + React, MIT licensed. Built to the atelier engineering standard.
   because `bun run` delegates to real node. Everything else is Bun-only.
 - Optional: `gitleaks` for pre-commit gate 3 (`brew install gitleaks`). The hook warns and
   continues without it.
-- Xcode Command Line Tools (`xcode-select --install`), to build the one native dependency
-  (`better-sqlite3`, which backs the searchable memory).
 
 Running the app needs no separate Node install: Electron ships its own runtime. It has no
 postinstall, so `bun install` is fast and the ~124MB binary downloads on the first `bun run dev`
 instead (about two minutes, once).
-
-`better-sqlite3` is compiled against Electron's ABI, not Node's, so after every `bun install`
-and every Electron version bump run `bun run rebuild:native` (it wraps `electron-rebuild`).
-The app fails to load the memory store with a version-mismatch error otherwise.
 
 ## Install and run
 
@@ -79,7 +73,6 @@ they are missing:
 ```bash
 bun run fetch:python   # the embedded CPython runtime, into vendor/python/<triple>
 bun run fetch:wheels   # the seed wheels, into vendor/wheels
-bun run rebuild:native # rebuild better-sqlite3 against Electron's ABI
 bun run dist           # electron-vite build, then electron-builder --mac --x64
 ```
 
@@ -89,9 +82,8 @@ the same reason there is no silent autoupdate. The app checks GitHub's latest re
 day and, when a newer one exists, shows a banner linking the DMG; installing it is manual.
 
 Scope is deliberately narrow: **x64 only** (the dev machine is Intel; arm64 needs real Apple
-Silicon to build and test on), and `asar: false` (the agent SDK spawns its own CLI and
-better-sqlite3 loads a native `.node`, both of which want real files, not an archive). The
-running version shows under the settings nav.
+Silicon to build and test on), and `asar: false` (the agent SDK spawns its own CLI, which
+wants real files, not an archive). The running version shows under the settings nav.
 
 ## Layout
 

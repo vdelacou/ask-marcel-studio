@@ -6,9 +6,9 @@
 # release and links the DMG (see services/update). arm64, signing and notarisation wait for
 # real hardware and a certificate.
 #
-# asar: false on purpose. The Claude Agent SDK spawns its own CLI and better-sqlite3 loads a
-# native .node; both want real files on disk, not an archive. The cost is a fatter, browsable
-# app bundle, which for a personal tool is a fair trade.
+# asar: false on purpose. The Claude Agent SDK spawns its own CLI, which wants real files on
+# disk rather than an archive. The cost is a fatter, browsable app bundle, which for a
+# personal tool is a fair trade.
 appId: com.askmarcel.studio
 productName: Ask Marcel Studio
 directories:
