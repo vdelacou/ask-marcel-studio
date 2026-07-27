@@ -61,6 +61,19 @@ const dotFor = (status: ToolCallStatus): string => {
   }
 };
 
+// Setup the agent does for itself, the same every time and never about the user's own
+// data: it recedes so the rows that actually touch something (a real command, a
+// delegated agent) read as what matters, by contrast rather than decoration.
+const SETUP_TOOLS: readonly string[] = ['Skill', 'Read'];
+
+const isSetupStep = (name: string): boolean => SETUP_TOOLS.includes(name);
+
+const labelTone = (name: string): string => (isSetupStep(name) ? 'text-ink-muted' : 'font-medium text-ink');
+
+// A nested step never carried the top-level's bold weight to begin with (it is already
+// one tier down); de-emphasis here only has the muted color to give.
+const stepLabelTone = (name: string): string => (isSetupStep(name) ? 'text-ink-muted' : 'text-ink');
+
 // While a delegated job runs, the collapsed card says what the helper is doing right
 // now rather than a generic "working": that is the only view of it the user has.
 const summaryStatus = (status: ToolCallStatus, steps: readonly ToolStep[]): string => {
@@ -77,7 +90,7 @@ export const ToolCallCard: FC<ToolCallCardProps> = ({ label, name, input, result
       <span aria-hidden="true" className="transition group-open:rotate-90">
         ›
       </span>
-      <span className="min-w-0 truncate font-medium text-ink">{label}</span>
+      <span className={`min-w-0 truncate ${labelTone(name)}`}>{label}</span>
       <span className="shrink-0 font-mono text-[10px] text-ink-muted">{name}</span>
       <span className="ml-auto shrink-0 pl-2 text-ink-muted">{summaryStatus(status, steps)}</span>
     </summary>
@@ -89,7 +102,7 @@ export const ToolCallCard: FC<ToolCallCardProps> = ({ label, name, input, result
               <details>
                 <summary className="flex cursor-pointer list-none items-center gap-x-2 text-xs">
                   <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${dotFor(step.status)}`} />
-                  <span className="min-w-0 truncate text-ink">{step.label}</span>
+                  <span className={`min-w-0 truncate ${stepLabelTone(step.name)}`}>{step.label}</span>
                   <span className="shrink-0 font-mono text-[10px] text-ink-muted">{step.name}</span>
                 </summary>
                 <div className="ml-3.5 mt-1 flex flex-col gap-y-1 border-l border-border-subtle pl-2.5">
