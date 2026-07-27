@@ -99,20 +99,11 @@ export const memoryDir = (userData: string): string => join(claudeConfigDir(user
 
 export const memoryFilePath = (userData: string, name: MemoryFileName): string => join(memoryDir(userData), `${name}.md`);
 
-// The searchable memory's database, under userData rather than claude-config on purpose:
-// claude-config is the agent-readable surface, and a sqlite file there would invite the
-// model to bypass the tool surface with a raw `sqlite3` over it and corrupt the WAL state.
-export const memoryDbPath = (userData: string): string => join(userData, 'memory', 'memory.db');
-
 // The app's own bookkeeping about those notes: what it wants to ask, and how far it has
 // read. Not under claude-config: the agent has no business reading either.
 export const memoryQueuePath = (userData: string): string => join(userData, 'memory', 'queue.json');
 
 export const memoryStatePath = (userData: string): string => join(userData, 'memory', 'state.json');
-
-// Written once the old notes have been carried into the searchable memory, so the
-// migration runs a single time.
-export const memoryMigratedMarkerPath = (userData: string): string => join(userData, 'memory', 'migrated.json');
 
 // Where a background job runs. Deliberately NOT under workspaces/: those belong to
 // conversations and are deleted with them.
