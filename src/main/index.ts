@@ -29,10 +29,6 @@ import { sweepTranscripts } from './services/store/transcript-sweep-io.ts';
 import { createUpdateChecker } from './services/update/update-checker.ts';
 import type { UpdateChecker } from './services/update/update-checker.ts';
 import { createMemoryService } from './services/memory/memory-service.ts';
-import { createSqliteMemoryStore } from './services/memory/sqlite-memory-store.ts';
-import type { Embedder } from './services/memory/sqlite-memory-store.ts';
-import { createEmbedder } from './services/memory/embedder-io.ts';
-import type { MemoryStore } from '../shared/memory-store.ts';
 import { createMemoryExtractor } from './services/memory/memory-extractor.ts';
 import { createIdleWatcher } from './services/memory/idle-watcher.ts';
 import { createBackgroundJobs } from './services/background/background-jobs.ts';
@@ -42,17 +38,7 @@ import { createTitleJob } from './services/background/title-job.ts';
 import { createSignatureService } from './services/office/signature-service.ts';
 import { parseAgentFileDoc } from '../shared/agent-files.ts';
 import { createModelTestService } from './services/models/model-test-service.ts';
-import {
-  accountDir,
-  backgroundWorkspaceDir,
-  mainLogPath,
-  memoryDbPath,
-  quickContextFilePath,
-  sdkProjectsDir,
-  signatureFilePath,
-  voiceProfileFilePath,
-  workspaceDir,
-} from '../shared/paths.ts';
+import { accountDir, backgroundWorkspaceDir, mainLogPath, quickContextFilePath, sdkProjectsDir, signatureFilePath, voiceProfileFilePath, workspaceDir } from '../shared/paths.ts';
 import { parseStoredQuickContext } from '../shared/quick-context.ts';
 import { readJsonFile, writeJsonFileAtomic } from './services/store/json-file.ts';
 import { BUILTIN_AGENTS } from './services/agent/builtin-agents.ts';
@@ -140,19 +126,6 @@ const agentCoreSource = (): string => (app.isPackaged ? join(process.resourcesPa
 
 // The prompts for work the app does on its own. Same dev/packaged split.
 const backgroundPromptSource = (name: string): string => (app.isPackaged ? join(process.resourcesPath, 'background', name) : join(__dirname, '../../resources/background', name));
-
-// The always-on line that tells the agent it has a searchable memory. Kept short: it is
-// appended to every system prompt, and its whole job is to make the agent reach for
-// memory_search before claiming ignorance, and to add or forget only on request.
-const MEMORY_PREAMBLE = [
-  '## Your memory',
-  '',
-  "You have a searchable memory of this user's world: terms their organisation uses, who",
-  'people are, their preferences. Before you say you do not know a term, a person, or a',
-  'preference, call memory_search. Add something (memory_add) or forget something',
-  '(memory_forget) ONLY when the user asks you to; never on your own initiative. Everything',
-  'you remember shows on their Memory page, where they can edit or remove it.',
-].join('\n');
 
 // The two on-demand M365 skills the app now ships, carved by trigger (read vs draft).
 const BUILTIN_SKILLS = ['answer-from-m365', 'draft-outlook-email'];
@@ -297,24 +270,7 @@ const buildRuntime = (
   const agentsStore = createAgentsStore({ userData: toolsRoot, builtins: BUILTIN_AGENTS });
   const agentFiles = createAgentFilesStore({ userData });
 
-  // The searchable memory: a native sqlite store behind the port when an embedding
-  // provider is configured, and a not-set-up store otherwise. The embedder reads its
-  // provider from settings per call, so changing it in settings applies without a restart.
-  // Built before the memory service, which writes accepted candidates into it.
-  const memoryStore = ((): MemoryStore => {
-    const embed: Embedder = async (text) => {
-      const current = await settings.get();
-      const config = current.ok ? current.value.memory : undefined;
-      if (config === undefined) return err('memory is not set up');
-      const provider = current.ok ? current.value.providers.find((candidate) => candidate.id === config.providerId) : undefined;
-      if (provider === undefined || provider.kind !== 'openai') return err('the memory provider is not configured');
-      const one = createEmbedder((url, init) => fetch(url, init), { baseUrl: provider.baseUrl, apiKey: provider.apiKey, model: config.embeddingModelId });
-      return one(text);
-    };
-    return createSqliteMemoryStore({ dbPath: memoryDbPath(userData), embed, now, newId: () => crypto.randomUUID() });
-  })();
-
-  const memory = createMemoryService({ userData, now, newId: () => crypto.randomUUID(), emit: emitMemory, memoryStore });
+  const memory = createMemoryService({ userData, now, newId: () => crypto.randomUUID(), emit: emitMemory });
 
   const location = officeCliLocation();
   const officeRun = createOfficeRun(location, process.env);
@@ -336,8 +292,6 @@ const buildRuntime = (
     settings,
     // Who the user is, read per send so a sign-in mid-session reaches the next turn.
     quickContextBlock: () => quickContext.block(),
-    memoryStore,
-    memoryPreamble: MEMORY_PREAMBLE,
     // What the user wrote about themselves, read per send from the global-context file.
     aboutYou: async () => {
       const read = await agentFiles.get('global-context');
@@ -456,7 +410,6 @@ const buildRuntime = (
     agentsStore,
     agentFiles,
     memory,
-    memoryStore,
     // Rebuilding a document is the same job the app runs on its own, asked for
     // explicitly. It resolves with the new contents so the panel shows them at once.
     regenerateAgentFile: async (doc) => {
@@ -529,10 +482,6 @@ void app.whenReady().then(async () => {
   // user deleted by hand comes back. Not awaited: a skill lands before the first
   // message can possibly be sent, and blocking startup on a copy would be worse.
   void skills.seedBuiltins();
-  // Carry the old jargon/team/people notes into the searchable memory, once. Silent and
-  // not awaited: it does nothing until an embedding provider is set up, and nothing after
-  // the first successful run.
-  void memory.migrateNotes();
   // Who the user is: read what was stored, then fetch again only if it has gone stale.
   // Not awaited, and silent on failure: the window opens either way, and the block is
   // simply absent from the prompt until it lands.

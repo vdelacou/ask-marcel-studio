@@ -24,7 +24,6 @@ import type { SettingsStore } from '../services/store/settings-store.ts';
 import type { AgentsStore } from '../services/store/agents-store.ts';
 import type { AgentFilesStore } from '../services/store/agent-files-store.ts';
 import type { MemoryService } from '../services/memory/memory-service.ts';
-import type { MemoryStore } from '../../shared/memory-store.ts';
 import type { UpdateChecker } from '../services/update/update-checker.ts';
 import type { AgentFileError } from '../../shared/agent-files.ts';
 import type { Result } from '../../shared/result.ts';
@@ -42,7 +41,6 @@ export type IpcDeps = {
   readonly agentsStore: AgentsStore;
   readonly agentFiles: AgentFilesStore;
   readonly memory: MemoryService;
-  readonly memoryStore: MemoryStore;
   // The last update status the checker learned. Synchronous read: the network happens on a
   // schedule in the background, never on the click that asks.
   readonly updateChecker: UpdateChecker;
@@ -179,15 +177,6 @@ export const registerIpc = (deps: IpcDeps): void => {
     const draft = input as { name?: unknown; contents?: unknown } | undefined;
     return deps.memory.write(draft?.name, draft?.contents);
   });
-  ipcMain.handle(CHANNEL.memoryList, () => deps.memoryStore.list());
-  ipcMain.handle(CHANNEL.memoryAdd, (_event, text: unknown) => deps.memoryStore.add({ text: asString(text), source: 'user' }));
-  ipcMain.handle(CHANNEL.memoryUpdate, (_event, input: unknown) => {
-    const draft = input as { id?: unknown; text?: unknown } | undefined;
-    return deps.memoryStore.update(asString(draft?.id), asString(draft?.text));
-  });
-  ipcMain.handle(CHANNEL.memoryDelete, (_event, id: unknown) => deps.memoryStore.remove(asString(id)));
-  ipcMain.handle(CHANNEL.memoryClearAll, () => deps.memoryStore.removeAll());
-  ipcMain.handle(CHANNEL.memoryHistory, (_event, id: unknown) => deps.memoryStore.history(asString(id)));
 
   ipcMain.handle(CHANNEL.agentFileGet, (_event, doc: unknown) => deps.agentFiles.get(doc));
   ipcMain.handle(CHANNEL.agentFileSave, (_event, input: unknown) => {
