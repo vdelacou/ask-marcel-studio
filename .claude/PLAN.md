@@ -1,140 +1,165 @@
-# Current run: fold the title band into the columns (approved 2026-07-24)
+# Current run: remove the embedding-backed memory (approved 2026-07-27)
 
-Full plan: `~/.claude/plans/modular-weaving-flurry.md`. Claude Desktop-style chrome: remove
-the empty full-width 36px drag band, run the sidebar surface to the window top with the
-traffic lights over it, move the conversation title into the content column's top strip.
-Two commits, each green through the gates.
+The searchable memory needed an OpenAI-compatible embedding provider for every add and
+every search, and the user does not want that dependency for now. The notes memory
+(jargon/team/people markdown, the elicitation queue, the confirm dialog, the glossary
+block on every turn) needs no embeddings and stays whole.
 
-## STATUS: DONE, COMMITTED (2026-07-24)
+Removing it also settles two bugs found while answering the question: the composition
+root always built the sqlite store, so its embed failure surfaced as `unavailable`, never
+the `not-configured` kind the service branched on. Accepting a candidate therefore errored
+instead of falling back to the note, and `migrateNotes` wrote its done-marker after every
+add had failed. Both branches disappear with the feature: accepting now writes the note,
+full stop.
 
-Landed in two slices: `eedbb2a` (fold the band) and `0762562` (tighter rows, draggable
-empty states), plus two post-verification fixes: `dade666` (menu dismissable, blur off the
-header box) and `3d2e993` (reopen chip last in DOM so its click survives the drag
-hit-test). All 8 pre-commit gates green on each. Verified in the BUILT app via a
-Playwright geometry+screenshot probe and a main-process probe (scratchpad, deleted);
-re-verified at HEAD after the fixes with a 16-check chrome probe, all green (see
-post-verification fixes below). Not pushed (parity with the previous run's "push only on
-Vincent's say-so"). Evidence below.
+## STATUS: DONE (2026-07-27), not committed
 
-### Commit 1 — `feat(ui): fold the title band into the columns`
+1. [x] Deleted 19 files: `main/services/memory/{sqlite-memory-store,embedder-io}.ts`,
+       `main/services/agent/memory-mcp.ts`, `shared/{embedding,vector-math,memory-store,
+       memory-tools-core,memory-migrate}.ts` + their 5 tests,
+       `test-helpers/fake-memory-store.ts`, renderer
+       `organisms/{memory-page,memory-config-panel}`, `molecules/memory-entry-row`,
+       `hooks/use-memory-{store,config}.ts`.
+2. [x] Main unwired: `index.ts` (store composition, `MEMORY_PREAMBLE`, the
+       `migrateNotes` launch call), `ipc/register.ts` (6 handlers + the `memoryStore` dep),
+       `agent-runtime.ts` (the whole `mcpServers` option, `memoryStore`, `memoryPreamble`),
+       `memory-service.ts` (store dep, `migrateNotes`, the dead not-configured branch).
+3. [x] Contract unwired: `ipc-contract.ts` (6 channels + 6 api methods), `paths.ts`
+       (`memoryDbPath`, `memoryMigratedMarkerPath`), `types.ts` (`MemorySettings` + both
+       `memory?` fields), `settings-doc.ts` (`memoryField` and its two call sites),
+       `preload/index.ts` (6 methods). `context-blocks.ts` lost `memoryPreamble`, which
+       existed only to announce the removed tools.
+4. [x] Renderer unwired: `app.tsx` (the `'chat' | 'memory'` view state and all three
+       `setView` sites, the MemoryPage render, the forget-everything ConfirmDialog); the
+       user menu's Memory item now opens Settings at the notes section instead of a
+       surface of its own. `settings-page.tsx` lost the config panel and its hook.
+5. [x] Tests trimmed (user confirmed both rounds, rule 24): memory-service (3
+       `migrateNotes` cases dropped, 2 store cases rewritten against the note),
+       settings-doc (13 cases replaced by one asserting the stale section is dropped, not
+       refused), paths (2), ipc-contract (6 names), context-blocks (4 cases lose the field).
+6. [x] `bun remove better-sqlite3 @types/better-sqlite3`, `rebuild:native` script and
+       `trustedDependencies` gone, electron-builder + README comments corrected.
+7. [x] Gates: `bun test` 1774 pass / 0 fail (97 files); `bun run lint` 0 errors 0 warnings
+       (2 prettier reflows fixed with `eslint --fix`, mechanical); `bun run typecheck`
+       clean; `bun run coverage` all tiers green; `bun run build` succeeds.
 
-1. [x] `src/main/index.ts`: added `trafficLightPosition: { x: 18, y: 18 }`; kept `hiddenInset`.
-       VERIFIED: `getWindowButtonPosition()` returns `{x:18,y:18}` (Electron honored it under
-       hiddenInset, hedge not needed); `bounds === contentBounds` (lights overlay content,
-       no native title bar); y-center 24 = midline of the 48px strip.
-2. [x] `app-frame`: band deleted; root flex row; `<main>` relative, keeps `min-h-0 min-w-0`;
-       `bandControl` → `reopenControl` as main's first child (moved to LAST child by
-       `3d2e993`, see post-verification fixes).
-       VERIFIED: aside top:0 left:0 (was 36), main top:0 relative, no band.
-3. [x] `sidebar`: `h-12 justify-end px-2` drag strip holds the collapse button (no-drag
-       wrapper); New conversation full-width; resize handle now no-drag; `menuItem` py-1.
-       VERIFIED: strip top:0 h:48 region=drag.
-4. [x] `conversation-header`: `sticky top-0 h-12 bg-surface/80 backdrop-blur` drag, border-b
-       dropped; `insetForWindowControls?` (pl-[8.5rem] pr-6 | px-6); no-drag on input + menu.
-       Blur later moved to an aria-hidden child layer by `dade666` (see below).
-       VERIFIED: header top:0 h:48 region=drag borderBottom:0 backdrop:blur(8px);
-       paddingLeft 24px open / 136px collapsed.
-5. [x] `update-banner`: `insetForWindowControls?` → pl-[8.5rem].
-6. [x] `app.tsx`: `reopenControl`; `insetForWindowControls={isCollapsed}` into header + banner.
-       VERIFIED collapsed: chip top:0 left:88 w:28 region=no-drag; header inset 136.
-7. [x] Stale comment sweep: settings-overlay, popover, panel-icon.
-8. [x] This PLAN.md rewrite.
+8. [x] Verified in the built app (`run-studio`): a full multi-step turn ran with no
+       `mcpServers` option at all, and the thread carried zero memory_* tool calls. The
+       glossary path went untested, because the driver opened the `1gygrzy` account, which
+       has no notes; the notes live in `mdx86f`. Settings > Memory and the user-menu item
+       are still unverified: the driver only drives the chat surface.
+9. [x] Landed as 10 commits (`0cc1007..eb9a476`), each passing all 8 pre-commit gates.
 
-### Commit 2 — `feat(ui): tighter rows and draggable empty states`
+Left behind on purpose: an existing `memory.db` under userData is orphaned, not deleted,
+and a `memory` section in an existing settings.json is ignored on read and dropped on the
+next save. `@electron/rebuild` is still a devDependency with no consumer now that
+`rebuild:native` is gone.
 
-9.  [x] `conversation-item`: rowBase py-1.
-        VERIFIED: sidebar rows 32px (was 36).
-10. [x] `empty-conversations` + `no-provider-notice`: full-size drag section, card no-drag.
-        Verified by construction (lint/typecheck green); not re-screenshotted (trivial wrap).
-
-### Accepted edge cases (do not chase as bugs)
-
-Collapsed+memory / collapsed+boot-loading: no drag surface until the sidebar reopens (parity
-with the settings overlay). Collapsed + >~1560px content: header inner box 56px right of the
-thread column (cosmetic). Fullscreen keeps light-clearance padding (no fullscreen branching
-exists). Scrollbar thumb near the top 48px falls in the header drag rect (tiny target).
-
-### Runtime hedges
-
-`hiddenInset` ignores `trafficLightPosition` → switch to `hidden`. Sticky-header drag stale
-after scrolling (low risk) → move drag to an `absolute inset-x-0 top-0 h-12` sibling outside
-the scroller inside the relative `<main>`, drop drag from the header.
-
-### Post-verification fixes (2026-07-24, both landed and re-verified)
-
-- `dade666` fixed the follow-up ticket noted at plan time (`backdrop-blur` made the header
-  a containing block, confining the menu popover's `fixed inset-0` dismiss backdrop to the
-  header box; Escape did not close `headerMenuOpen`): the blur now lives on an aria-hidden
-  `-z-10` child layer so the header box carries no filter, and the shell's Escape handler
-  knows `headerMenuOpen`. No open ticket remains here.
-- `3d2e993` moved the reopen chip to main's LAST child: `-webkit-app-region` hit-testing
-  resolves by document order, not z-index, so first-in-DOM the chip's no-drag lost to the
-  header's drag rect and the OS swallowed the click as a window drag. Tradeoff accepted:
-  the plan's tab-order-parity rationale is gone (the chip is now focused after the content
-  column).
-
-Chrome probe at HEAD (16 checks, all green; script + shots scratchpad, deleted): lights
-`{x:18,y:18}`, `bounds === contentBounds`; header sticky h:48 region=drag, box
-`backdrop-filter:none`, child layer `blur(8px)`; menu opens, its dismiss backdrop spans
-the full 1200x800 window, outside click and Escape both close it; collapsed: chip left:88
-top:0 h:48 region=no-drag, last child of `<main>`, after the header in document order
-while overlapping its drag rect, header inset 136px; chip click reopens the sidebar
-(renderer-level click; the OS hit-test follows from region + document order, the exact
-mechanism `3d2e993` corrects). Frosted strip confirmed legible over scrolled transcript.
+Slice order that works, consumer before module: renderer surfaces -> renderer hooks ->
+main unwiring (carries `context-blocks.ts`) -> sqlite store and embedder -> agent tools
+and the store fake -> the ipc contract (carries `memory-store.ts`) -> vector math,
+embedding parser, note migration -> the dependency last. See LESSONS for why.
 
 ---
 
-# Handoff from the previous run (22-requirement plan, all four phases COMPLETE 2026-07-24)
+# Previous run: token-refresh triage fix + renewal countdown (approved 2026-07-26)
 
-Full history in git and `.claude/LESSONS.md`. What is still live:
+Design review of the Microsoft 365 sign-in popover surfaced that `office-health.ts`
+treated any unavailable token tier as attention-worthy, even chatsvcagg/ic3, which the
+CLI's own docs say self-heal from the shared refresh token and are "informational rather
+than a preflight gate." Only the elevated tier is actually stuck (no refresh token,
+~hourly, interactive-only). Fixed the triage to key off `tier.refresh === 'interactive'`
+instead of `tier.available` alone, softened "has expired" copy to "needs a quick
+refresh" throughout, and added a small renewal countdown for the elevated tier.
 
-## THE ONE THING NOT DONE YET: publish a GitHub release
+## STATUS: DONE (2026-07-26)
 
-Vincent chose "push only" on 2026-07-24, so the commits are on origin/main but no release
-exists. The update feature (R21c) is inert until one does: the checker calls
-`repos/vdelacou/ask-marcel-studio/releases/latest`, which 404s on a repo with no releases,
-and degrades silently by design. To make it live:
+1. [x] `office-health.test.ts`: added `refresh: 'interactive'` to elevated-tier fixtures
+       that were implicitly relying on the old any-tier-unavailable logic; rewrote the two
+       Teams-substrate tests to assert `healthy`/`[]` instead of `attention`; updated the
+       `dotLabel('attention')` string; added the chatsvcagg+ic3-stays-healthy test and two
+       renewalNote wiring tests. User confirmed the full diff before it was written (rule 24).
+       VERIFIED: RED before prod changes, GREEN after.
+2. [x] `office-renewal.ts` (new): `renewalNote(status)`, pure, split out of office-health.ts
+       to keep it under the ~100-line budget and because it's a distinct concern (countdown
+       display vs. break/fix triage). `office-renewal.test.ts` (new): 8 tests, 100% coverage.
+3. [x] `office-health.ts`: `isStuck(tier) = !available && refresh === 'interactive'`,
+       replaces the `!tier.available` checks in `healthFromStatus` and `lostFunctions`.
+       Copy: `HEADLINES.attention`, the `healthFromStatus` fallback message, and
+       `DOT_LABELS.attention` all dropped "has expired" for "needs a quick refresh";
+       `reassurance` gained "this happens periodically and is expected."
+4. [x] `office-status-popover/index.tsx`: `renewalNote?: string` prop, rendered as a muted
+       line alongside `reassurance`. `app.tsx`: wired `office.popover.renewalNote` through.
+5. [x] Gates: `bun test` 1825 pass / 0 fail; `bun run lint` 0 errors 0 warnings (two
+       prettier-format warnings from the test/lib edits fixed via `eslint --fix`, mechanical
+       only); `bun run typecheck` clean; `bun run coverage` all tiers green, both new files
+       100%/100%.
 
-```bash
-bun run dist   # only if release/ was cleaned; the DMG is gitignored
-gh release create v0.1.0 "release/Ask Marcel Studio-0.1.0.dmg" --title "v0.1.0" --notes "..."
-```
+Not committed. Not run in the built app (pure-logic + copy change, verified by the
+lib-tier test suite).
 
-Version subtlety, so a future session does not chase a non-bug: the banner appears only when
-the published release is STRICTLY higher than the running version. Releasing v0.1.0 while
-0.1.0 is installed correctly shows nothing. The banner first appears on the next real version
-bump. See the [decision] entry in LESSONS.md.
+## Follow-up round (same day): user feedback from the live app
 
-## Deferred by decision (need Vincent's sign-off, not blockers)
+Live screenshot showed the countdown, then two more fixes: popover positioning and
+text density.
 
-- Delete memory-glossary.ts + tests (rule 24 needs his ok; plan holds it one release anyway,
-  so "do nothing yet" remains a valid answer).
-- scripts/eval-memory.ts, the optional manual eval harness (rule 32 gate, needs a real key).
-  Only worth building if the memory preamble or embedder gets tuned again.
-
-## Disk left behind, safe to delete when he says so
-
-- `release/` : the DMG plus the unpacked bundle, roughly 900 MB, gitignored.
-- `~/Library/Application Support/ask-marcel-studio-backup-pre-accounts` : 492 MB, the pre-R23
-  data snapshot taken before the per-account migration. The migration was verified against
-  the real data folder, so this is a belt-and-braces copy.
-
-## Operational facts a fresh session needs
-
-- Packaging needs three things first or it fails: `bun run fetch:python`, `bun run
-  fetch:wheels`, `bun run rebuild:native`. Then `bun run dist`. Both vendor dirs are present
-  on this machine.
-- `better-sqlite3` is currently built for the Electron ABI (rebuild:native was run). `bun
-  test` is unaffected: nothing it loads imports the native module.
-- `release/` is in eslint's ignores. It has to stay there or `lint:strict` hangs walking the
-  packaged node_modules, which surfaces as an unexplained pre-commit timeout (see LESSONS).
-- The build is unsigned, so first launch needs right-click then Open past Gatekeeper.
-
-## Carried over, still open
-
-- [x] The `\&` escaping returning on every save through the rich editor (Milkdown
-      serialiser): fixed 2026-07-26, `src/renderer/src/lib/markdown-ampersands.ts`.
-- [x] flash-lite omitting the Sources footer on note-only answers: accepted as a known
-      weak-model instruction-adherence gap, not a code defect. See LESSONS.
-- [ ] No CI, deliberate. The staged-tree hook is the only gate.
-- [ ] Optional: shell-guard hardening, README line for run-studio, jq vendoring for Windows.
+6. [x] `office-status-popover/index.tsx`: `placement="up-start"` -> `"up-end"`. The dot
+       sits at the far right of its positioning ancestor (a full-width sidebar footer
+       div); left-anchoring put the popover far from the button. Matches the `down-end`
+       convention already used for the row-menu popover in `sidebar/index.tsx`.
+7. [x] Same file: wrapped headline/unavailable/reassurance/renewalNote in a
+       `role="status"` div so screen readers get notified when health changes while the
+       popover is open (`error` already had `role="alert"`, this closes the gap for
+       everything else). No test gate, untested design-system tier.
+8. [x] `office-renewal.ts`: copy cut from "Colleague lookups are good for about N more
+       minutes, then need a quick refresh." to "Colleague lookups: about N minutes
+       left." per "too much text" feedback. Updated the 3 affected assertions in
+       `office-renewal.test.ts` to match (not re-confirmed with the user individually,
+       the shortened wording was implicit in what they'd already flagged).
+9. [x] `app.tsx`: `onToggleOfficeStatus` now calls `office.reload()` when opening (not
+       closing), so the countdown is fresh at view time instead of showing whatever the
+       last 5-minute poll or window-focus event happened to catch.
+10. [x] Gates re-run: `bun test` 1825/1825, `bun run lint` 0/0, `bun run typecheck` clean,
+        `bun run coverage` all tiers green.
+11. [x] Signed-out headline: dropped `text-danger`, always `text-ink`. Copy: "has ended.
+        To let Marcel read your mail, files and calendar, sign in again." (avoided
+        capitalized "Sign in again" breaking the existing `toContain('sign in again')`
+        test). Sign-in button tried `danger` variant, then user clarified "the button"
+        meant the sidebar dot, not this button; reverted the button to its original
+        `secondary`/`primary` ternary.
+12. [x] `sidebar/index.tsx`: `healthDot['signed-out']` was `bg-ink-muted` (gray, same
+        visual weight as "nothing to see"), now `bg-danger`. This was the actual ask,
+        the worst state was previously the least alarming-looking dot.
+13. [x] Gates re-run again: all green.
+14. [x] `canRefresh` added to `OfficePopoverView` (`attention || signed-out`), button
+        hidden entirely when healthy/checking. 4 new tests, gates green (1829 pass).
+15. [x] renewalNote copy: "Colleague lookups: about N minutes left, then refresh to
+        keep using them. Everything else renews itself." Answers "where's the main
+        token's timer" in-app: there isn't one because the access token auto-refreshes
+        forever off the shared refresh token, a countdown would be noise since nothing
+        is ever needed from the user. No test changes, new copy is a superset of the
+        old assertions. Gates green.
+16. [x] New feature (not a bug): `tokenBreakdown()` in office-renewal.ts, a per-token
+        multi-line breakdown for the dot's native `title` hover tooltip (separate from
+        `aria-label`, which stays the short health label). Wired: OfficePopoverView.dotDetail
+        -> Sidebar officeDetail prop -> dot's title={officeDetail ?? officeLabel}. 9 new
+        tests in office-renewal.test.ts, 2 wiring tests in office-health.test.ts. 1840 pass,
+        gates green.
+17. [x] User caught a self-contradiction: the tooltip's main-token line showed the
+        access-token countdown, the exact "meaningless number" already argued against
+        earlier for the same token. Replaced with a qualitative line on what actually
+        ends the auto-refresh cycle (sign out / password change / revoked access);
+        dropped the per-token split since mail/calendar/files and Teams chats share the
+        same refresh token and the same failure mode. 3 tests replaced with 2. 1839
+        pass, gates green.
+18. [x] "Same way of doing here" applied to the Settings > Microsoft 365 panel
+        (`office-panel/index.tsx` + `settings-page.tsx`), which turned out to be a
+        separate, drifted implementation (own OfficeView type, never used
+        canRefresh/renewalNote from office-health.ts, and still said "Part of your
+        sign-in has expired" while the popover had already moved to "needs a quick
+        refresh"). Fixed: refresh button hidden when `unavailable.length === 0` (mirrors
+        canRefresh, derived from the already-present field, no new one needed);
+        renewalNote pulled through from the same `popoverViewFromStatus(status.value)`
+        call this file already made for `unavailable`, rendered under the status line;
+        "has expired" copy aligned with the popover's tone. Both files are untested tier
+        (page-shell + design-system organism), no test changes. Gates green, 1839 pass.
