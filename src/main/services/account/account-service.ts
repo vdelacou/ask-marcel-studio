@@ -37,6 +37,8 @@ export type AccountFs = {
   // The quick context stored inside an account folder, which is how a legacy tree says
   // whose it was.
   readonly readQuickContextIn: (account: AccountKey | undefined) => Promise<QuickContext | undefined>;
+  // Forgets what a folder had cached about whose it is. Only ever the folder being left.
+  readonly clearQuickContextIn: (account: AccountKey) => Promise<void>;
 };
 
 export type AccountService = {
@@ -94,8 +96,17 @@ export const createAccountService = async (fs: AccountFs): Promise<AccountServic
       return 'adopted';
     }
     // Somebody else. Record it and let the caller start again pointing at their folder.
+    //
+    // The folder being left cached this person as its own: that is how signing in as
+    // somebody else in that folder tells the next launch to move. It has now been acted
+    // on, so it is forgotten. Leaving it would let two folders cached as each other's
+    // relaunch the app between them for ever, which is exactly what they did; each switch
+    // spends one such pointer, so the app lands on a folder with nothing cached and asks
+    // Microsoft 365 who is signed in instead.
+    const leaving = current.key;
     current = accountFrom(wanted, context);
     await fs.writeCurrent(current);
+    await fs.clearQuickContextIn(leaving);
     return 'switched';
   };
 

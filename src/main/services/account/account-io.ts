@@ -15,7 +15,7 @@ import type { CurrentAccount } from '../../../shared/current-account.ts';
 import { parseStoredQuickContext } from '../../../shared/quick-context.ts';
 import type { QuickContext } from '../../../shared/quick-context.ts';
 import { accountDir, accountsDir, currentAccountPath, quickContextFilePath } from '../../../shared/paths.ts';
-import { readJsonFile, writeJsonFileAtomic } from '../store/json-file.ts';
+import { readJsonFile, removeFile, writeJsonFileAtomic } from '../store/json-file.ts';
 import type { AccountFs } from './account-service.ts';
 
 // What an installation from before this change has at the top of its data folder. Moving
@@ -84,5 +84,13 @@ export const createAccountFs = (userData: string): AccountFs => ({
     const root = account === undefined ? userData : accountDir(userData, account);
     const read = await readJsonFile(quickContextFilePath(root));
     return read.ok ? parseStoredQuickContext(read.value)?.context : undefined;
+  },
+
+  // Deleting it costs that account nine Graph calls the next time it is opened, and buys
+  // the guarantee that a stale answer cannot move the app twice. The outcome wanted is a
+  // file that is not there, which a file that was never there already satisfies, so the
+  // Result is deliberately dropped: there is nothing a caller could do with it.
+  clearQuickContextIn: async (account: AccountKey): Promise<void> => {
+    await removeFile(quickContextFilePath(accountDir(userData, account)));
   },
 });

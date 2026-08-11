@@ -19,16 +19,27 @@ const OTHER = contextFor('id-other', 'someone.else@lvmh.com', 'Someone Else');
 
 // Hand-written fake filesystem (rule 13): folders as a set, moves as set operations.
 const fakeFs = (
-  options: { readonly accounts?: readonly AccountKey[]; readonly current?: CurrentAccount; readonly legacy?: boolean; readonly legacyContext?: QuickContext } = {}
+  options: {
+    readonly accounts?: readonly AccountKey[];
+    readonly current?: CurrentAccount;
+    readonly legacy?: boolean;
+    readonly legacyContext?: QuickContext;
+    // What each account folder has cached about whose it is. A folder naming somebody
+    // else is the leftover pointer a sign-in in that folder wrote.
+    readonly storedContexts?: Readonly<Record<string, QuickContext>>;
+  } = {}
 ): {
   readonly fs: AccountFs;
   readonly moves: string[];
   readonly folders: Set<string>;
   readonly written: CurrentAccount[];
+  readonly cleared: string[];
 } => {
   const folders = new Set<string>(options.accounts ?? []);
   const moves: string[] = [];
   const written: CurrentAccount[] = [];
+  const cleared: string[] = [];
+  const contexts = new Map<string, QuickContext>(Object.entries(options.storedContexts ?? {}));
   let current = options.current;
   let legacy = options.legacy ?? false;
   const fs: AccountFs = {
@@ -52,9 +63,14 @@ const fakeFs = (
       current = account;
       return Promise.resolve();
     },
-    readQuickContextIn: () => Promise.resolve(options.legacyContext),
+    readQuickContextIn: (account) => Promise.resolve(account === undefined ? options.legacyContext : contexts.get(account)),
+    clearQuickContextIn: (account) => {
+      cleared.push(account);
+      contexts.delete(account);
+      return Promise.resolve();
+    },
   };
-  return { fs, moves, folders, written };
+  return { fs, moves, folders, written, cleared };
 };
 
 describe('opening the app on the right account', () => {
@@ -154,6 +170,44 @@ describe('signing in', () => {
 
     expect(await service.observe(VINCENT)).toBe('switched');
     expect(service.current().key).toBe(mine);
+  });
+
+  test('the pointer that sends the app away is not left behind to send it back', async () => {
+    const mine = accountKeyFor({ id: VINCENT.userId, email: VINCENT.email });
+    const theirs = accountKeyFor({ id: OTHER.userId, email: OTHER.email });
+    // Signing in as somebody else while in my folder cached them there: that cache is how
+    // the next launch knows to switch, and it must not survive the switch it caused.
+    const { fs, cleared } = fakeFs({
+      accounts: [mine, theirs],
+      current: { key: mine, userId: VINCENT.userId, email: VINCENT.email, displayName: VINCENT.displayName },
+      storedContexts: { [mine]: OTHER },
+    });
+    const service = await createAccountService(fs);
+
+    expect(await service.observe(OTHER)).toBe('switched');
+    expect(cleared).toEqual([mine]);
+    expect(await fs.readQuickContextIn(mine)).toBeUndefined();
+  });
+
+  test('two folders each cached as the other’s do not bounce the app between them forever', async () => {
+    const mine = accountKeyFor({ id: VINCENT.userId, email: VINCENT.email });
+    const theirs = accountKeyFor({ id: OTHER.userId, email: OTHER.email });
+    // The state that had the app relaunching in a loop: each folder cached as belonging to
+    // the account the other folder is named for.
+    const { fs } = fakeFs({
+      accounts: [mine, theirs],
+      current: { key: mine, userId: VINCENT.userId, email: VINCENT.email, displayName: VINCENT.displayName },
+      storedContexts: { [mine]: OTHER, [theirs]: VINCENT },
+    });
+
+    // Launch, switch, relaunch, switch: two hops is all the pointers can pay for.
+    expect(await (await createAccountService(fs)).observe(OTHER)).toBe('switched');
+    expect(await (await createAccountService(fs)).observe(VINCENT)).toBe('switched');
+
+    // Nothing is left to read whose answer would move the app again: the next launch has
+    // to ask Microsoft 365 who is signed in, and that answer is the true one.
+    expect(await fs.readQuickContextIn(mine)).toBeUndefined();
+    expect(await fs.readQuickContextIn(theirs)).toBeUndefined();
   });
 
   test('a context with no id at all leaves the open account alone', async () => {
