@@ -545,3 +545,40 @@ work. The update path is inert until a GitHub release actually exists, since the
 404 for a repo with none. And the banner only appears when the published release is strictly
 higher than the running version, so a release tagged at the version already installed is
 correct behaviour showing nothing, not a bug.
+
+## [gotcha] pre-commit gate 6 typechecks the STAGED tree, so a removal must be sliced consumer-first (2026-07-27)
+
+Splitting the ~2000-line removal of the embedding-backed memory into commits that each fit
+the size gate looked like a bookkeeping exercise. It is not: gate 6 runs `tsc` over the
+staged content, not the working tree, so every commit is independently verified and any
+slice that deletes a module still imported by another file is rejected on the spot.
+
+Three orderings were caught this way, each of which would have left a commit that does not
+compile for `git bisect` to trip over. Deleting `sqlite-memory-store.ts` before the
+composition root stopped importing it. Updating `ipc-contract.ts` while `use-memory-store.ts`
+still called the api methods being removed. Deleting `fake-memory-store.ts` one commit
+before `memory-store.test.ts`, which imports it.
+
+Two slices therefore had to absorb a neighbour rather than stand alone: the main unwiring
+carries `context-blocks.ts` (agent-runtime stops passing `memoryPreamble` in the same
+commit), and the contract slice carries `memory-store.ts` (the contract was its last
+importer). Rule for next time: slice a deletion strictly consumer-before-module, and expect
+a file's last importer to pull that file into its commit. Two counting details make this
+easier than it looks: `--diff-filter=ACMR` means deleted files do not count toward the
+10-file limit, and `*.test.ts` lines do not count toward the 300-line limit.
+
+## [gotcha] `bun remove` a dependency first and every intermediate commit stops typechecking (2026-07-27)
+
+`bun remove better-sqlite3` ran early, while the code still imported it, because dropping
+the dependency felt like part of the same edit. The working tree was fine, since the file
+importing it was already deleted there. Every staged tree was not: any commit whose index
+still contained `sqlite-memory-store.ts` failed gate 6 with "Cannot find module
+'better-sqlite3'", and that included the three unrelated office commits queued ahead of the
+removal, which had nothing to do with sqlite at all. The failure points at a file the commit
+does not touch, which reads as nonsense until you know.
+
+Fixed by restoring the dependency (`git checkout HEAD -- package.json bun.lock && bun
+install`), landing all nine code slices, and removing it last. Rule for next time: a
+dependency removal is the LAST commit of a removal series, never the first. node_modules is
+shared by every staged tree the hook builds, so uninstalling early breaks commits that
+predate the change.
