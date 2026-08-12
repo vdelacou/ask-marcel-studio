@@ -9,6 +9,7 @@
  * Pure: zero electron imports, so `bun test` covers it.
  */
 import { memoryFileName } from './memory-file-name.ts';
+import { TERM_LIMIT } from './memory-doc.ts';
 import type { MemoryFileName } from './memory-file-name.ts';
 import type { Message } from './types.ts';
 import type { Result } from './result.ts';
@@ -45,8 +46,8 @@ export type RawCandidate = {
   readonly enrichment?: string;
 };
 
-// Clipped so one long answer cannot fill the notes, which are read into every turn.
-const TERM_LIMIT = 80;
+// Clipped so one long answer cannot fill the notes, which are read into every turn. The
+// term's limit is shared with the note format itself (memory-doc).
 const DETAIL_LIMIT = 300;
 const QUOTE_LIMIT = 200;
 const ALTERNATIVES_LIMIT = 3;

@@ -28,6 +28,11 @@ export type MemoryDoc = {
 const BOLD_ENTRY = /^[-*+] \*\*([^*]+)\*\*: ?(.*)$/;
 const PLAIN_ENTRY = /^[-*+] ([^:]+): ?(.*)$/;
 
+// How long a term may be, wherever it comes from: what the model proposed, or what the
+// user typed over it while answering. Lives here because it is a fact about the notes, and
+// two copies of it would drift.
+export const TERM_LIMIT = 80;
+
 export const normaliseTerm = (term: string): string => term.trim().toLowerCase().replace(/\s+/g, ' ');
 
 const readEntry = (line: string): MemoryEntry | undefined => {

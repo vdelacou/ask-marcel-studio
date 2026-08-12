@@ -136,6 +136,40 @@ describe('answering a question', () => {
   test('an answer to nothing at all is refused', async () => {
     expect((await service.resolve({ action: 'reject' })).ok).toBe(false);
   });
+
+  test('a term corrected while answering is the one filed', async () => {
+    await service.addCandidates([found()], 'conv-1');
+
+    await service.resolve({ id: 'c1', action: 'accept', detail: 'quick win', term: 'Q.W.' });
+
+    const note = readFileSync(noteAt('jargon'), 'utf8');
+    expect(note).toContain('Q.W.');
+    expect(note).not.toContain('QW');
+  });
+
+  test('a corrected term is trimmed, like the meaning beside it', async () => {
+    await service.addCandidates([found()], 'conv-1');
+
+    await service.resolve({ id: 'c1', action: 'accept', detail: 'quick win', term: '  Q.W.  ' });
+
+    expect(readFileSync(noteAt('jargon'), 'utf8')).toContain('**Q.W.**');
+  });
+
+  test('a term rubbed out entirely keeps the one Marcel proposed, rather than filing a blank', async () => {
+    await service.addCandidates([found()], 'conv-1');
+
+    await service.resolve({ id: 'c1', action: 'accept', detail: 'quick win', term: '   ' });
+
+    expect(readFileSync(noteAt('jargon'), 'utf8')).toContain('QW');
+  });
+
+  test('a term long enough to be a paragraph is cut to a term', async () => {
+    await service.addCandidates([found()], 'conv-1');
+
+    await service.resolve({ id: 'c1', action: 'accept', detail: 'quick win', term: 'Q'.repeat(200) });
+
+    expect(readFileSync(noteAt('jargon'), 'utf8')).toContain(`**${'Q'.repeat(80)}**`);
+  });
 });
 
 describe('the notes themselves', () => {

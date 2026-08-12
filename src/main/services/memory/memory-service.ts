@@ -8,7 +8,7 @@
  * Nothing is ever written to the notes without the user having said yes to it. That is
  * the whole point of the queue.
  */
-import { listEntries, mergeMemoryEntries, parseMemoryDoc, serialiseMemoryDoc } from '../../../shared/memory-doc.ts';
+import { TERM_LIMIT, listEntries, mergeMemoryEntries, parseMemoryDoc, serialiseMemoryDoc } from '../../../shared/memory-doc.ts';
 import { memoryFileName } from '../../../shared/memory-file-name.ts';
 import type { MemoryFileName } from '../../../shared/memory-file-name.ts';
 import { EMPTY_MEMORY_QUEUE, addCandidates, findCandidate, parseMemoryQueue, removeCandidate, serialiseMemoryQueue } from '../../../shared/memory-queue-doc.ts';
@@ -105,9 +105,15 @@ export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
       const detail = typeof draft.detail === 'string' ? draft.detail.trim() : '';
       if (detail.length === 0) return err({ kind: 'invalid', message: 'a note needs something written in it' });
 
+      // The term as the user left it. Marcel hears a word inside a sentence and sometimes
+      // hears it slightly wrong, so the review list lets them correct it; rubbing it out
+      // entirely means they had nothing to add, not that the note wants a blank heading.
+      const corrected = typeof draft.term === 'string' ? draft.term.trim().slice(0, TERM_LIMIT) : '';
+      const term = corrected.length === 0 ? candidate.term : corrected;
+
       // Into the note the candidate belongs to, merged with what is already written there.
       const current = parseMemoryDoc(await readNote(candidate.kind));
-      const merged = serialiseMemoryDoc(mergeMemoryEntries(current, [{ term: candidate.term, detail }]));
+      const merged = serialiseMemoryDoc(mergeMemoryEntries(current, [{ term, detail }]));
       const written = await writeTextFileAtomic(memoryFilePath(deps.userData, candidate.kind), merged);
       if (!written.ok) return err({ kind: 'write-failed', message: written.error.message });
     }

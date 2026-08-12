@@ -73,7 +73,12 @@ export type MemoryEvent = { readonly type: 'pending-changed'; readonly count: nu
 
 //   accept  remember this term with this meaning
 //   reject  never mind
-export type MemoryResolveInput = { readonly id: string; readonly action: 'accept'; readonly detail: string } | { readonly id: string; readonly action: 'reject' };
+//
+// `term` is what the user made of the word Marcel proposed: it hears a term inside a
+// sentence and sometimes hears it slightly wrong, so the review list lets them correct it.
+// Absent, or blank, files the term as proposed.
+export type MemoryResolveInput =
+  { readonly id: string; readonly action: 'accept'; readonly detail: string; readonly term?: string } | { readonly id: string; readonly action: 'reject' };
 
 export type TurnUsage = {
   readonly inputTokens: number;
