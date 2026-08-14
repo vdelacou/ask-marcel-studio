@@ -96,6 +96,9 @@ ask-marcel-studio/
    │  │  ├─ gateway/translate-stream.ts (+test)  # AI SDK fullStream → anthropic SSE events
    │  │  ├─ gateway/anthropic-sse.ts (+test)     # event → SSE wire string
    │  │  ├─ gateway/non-streaming.ts (+test)     # result → Message JSON + error envelopes
+   │  │  ├─ memory/memory-service.ts      # notes + queue + extraction bookkeeping
+   │  │  ├─ memory/memory-extractor.ts    # one agent pass over the unread transcript
+   │  │  ├─ memory/idle-watcher.ts (+test) # 5 minutes of quiet, per conversation
    │  │  ├─ skills/skills-service.ts      # list/add/remove/seed
    │  │  ├─ skills/skill-md.ts (+test)    # frontmatter name/description parse (no yaml dep)
    │  │  ├─ office/office-service.ts      # scopes-check probe, login spawn, single-flight
@@ -106,12 +109,14 @@ ask-marcel-studio/
       ├─ main.tsx / app.tsx / globals.css     # Tailwind v4 @theme, light/dark
       ├─ lib/api.ts / lib/store.ts (zustand) / lib/ui-event-fold.ts (+test)
       ├─ lib/hooks/use-chat-events.ts / use-autoscroll.ts
-      ├─ page/chat-page.tsx / page/settings-page.tsx
+      ├─ page/chat-page.tsx / page/settings-page.tsx / page/memory-page.tsx
+      ├─ lib/memory-review.ts (+test)         # one draft answer per waiting row
       └─ components/
          ├─ atoms/     button, icon-button, spinner, badge, text-input, select, markdown-view
          ├─ molecules/ conversation-item, chat-message, tool-call-card, model-picker,
          │             provider-form, skill-card, empty-state
-         └─ organisms/ sidebar, chat-thread, composer, providers-panel, skills-panel, office-panel
+         └─ organisms/ sidebar, chat-thread, composer, providers-panel, skills-panel, office-panel,
+                       memory-review-panel, note-panel, overlay-sheet, sheet-layout, sheet-nav
 ```
 
 Runtime userData layout:
@@ -121,6 +126,9 @@ Runtime userData layout:
 <userData>/conversations/<id>.json
 <userData>/workspaces/<conversationId>/     # per-conversation cwd
 <userData>/claude-config/skills/<name>/     # CLAUDE_CONFIG_DIR
+<userData>/claude-config/memory/{jargon,team,people}.md   # the notes, agent-readable
+<userData>/memory/{queue,state}.json        # deliberately NOT under claude-config:
+                                            # the agent has no business reading either
 <userData>/bin/ask-marcel-office(.cmd)      # PATH shim
 ```
 
@@ -140,9 +148,25 @@ type Provider =
 type Settings = { providers: Provider[]; defaultModel?: string };  // 'providerId::modelId'
 ```
 
+Memory (post-v1, see the Memory section below). The notes themselves are markdown, not JSON:
+one `- **term**: detail` line per entry, parsed and merged by `shared/memory-doc.ts`.
+
+```ts
+type MemoryFileName = 'jargon' | 'team' | 'people';           // a whitelist, never a path
+type MemoryEntry = { term: string; detail: string };
+type MemoryCandidate = { id: string; kind: MemoryFileName; term: string;
+  suggestedDetail: string; alternatives: string[]; conversationId: string;
+  quote: string; enrichment?: string; createdAt: string };
+type MemoryQueueDoc = { items: MemoryCandidate[] };            // what is waiting to be asked
+type MemoryStateDoc = { conversations: Record<string,           // how far each was read
+  { extractedMessageCount: number; extractedAt: string }> };
+```
+
 ## IPC contract
 
-Invoke channels (all payloads Result-shaped): `conversations:list/create/get/delete/rename/open-workspace`, `chat:send {conversationId,text}`, `chat:cancel`, `settings:get/save`, `skills:list/add/remove`, `office:status`, `office:login`.
+Invoke channels (all payloads Result-shaped): `conversations:list/create/get/delete/rename/open-workspace`, `chat:send {conversationId,text}`, `chat:cancel`, `settings:get/save`, `skills:list/add/remove`, `office:status`, `office:login`. **(Post-v1 additions, the full list lives in `shared/ipc-contract.ts`: `memory:pending/resolve/read/write`, plus agents, agent-file, models:test, office:commands and update:status.)**
+
+`memory:resolve` takes `{ id, action: 'accept', detail, term? }` or `{ id, action: 'reject' }`. `term` is what the user made of the word Marcel proposed: it hears a term inside a sentence and sometimes hears it slightly wrong, so the review list lets them correct it before it is filed. Absent or blank files the term as proposed.
 
 Stream events, main to renderer on `chat:event`:
 
@@ -156,6 +180,8 @@ type UIEvent =
   | { type: 'error';       conversationId; message }
   | { type: 'title';       conversationId; title };
 ```
+
+A second, much quieter stream on `memory:event`, separate because it has nothing to do with a turn: `{ type: 'pending-changed'; count }`, emitted on every queue write. It is what keeps the count in the sidebar live.
 
 `sdk-event-fold.ts` is the single source of truth mapping SDK messages to BOTH UIEvents and persisted parts: `stream_event` text deltas append to the trailing text part; SDK `assistant` messages with `tool_use` append running tool parts; SDK `user` messages with `tool_result` resolve them; SDK `result` closes the turn and captures `session_id` + usage. Persist once per turn end (user message persisted at send). Thinking blocks dropped in v1.
 
@@ -194,6 +220,24 @@ One in-flight run per conversation (map keyed by id); `chat:send` during a run r
 - Add = folder picker, validate SKILL.md exists, recursive copy (reject collisions). Remove = delete dir. Built-in office skill re-seeded on launch if missing or app version bumped; UI marks it builtIn and hides Remove.
 - Fresh SDK process per turn means new skills apply next message; no hot-reload machinery.
 
+## Memory (post-v1; the searchable half was removed, see `.claude/PLAN.md`)
+
+What the app knows about the person it works for. Three markdown notes — `jargon`, `team`, `people` — read into the system prompt on every turn as headed blocks (`memory-glossary.ts`), so the agent recognises the words and names the user takes for granted. Nothing reaches a note without the user having said yes to it: that is the whole point of the queue.
+
+How a candidate arrives:
+
+1. A turn ends. The idle watcher sees the same UIEvent stream the renderer does and starts a per-conversation timer; 5 minutes of quiet fires it. At launch, conversations touched in the last 14 days that are still due are enqueued too, so a closed app does not lose the reading.
+2. The background runner (strictly serial) runs one agent pass over the part of the transcript nobody has read yet, with `resources/background/memory-extract-prompt.md` and read-only tools. Reading costs the user tokens, so it happens once per quiet period rather than per turn.
+3. `parseMemoryCandidates` reads the last fenced JSON block and clips every field (term 80, detail 300, quote 200, ≤3 alternatives). Candidates already queued, or already in a note, are dropped on `normaliseTerm`.
+4. The queue is written and `memory:event` fires with the new count.
+
+The surface. Nothing appears on its own: the app used to open a confirm dialog over the conversation as soon as a politeness gate allowed, and that dialog and its gate are gone. What Marcel noticed waits in a list, a count on the sidebar's user row says how much is there, and the user opens Memory from the user menu when they feel like it. It is a full-window sheet rather than a swap of the main column, because the chat page holds the composer draft in its own state and swapping would throw away a half-typed message.
+
+Two groups in its left menu:
+
+- **Waiting for you** — one row per candidate: the word (editable), where it was heard, the wordings Marcel offers as radios, a box for the user's own, then Remember it / Skip. Remember is refused until there is both a word and a meaning. Answering returns the items still waiting, so the row leaves the list without a second read.
+- **What Marcel knows** — the three notes, then About you, Email signature and Writing voice. These moved out of Settings, which keeps what configures the app (models, skills, agents, the Microsoft 365 connection).
+
 ## Office CLI integration
 
 - Dependency `ask-marcel-office-cli@^2.2.0`. Its cli.js externalizes playwright, mammoth, xlsx, winston, etc., so those must exist as real files in the packaged app (drives the asar decision, R2).
@@ -208,6 +252,7 @@ One in-flight run per conversation (map keyed by id); `chat:send` during a run r
 - One `onChatEvent` listener at mount; pure `ui-event-fold.ts` (bun-tested) applies UIEvents to the store.
 - `chat-message` maps parts to `markdown-view` (react-markdown + remark-gfm) and `tool-call-card` (native `<details>` showing name, input, result). Composer: textarea, Enter to send, Send/Stop swap.
 - Tailwind v4 via `@tailwindcss/vite` in the renderer build; `@theme` tokens in globals.css; components stateless and props-only per atomic design. Shiki highlighting lazy-loaded at M7.
+- **(Post-v1: the store is hooks, not zustand, and there are two full-window sheets over the chat rather than a `view` flag — Settings and Memory. Both use `overlay-sheet` + `sheet-layout` + `sheet-nav`, which lost the name of the screen that happened to use them first. A sheet's content column carries `min-w-0`: a flex item's minimum width is its content, so one wide code block inside a panel otherwise widens the column past the sheet.)**
 
 ## Milestones
 
@@ -240,4 +285,5 @@ One in-flight run per conversation (map keyed by id); `chat:send` during a run r
 3. Skills: add test skill, confirm behavior next turn; remove it.
 4. Office: scopes-check shows signed out, Login opens browser, status flips; in a conversation ask "what is in my inbox" and watch the agent drive `ask-marcel-office` via bash.
 5. Gateway: configure an OpenAI-compatible provider, run a turn that uses bash (tool_use round-trips through the translator), compare with direct Anthropic behavior.
+6. Memory: with something queued, confirm no dialog appears while typing or after a turn ends; the sidebar carries the count; Memory lists the rows; correcting a word and pressing Remember it writes `- **term**: detail` into the right note and drops the row; Skip empties the queue and clears the count; a half-typed message survives opening and closing the sheet.
 6. Package DMG and smoke test M2-M5 flows.
