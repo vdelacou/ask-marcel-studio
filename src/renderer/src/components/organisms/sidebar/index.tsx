@@ -30,6 +30,10 @@ export type SidebarProps = {
   // the button says Settings, which is what it used to say and what it still does.
   userName?: string;
   userMenu?: ReactNode;
+  // How many things Marcel has noticed and not been told about. Shown on the user row
+  // rather than announced: it is the only signal that anything is waiting, and it must be
+  // there to be found rather than arrive on its own.
+  memoryCount?: number;
   // How wide the user has dragged it. An inline style, which is allowed here and only
   // here: a pixel value cannot be a utility class, and the seal is about the app not
   // knowing Tailwind, not about the design system refusing a number.
@@ -88,6 +92,7 @@ export const Sidebar: FC<SidebarProps> = ({
   officePopover,
   userName,
   userMenu,
+  memoryCount,
   width,
   onStartResize,
   onCollapse,
@@ -177,6 +182,12 @@ export const Sidebar: FC<SidebarProps> = ({
             </span>
           )}
           <span className="truncate">{userName ?? 'Settings'}</span>
+          {memoryCount !== undefined && memoryCount > 0 && (
+            <span className="ml-auto shrink-0 rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-semibold text-accent-ink">
+              {memoryCount}
+              <span className="sr-only"> waiting for you in Memory</span>
+            </span>
+          )}
         </button>
         <button
           type="button"

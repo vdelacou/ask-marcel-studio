@@ -14,17 +14,13 @@ import { SkillsPanel } from '../components/organisms/skills-panel/index.tsx';
 import { SkillDetail } from '../components/organisms/skill-detail/index.tsx';
 import { AgentsPanel } from '../components/organisms/agents-panel/index.tsx';
 import { AgentEditor } from '../components/organisms/agent-editor/index.tsx';
-import { SignaturePanel } from '../components/organisms/signature-panel/index.tsx';
-import { VoicePanel } from '../components/organisms/voice-panel/index.tsx';
-import { AboutYouPanel } from '../components/organisms/about-you-panel/index.tsx';
-import { MemoryPanel } from '../components/organisms/memory-panel/index.tsx';
-import type { MemoryNoteId } from '../components/organisms/memory-panel/index.tsx';
 import { DocumentEditor } from '../components/organisms/document-editor/index.tsx';
+import { MarkdownView } from '../components/atoms/markdown-view/index.tsx';
 import { OfficePanel } from '../components/organisms/office-panel/index.tsx';
 import type { OfficeView } from '../components/organisms/office-panel/index.tsx';
-import { SettingsLayout } from '../components/organisms/settings-layout/index.tsx';
-import { SettingsNav } from '../components/organisms/settings-nav/index.tsx';
-import type { SettingsNavGroup } from '../components/organisms/settings-nav/index.tsx';
+import { SheetLayout } from '../components/organisms/sheet-layout/index.tsx';
+import { SheetNav } from '../components/organisms/sheet-nav/index.tsx';
+import type { SheetNavGroup } from '../components/organisms/sheet-nav/index.tsx';
 import { VersionLine } from '../components/molecules/version-line/index.tsx';
 import { useUpdate } from '../hooks/use-update.ts';
 import type { ProviderDraft } from '../components/molecules/provider-form/index.tsx';
@@ -40,29 +36,18 @@ import { rowForTest } from '../lib/model-test-view.ts';
 import { useSkills } from '../hooks/use-skills.ts';
 import { useAgents } from '../hooks/use-agents.ts';
 import { slugify } from '../lib/slugify.ts';
-import { useAgentFile } from '../hooks/use-agent-file.ts';
 import { MarkdownEditor } from '../render/markdown-editor.tsx';
 import { renderMarkdown } from '../render/markdown.tsx';
 
 // The left-menu structure. Models and Skills configure the agent; Microsoft 365 is a
 // connected app. Each id matches a section rendered on the right.
-const NAV_GROUPS: readonly SettingsNavGroup[] = [
+const NAV_GROUPS: readonly SheetNavGroup[] = [
   {
     heading: 'Agent',
     items: [
       { id: 'models', label: 'Models', icon: 'models' },
       { id: 'skills', label: 'Skills', icon: 'skills' },
       { id: 'agents', label: 'Agents', icon: 'agents' },
-      { id: 'memory', label: 'Memory', icon: 'memory' },
-      { id: 'notes', label: 'What it remembers', icon: 'memory' },
-    ],
-  },
-  {
-    heading: 'About you',
-    items: [
-      { id: 'about', label: 'About you', icon: 'memory' },
-      { id: 'signature', label: 'Email signature', icon: 'signature' },
-      { id: 'voice', label: 'Writing voice', icon: 'voice' },
     ],
   },
   { heading: 'Connections', items: [{ id: 'office', label: 'Microsoft 365', icon: 'office' }] },
@@ -91,21 +76,12 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
   const update = useUpdate();
   const skills = useSkills();
   const agents = useAgents();
-  const about = useAgentFile('global-context');
-  const signature = useAgentFile('signature');
-  const voice = useAgentFile('voice-profile');
-  const [isEditingSignature, setIsEditingSignature] = useState(false);
-  const [memoryNote, setMemoryNote] = useState<MemoryNoteId>('jargon');
-  const [memoryText, setMemoryText] = useState('');
-  const [memoryStored, setMemoryStored] = useState('');
-  const [memorySaving, setMemorySaving] = useState(false);
   const [officeView, setOfficeView] = useState<OfficeView>({ kind: 'loading' });
   const [isScopesOpen, setIsScopesOpen] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [officeError, setOfficeError] = useState<string | undefined>(undefined);
   const [officeCatalog, setOfficeCatalog] = useState<readonly OfficeCategory[]>([]);
-  const [pendingNotes, setPendingNotes] = useState(0);
   const [officePolicy, setOfficePolicy] = useState<OfficePolicy | undefined>(undefined);
   const [expandedCategory, setExpandedCategory] = useState<string | undefined>(undefined);
 
@@ -140,31 +116,6 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
       setOfficeCatalog(await studio.office.commands());
     })();
   }, []);
-
-  useEffect(() => {
-    void (async (): Promise<void> => {
-      const read = await studio.memory.read(memoryNote);
-      const text = read.ok ? read.value : '';
-      setMemoryStored(text);
-      setMemoryText(text);
-    })();
-  }, [memoryNote]);
-
-  useEffect(() => {
-    void (async (): Promise<void> => {
-      const waiting = await studio.memory.pending();
-      if (waiting.ok) setPendingNotes(waiting.value.length);
-    })();
-  }, []);
-
-  const saveMemory = useCallback((): void => {
-    setMemorySaving(true);
-    void (async (): Promise<void> => {
-      await studio.memory.write({ name: memoryNote, contents: memoryText });
-      setMemorySaving(false);
-      setMemoryStored(memoryText);
-    })();
-  }, [memoryNote, memoryText]);
 
   const onLogin = useCallback((): void => {
     setOfficeError(undefined);
@@ -320,7 +271,11 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
             />
           ),
         };
-  const skillBody = skillEditing?.skill?.isBuiltIn === true ? { bodyRendered: renderMarkdown(skillEditing.form.body) } : skillBodyEditor;
+  // Through MarkdownView, like the chat does it: that atom owns the prose typography and,
+  // more to the point here, makes a wide code block scroll inside itself. Handed the raw
+  // tree, a built-in skill's instructions set their own width and dragged the whole panel
+  // out past the sheet.
+  const skillBody = skillEditing?.skill?.isBuiltIn === true ? { bodyRendered: <MarkdownView>{renderMarkdown(skillEditing.form.body)}</MarkdownView> } : skillBodyEditor;
 
   // Built as values rather than nested inside the JSX: a section that is a list until
   // you open one of its rows is two screens, and reading that as a ternary inside a
@@ -397,8 +352,8 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
     );
 
   return (
-    <SettingsLayout
-      nav={<SettingsNav groups={NAV_GROUPS} activeId={section} onSelect={setSection} />}
+    <SheetLayout
+      nav={<SheetNav groups={NAV_GROUPS} activeId={section} onSelect={setSection} />}
       {...(update === undefined ? {} : { footer: <VersionLine version={update.current} updateAvailable={update.updateAvailable} /> })}
     >
       {section === 'models' && (
@@ -419,78 +374,6 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
 
       {section === 'agents' && agentsSection}
 
-      {section === 'memory' && (
-        <MemoryPanel note={memoryNote} pendingCount={pendingNotes} onSelectNote={setMemoryNote}>
-          <DocumentEditor
-            mode="rich"
-            richNode={<MarkdownEditor key={`${memoryNote}-${memoryStored}`} defaultValue={memoryText} onChange={setMemoryText} />}
-            markdownValue={memoryText}
-            emptyHint="Nothing yet. Marcel adds to this as it notices words you use, and always asks first."
-            isSaving={memorySaving}
-            isDirty={memoryText !== memoryStored}
-            onChangeMarkdown={setMemoryText}
-            onSave={saveMemory}
-            onCancel={() => setMemoryText(memoryStored)}
-          />
-        </MemoryPanel>
-      )}
-
-      {section === 'signature' && (
-        <SignaturePanel
-          html={signature.draft}
-          isEditing={isEditingSignature}
-          isSaving={signature.isSaving}
-          isRegenerating={signature.isRegenerating}
-          canRegenerate={signature.canRegenerate}
-          {...(signature.notice === undefined ? {} : { notice: signature.notice })}
-          onChangeHtml={signature.setDraft}
-          onStartEdit={() => setIsEditingSignature(true)}
-          onSave={() => {
-            signature.save();
-            setIsEditingSignature(false);
-          }}
-          onCancel={() => {
-            signature.cancel();
-            setIsEditingSignature(false);
-          }}
-          onRegenerate={signature.regenerate}
-        />
-      )}
-
-      {section === 'about' && (
-        <AboutYouPanel>
-          <DocumentEditor
-            mode="rich"
-            richNode={<MarkdownEditor key={about.stored} defaultValue={about.draft} onChange={about.setDraft} />}
-            markdownValue={about.draft}
-            emptyHint="Nothing yet. Tell Marcel who you are, what you are responsible for, and anything it should always keep in mind."
-            isSaving={about.isSaving}
-            isDirty={about.isDirty}
-            {...(about.notice === undefined ? {} : { notice: about.notice })}
-            onChangeMarkdown={about.setDraft}
-            onSave={about.save}
-            onCancel={about.cancel}
-          />
-        </AboutYouPanel>
-      )}
-
-      {section === 'voice' && (
-        <VoicePanel isRegenerating={voice.isRegenerating} canRegenerate={voice.canRegenerate} onRegenerate={voice.regenerate}>
-          <DocumentEditor
-            mode="rich"
-            richNode={<MarkdownEditor key={voice.stored} defaultValue={voice.draft} onChange={voice.setDraft} />}
-            markdownValue={voice.draft}
-            emptyHint="Nothing yet. Marcel writes one from your sent mail the first time it can, or you can write your own."
-            isSaving={voice.isSaving}
-            isDirty={voice.isDirty}
-            {...(voice.notice === undefined ? {} : { notice: voice.notice })}
-            onChangeMarkdown={voice.setDraft}
-            onSave={voice.save}
-            onCancel={voice.cancel}
-          />
-        </VoicePanel>
-      )}
-
       {section === 'office' && (
         <OfficePanel
           view={officeView}
@@ -509,7 +392,7 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
           onSignOut={onSignOut}
         />
       )}
-    </SettingsLayout>
+    </SheetLayout>
   );
 };
 

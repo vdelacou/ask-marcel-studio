@@ -1,14 +1,17 @@
 import type { FC } from 'react';
 
-// Props-only (rule 21). A grouped left menu for the settings sections. The page shell
+// Props-only (rule 21). A grouped left menu for the sections of a sheet (settings, and
+// what Marcel knows). The page shell
 // supplies the groups, labels and which icon each row wears; this component owns the
 // icon shapes and the active-row styling.
-export type SettingsNavIcon = 'models' | 'skills' | 'agents' | 'memory' | 'signature' | 'voice' | 'office';
-export type SettingsNavItem = { id: string; label: string; icon: SettingsNavIcon };
-export type SettingsNavGroup = { heading: string; items: readonly SettingsNavItem[] };
+export type SheetNavIcon = 'models' | 'skills' | 'agents' | 'memory' | 'signature' | 'voice' | 'office';
+// `badge` is a count pinned to the right of the row, for a section with something
+// waiting in it. Absent or zero shows nothing.
+export type SheetNavItem = { id: string; label: string; icon: SheetNavIcon; badge?: number };
+export type SheetNavGroup = { heading: string; items: readonly SheetNavItem[] };
 
-export type SettingsNavProps = {
-  groups: readonly SettingsNavGroup[];
+export type SheetNavProps = {
+  groups: readonly SheetNavGroup[];
   activeId: string;
   onSelect: (id: string) => void;
 };
@@ -55,7 +58,7 @@ const BookIcon: FC = () => (
   </svg>
 );
 
-const icons: Record<SettingsNavIcon, FC> = {
+const icons: Record<SheetNavIcon, FC> = {
   models: SparklesIcon,
   skills: BoltIcon,
   agents: PeopleIcon,
@@ -65,7 +68,7 @@ const icons: Record<SettingsNavIcon, FC> = {
   office: GridIcon,
 };
 
-export const SettingsNav: FC<SettingsNavProps> = ({ groups, activeId, onSelect }) => (
+export const SheetNav: FC<SheetNavProps> = ({ groups, activeId, onSelect }) => (
   <nav className="flex flex-col gap-y-6">
     {groups.map((group) => (
       <div key={group.heading} className="flex flex-col gap-y-1">
@@ -85,6 +88,9 @@ export const SettingsNav: FC<SettingsNavProps> = ({ groups, activeId, onSelect }
             >
               <Icon />
               {item.label}
+              {item.badge !== undefined && item.badge > 0 && (
+                <span className="ml-auto shrink-0 rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-semibold text-accent-ink">{item.badge}</span>
+              )}
             </button>
           );
         })}
@@ -93,4 +99,4 @@ export const SettingsNav: FC<SettingsNavProps> = ({ groups, activeId, onSelect }
   </nav>
 );
 
-SettingsNav.displayName = 'SettingsNav';
+SheetNav.displayName = 'SheetNav';
