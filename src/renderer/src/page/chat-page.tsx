@@ -37,9 +37,6 @@ export type ChatPageProps = {
   onHydrate: () => void;
   onSend: (text: string) => void;
   onCancel: () => void;
-  // The app asks the user about things it noticed, and does it only when they are not
-  // mid-sentence. This is how it knows.
-  onComposerActivity: (hasText: boolean) => void;
   // The conversation's sticky title bar, built by the app shell (it owns rename and
   // delete, which the sidebar shares).
   header?: ReactNode;
@@ -97,7 +94,7 @@ const toThreadMessage = (message: Message): ThreadMessage => {
   };
 };
 
-export const ChatPage: FC<ChatPageProps> = ({ conversationId, view, model, onHydrate, onSend, onCancel, onChangeModel, onComposerActivity, header }) => {
+export const ChatPage: FC<ChatPageProps> = ({ conversationId, view, model, onHydrate, onSend, onCancel, onChangeModel, header }) => {
   const [draft, setDraft] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
   const [skills, setSkills] = useState<readonly SkillSuggestion[]>([]);
@@ -152,22 +149,17 @@ export const ChatPage: FC<ChatPageProps> = ({ conversationId, view, model, onHyd
       setPending(carried);
       setDraft(step.draft);
       setHistoryDepth(step.depth);
-      onComposerActivity(step.draft.trim().length > 0);
     },
-    [sent, historyDepth, pending, draft, onComposerActivity]
+    [sent, historyDepth, pending, draft]
   );
 
-  const changeDraft = useCallback(
-    (next: string): void => {
-      setDraft(next);
-      setSuggestionsDismissed(false);
-      setActiveSuggestion(0);
-      // Typing ends the browsing, so the next press of up starts from the newest again.
-      setHistoryDepth(undefined);
-      onComposerActivity(next.trim().length > 0);
-    },
-    [onComposerActivity]
-  );
+  const changeDraft = useCallback((next: string): void => {
+    setDraft(next);
+    setSuggestionsDismissed(false);
+    setActiveSuggestion(0);
+    // Typing ends the browsing, so the next press of up starts from the newest again.
+    setHistoryDepth(undefined);
+  }, []);
 
   const pickSuggestion = useCallback((name: string): void => {
     setDraft(insertSkill(name));
@@ -183,10 +175,9 @@ export const ChatPage: FC<ChatPageProps> = ({ conversationId, view, model, onHyd
     setHistoryDepth(undefined);
     setPending('');
     setMenuOpen(false);
-    onComposerActivity(false);
     onSend(`${text}${attachmentSuffix(attached)}`);
     clear();
-  }, [draft, onSend, attached, clear, onComposerActivity]);
+  }, [draft, onSend, attached, clear]);
 
   const { pick, acceptDrop } = attachments;
   const pickMenu = useCallback(

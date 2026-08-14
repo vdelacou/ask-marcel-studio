@@ -15,10 +15,10 @@ import { AppFrame } from './components/organisms/app-frame/index.tsx';
 import { NoProviderNotice } from './components/organisms/no-provider-notice/index.tsx';
 import { EmptyConversations } from './components/organisms/empty-conversations/index.tsx';
 import { Sidebar } from './components/organisms/sidebar/index.tsx';
-import { SettingsOverlay } from './components/organisms/settings-overlay/index.tsx';
+import { OverlaySheet } from './components/organisms/overlay-sheet/index.tsx';
 import { OfficeStatusPopover } from './components/organisms/office-status-popover/index.tsx';
 import { Toast } from './components/molecules/toast/index.tsx';
-import { MemoryConfirmDialog } from './components/organisms/memory-confirm-dialog/index.tsx';
+import { MemoryPage } from './page/memory-page.tsx';
 import { ConfirmDialog } from './components/organisms/confirm-dialog/index.tsx';
 import { ConversationHeader } from './components/organisms/conversation-header/index.tsx';
 import { Popover } from './components/molecules/popover/index.tsx';
@@ -48,8 +48,9 @@ type Boot =
 
 export const App: FC = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // Whether the user is mid-sentence, so a question the app wants to ask waits.
-  const [composerEmpty, setComposerEmpty] = useState(true);
+  // The review surface. Nothing opens it but the user: what Marcel noticed waits in a list
+  // until they come to it.
+  const [memoryOpen, setMemoryOpen] = useState(false);
   const [boot, setBoot] = useState<Boot>({ step: 'loading' });
   // Same read guard the hook documents: StrictMode double-invokes the effect and
   // closing settings re-runs bootstrap.
@@ -104,7 +105,7 @@ export const App: FC = () => {
   const [renameSurface, setRenameSurface] = useState<'sidebar' | 'header'>('sidebar');
   const office = useOfficeHealth();
   const identity = useUserIdentity();
-  const memory = useMemory({ composerEmpty, settingsOpen });
+  const memory = useMemory();
   const [officeOpen, setOfficeOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   // The conversation header's actions menu. Declared here, above the Escape handler, so that
@@ -118,12 +119,9 @@ export const App: FC = () => {
     setSettingsSection(undefined);
     setSettingsOpen(true);
   }, []);
-  // The notes the agent reads before every message live in Settings, so the menu item
-  // opens that section rather than a surface of its own.
-  const openNotes = useCallback((): void => {
-    setSettingsSection('memory');
-    setSettingsOpen(true);
-  }, []);
+  // Everything Marcel knows about the user has a surface of its own, opened only from the
+  // menu: what it noticed and is waiting to ask about, and the notes it reads every turn.
+  const openMemory = useCallback((): void => setMemoryOpen(true), []);
   const { reload: reloadOffice } = office;
   // Closing may mean a provider was just added, so re-resolve the default model, and a
   // sign-in may have happened in there too.
@@ -165,11 +163,12 @@ export const App: FC = () => {
       if (headerMenuOpen) return setHeaderMenuOpen(false);
       if (officeOpen) return setOfficeOpen(false);
       if (settingsOpen) return closeSettings();
+      if (memoryOpen) return setMemoryOpen(false);
       return undefined;
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [confirmingDeleteId, cancelDelete, menuOpenId, toggleRowMenu, headerMenuOpen, officeOpen, settingsOpen, closeSettings]);
+  }, [confirmingDeleteId, cancelDelete, menuOpenId, toggleRowMenu, headerMenuOpen, officeOpen, settingsOpen, closeSettings, memoryOpen]);
 
   const isReady = boot.step === 'ready';
   // Only worth a picker when there is a choice to make.
@@ -269,18 +268,19 @@ export const App: FC = () => {
       onNew={create}
       onSelect={conversations.select}
       {...(identity.context === undefined || identity.context.firstName.length === 0 ? {} : { userName: identity.context.firstName })}
+      memoryCount={memory.pending.length}
       {...(userMenuOpen
         ? {
             userMenu: (
               <Popover placement="up-start" dismissLabel="Close menu" onDismiss={() => setUserMenuOpen(false)}>
                 <Menu
                   items={[
-                    { id: 'memory', label: 'Memory' },
+                    { id: 'memory', label: 'Memory', badge: memory.pending.length },
                     { id: 'settings', label: 'Settings' },
                   ]}
                   onPick={(id) => {
                     setUserMenuOpen(false);
-                    if (id === 'memory') return openNotes();
+                    if (id === 'memory') return openMemory();
                     return openSettings();
                   }}
                 />
@@ -338,36 +338,20 @@ export const App: FC = () => {
             onSend={sendToActive}
             onCancel={cancelActive}
             onChangeModel={changeModel}
-            onComposerActivity={(hasText) => setComposerEmpty(!hasText)}
             {...(conversationHeader === undefined ? {} : { header: conversationHeader })}
           />
         )}
         {isReady && activeId === undefined && <EmptyConversations onNew={create} />}
       </AppFrame>
       {settingsOpen && (
-        <SettingsOverlay onClose={closeSettings}>
+        <OverlaySheet label="Settings" onClose={closeSettings}>
           <SettingsPage {...(settingsSection === undefined ? {} : { initialSection: settingsSection })} onOfficeChanged={reloadOffice} />
-        </SettingsOverlay>
+        </OverlaySheet>
       )}
-      {memory.isOpen && memory.current !== undefined && (
-        <MemoryConfirmDialog
-          question={{
-            term: memory.current.term,
-            kind: memory.current.kind,
-            quote: memory.current.quote,
-            choices: [memory.current.suggestedDetail, ...memory.current.alternatives].filter((choice) => choice.length > 0),
-            ...(memory.current.enrichment === undefined ? {} : { enrichment: memory.current.enrichment }),
-          }}
-          remaining={memory.pending.length}
-          {...(memory.selected === undefined ? {} : { selected: memory.selected })}
-          ownAnswer={memory.ownAnswer}
-          isSaving={memory.isSaving}
-          onSelect={memory.select}
-          onChangeOwn={memory.changeOwn}
-          onAccept={memory.accept}
-          onSkip={memory.skip}
-          onClose={memory.snooze}
-        />
+      {memoryOpen && (
+        <OverlaySheet label="Memory" onClose={() => setMemoryOpen(false)}>
+          <MemoryPage memory={memory} />
+        </OverlaySheet>
       )}
       {conversations.confirmingDeleteId !== undefined && (
         <ConfirmDialog
