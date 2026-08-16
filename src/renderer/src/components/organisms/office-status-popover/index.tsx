@@ -2,11 +2,11 @@ import type { FC } from 'react';
 import { Button } from '../../atoms/button/index.tsx';
 import { Popover } from '../../molecules/popover/index.tsx';
 
-export type OfficeHealthKind = 'checking' | 'healthy' | 'attention' | 'signed-out';
+export type OfficeHealthKind = 'checking' | 'healthy' | 'signed-out';
 
-// What the dot in the sidebar says when it is clicked. Two failures live behind one dot,
-// and they need different words: a token tier that died costs named abilities and is
-// fixed by a refresh, while an ended sign-in costs everything and needs a real sign-in.
+// What the dot in the sidebar says when it is clicked. The one failure behind it now is an
+// ended sign-in, which costs everything and needs a real sign-in; the refresh path remains
+// for that (and for a still-checking probe) but no longer stands for a degraded token tier.
 export type OfficeStatusPopoverProps = {
   health: OfficeHealthKind;
   headline: string;

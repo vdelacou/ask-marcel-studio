@@ -20,7 +20,7 @@ export type SidebarProps = {
   isSettingsActive: boolean;
   // The Microsoft 365 dot beside Settings. The popover is built by the app shell and
   // rendered here when it is open, so the sidebar stays free of any refresh wiring.
-  officeHealth: 'checking' | 'healthy' | 'attention' | 'signed-out';
+  officeHealth: 'checking' | 'healthy' | 'signed-out';
   officeLabel: string;
   // The fuller per-token breakdown, shown on hover. Falls back to officeLabel when there
   // is nothing more to say (signed out, still checking).
@@ -75,7 +75,6 @@ const menuItem = 'flex w-full items-center gap-x-2 rounded-md px-2 py-1 text-sm 
 const healthDot: Record<SidebarProps['officeHealth'], string> = {
   checking: 'bg-border-subtle',
   healthy: 'bg-success',
-  attention: 'bg-warning',
   'signed-out': 'bg-danger',
 };
 

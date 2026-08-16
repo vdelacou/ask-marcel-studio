@@ -41,26 +41,10 @@ describe('reporting whether Microsoft 365 is working', () => {
     expect(healthFromStatus(signedIn({ expiresInSeconds: 240 })).health).toBe('healthy');
   });
 
-  test('one tier gone needs attention, even though mail still works', () => {
-    // The quiet failure: looking a colleague up starts failing while everything else
-    // carries on, and nothing else in the app would say so.
-    expect(healthFromStatus(signedIn({ tiers: { elevated: tier({ available: false, refresh: 'interactive' }) } })).health).toBe('attention');
-  });
-
-  test('the reason the CLI gave is what the user is told', () => {
-    const view = healthFromStatus(signedIn({ tiers: { elevated: tier({ available: false, refresh: 'interactive', reason: 'the people directory needs a fresh sign-in' }) } }));
-
-    expect(view.message).toBe('the people directory needs a fresh sign-in');
-  });
-
-  test('a tier gone with no reason still says something useful', () => {
-    const view = healthFromStatus(signedIn({ tiers: { elevated: tier({ available: false, refresh: 'interactive' }) } }));
-
-    expect(view.message).toContain('quick refresh');
-  });
-
-  test('a healthy tier alongside a broken one does not hide it', () => {
-    expect(healthFromStatus(signedIn({ tiers: { elevated: tier({ available: false, refresh: 'interactive' }), ic3: tier() } })).health).toBe('attention');
+  test('a stuck elevated token no longer matters, because Marcel runs on the main token', () => {
+    // get-user moved colleague lookups onto the main token, so a dead elevated token costs
+    // the app nothing and must not raise the dot.
+    expect(healthFromStatus(signedIn({ tiers: { elevated: tier({ available: false, refresh: 'interactive' }) } })).health).toBe('healthy');
   });
 
   test('a Teams substrate token gone on its own is not attention-worthy, because it self-heals from the shared refresh token', () => {
@@ -77,18 +61,12 @@ describe('what the sign-in popover says', () => {
     expect(view.unavailable).toEqual([]);
   });
 
-  test('a dead elevated token says colleague details stopped working', () => {
+  test('a dead elevated token names nothing as lost, because the app no longer uses it', () => {
     const view = popoverViewFromStatus(signedIn({ tiers: { elevated: tier({ available: false, refresh: 'interactive' }) } }));
 
-    expect(view.health).toBe('attention');
-    expect(view.unavailable).toEqual(['Look up colleague details like phone numbers, offices and managers']);
-  });
-
-  test('a degraded sign-in promises the user will not have to sign in again from scratch', () => {
-    const view = popoverViewFromStatus(signedIn({ tiers: { elevated: tier({ available: false, refresh: 'interactive' }) } }));
-
-    expect(view.reassurance).toContain('will not need to sign in again');
-    expect(view.action).toBe('refresh');
+    expect(view.health).toBe('healthy');
+    expect(view.unavailable).toEqual([]);
+    expect(view.canRefresh).toBe(false);
   });
 
   test('both Teams substrate tokens looking stale does not raise an alarm, because they self-heal on the next real call', () => {
@@ -96,18 +74,6 @@ describe('what the sign-in popover says', () => {
 
     expect(view.health).toBe('healthy');
     expect(view.unavailable).toEqual([]);
-  });
-
-  test('a healthy elevated token tells the user roughly how long it is good for', () => {
-    const view = popoverViewFromStatus(signedIn({ tiers: { elevated: tier({ expiresInSeconds: 2700 }) } }));
-
-    expect(view.renewalNote).toContain('45');
-  });
-
-  test('a broken elevated token gets the reassurance, not a countdown', () => {
-    const view = popoverViewFromStatus(signedIn({ tiers: { elevated: tier({ available: false, refresh: 'interactive' }) } }));
-
-    expect(view.renewalNote).toBeUndefined();
   });
 
   test('an expired sign-in asks for a new one and offers no sign-out', () => {
@@ -120,12 +86,6 @@ describe('what the sign-in popover says', () => {
 
   test('a healthy sign-in does not offer a refresh, because nothing needs one', () => {
     expect(popoverViewFromStatus(signedIn()).canRefresh).toBe(false);
-  });
-
-  test('a degraded sign-in offers the refresh that would fix it', () => {
-    const view = popoverViewFromStatus(signedIn({ tiers: { elevated: tier({ available: false, refresh: 'interactive' }) } }));
-
-    expect(view.canRefresh).toBe(true);
   });
 
   test('a fully signed-out user gets the one button that helps: sign in', () => {
@@ -171,10 +131,6 @@ describe('explaining why a sign-in did not finish', () => {
 });
 
 describe('what the dot says on hover', () => {
-  test('a degraded sign-in is described in words, not in the cli’s own reason string', () => {
-    expect(dotLabel('attention')).toBe('Part of your Microsoft 365 sign-in needs a quick refresh');
-  });
-
   test('every state has something to say', () => {
     expect([dotLabel('checking'), dotLabel('healthy'), dotLabel('signed-out')].every((label) => label.length > 0)).toBe(true);
   });
