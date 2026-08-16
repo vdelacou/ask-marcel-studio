@@ -1,3 +1,28 @@
+# Current run: remove the elevated-health subsystem (approved 2026-08-16)
+
+The ask-marcel-office CLI moved get-user (colleague lookups) onto the main token, and the
+studio uses no other elevated command (cli-cheatsheet.ts). So a stuck elevated token now costs
+the app nothing: the amber "quick refresh" prompt and the "Colleague lookups: N min left"
+countdown are false. office-health/office-renewal existed only to surface that now-impossible
+failure. End state: health is checking | healthy | signed-out on the main token alone.
+
+1. [x] office-health.ts: drop `attention` from OfficeHealth; healthFromStatus returns
+       healthy/signed-out/checking on the main token; remove tiersOf/isStuck/lostFunctions/
+       COLLEAGUE_DETAILS/TEAMS_CHATS; popover unavailable=[] always, canRefresh=signed-out,
+       canSignOut=healthy. OfficePopoverView field shape kept (reassurance?/renewalNote? stay,
+       always absent) so app.tsx/settings/popover/panel need no edits.
+2. [x] office-renewal.ts: delete renewalNote + the elevated breakdown line; tokenBreakdown
+       returns just the auto-tokens tooltip line.
+3. [x] sidebar + office-status-popover: drop `attention` from their health unions + the
+       sidebar healthDot entry.
+4. [x] office-health.test.ts (9 removed/rewritten, +1 pinning stuck-elevated -> healthy) and
+       office-renewal.test.ts (down to the 4 tokenBreakdown tests). user-approved, rule 24.
+5. [x] Gates green: bun test 1770 pass, typecheck node+web clean, lint 0/0, coverage all tiers
+       (lib 100%), mutation aggregate 90.41 >= 90 (office-renewal 100, office-health 89.23 with
+       6 un-asserted copy-string survivors + 1 equivalent guard mutant). Commit gated on user.
+
+---
+
 # Current run: remove the embedding-backed memory (approved 2026-07-27)
 
 The searchable memory needed an OpenAI-compatible embedding provider for every add and
