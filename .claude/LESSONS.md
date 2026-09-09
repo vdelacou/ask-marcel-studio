@@ -648,3 +648,25 @@ never compiled.
 
 office-health.ts + office-renewal.ts existed to catch a quiet failure: the elevated (M365ChatClient) token dies (it carries no refresh token of its own) while the main token keeps working, so colleague lookups start failing with no other signal. That failure is gone. The ask-marcel-office CLI moved get-user (colleague lookups) onto the MAIN token (basic-first, elevated only as a 403 fallback for tenants that restrict basic directory reads), and the studio uses no other elevated-dependent command (cli-cheatsheet.ts is get-user + get-user-manager, both main-token). So a stuck elevated token now costs the app nothing. Gutted both modules: health is `checking | healthy | signed-out` on the main token alone; dropped the `attention` state, the COLLEAGUE_DETAILS / TEAMS_CHATS unavailable list, the reassurance copy, and the "Colleague lookups: N minutes left" countdown (office-renewal is now just the auto-tokens tooltip line). OfficePopoverView shape was preserved (unavailable always [], reassurance/renewalNote never set) so app.tsx / settings-page / office-panel needed no edits; only sidebar + office-status-popover dropped the now-unreachable `attention` union member. Mutation aggregate stayed >= 90 (office-renewal 100, office-health 89.23 with 6 un-asserted copy-string survivors + 1 equivalent guard mutant).
 Rule for next time: this is correct for a SHIPPED studio only once the CLI get-user fix is published to npm (the packaged app must call a CLI where colleague lookups are on the main token). Before re-adding an elevated-health signal, check the CLI's `needsElevatedToken` command set against cli-cheatsheet.ts: if the studio invokes none of them, there is nothing to surface.
+
+## [gotcha] 2026-09-09 | 100% line coverage does not catch an impossible-state fallback
+
+`closeRun` in `src/renderer/src/lib/tool-runs.ts` reached review as:
+
+```ts
+run.length === 0 ? done : [...done, { id: `run-${run[0]?.id ?? ''}`, title: title(run), items: run }];
+```
+
+The `?? ''` is a
+fallback for a run whose first item is missing, which the `length === 0` arm has already ruled
+out: a branch for a state that cannot happen, which the simplicity guideline rules out by name.
+`bun test` reported the file at 100% funcs and 100% lines and the renderer-lib tier gate passed,
+because bun measures line and function coverage, not branch coverage, and the dead branch sat on
+a line the tests already ran. Rewritten as one guard: read `run[0]`, return `done` when it is
+undefined, use `first.id` after.
+
+Rule for next time: the coverage tier proves every line ran, never that every branch earned its
+place. A `?? fallback`, a `?.`, or a ternary arm added behind a guard that already excludes the
+state is invisible to it, and `src/renderer/**` has no second net either: `mutate:changed` and
+`mutate:staged` filter to `^src/shared/`, so no mutant ever probes renderer lib logic. Read the
+guard and the fallback as one expression, and delete the half the other has made unreachable.
