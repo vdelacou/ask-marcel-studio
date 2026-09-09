@@ -14,7 +14,8 @@ import { Composer } from '../components/organisms/composer/index.tsx';
 import type { ComposerModel } from '../components/organisms/composer/index.tsx';
 import { DropTarget } from '../components/organisms/drop-target/index.tsx';
 import { Toast } from '../components/molecules/toast/index.tsx';
-import type { ChatPart } from '../components/molecules/chat-message/index.tsx';
+import { groupToolRuns } from '../lib/tool-runs.ts';
+import type { UngroupedPart } from '../lib/tool-runs.ts';
 import type { ToolStep } from '../components/molecules/tool-call-card/index.tsx';
 import type { SuggestItem } from '../components/molecules/suggest-popover/index.tsx';
 import { useAttachments } from '../hooks/use-attachments.ts';
@@ -71,26 +72,32 @@ const toThreadMessage = (message: Message): ThreadMessage => {
     id: message.id,
     role: message.role,
     ...(stats === undefined ? {} : { stats }),
-    parts: message.parts.flatMap((part): ChatPart[] => {
-      // The assistant speaks markdown; the user's own text is shown verbatim.
-      if (part.type === 'text') return [{ kind: 'text', content: message.role === 'assistant' ? renderMarkdown(part.text) : part.text }];
-      if (part.parentToolUseId !== undefined) return [];
+    // A run of tool calls with nothing between them becomes one working card
+    // (lib/tool-runs); the thread never shows a loose row.
+    parts: groupToolRuns(
+      message.parts.flatMap((part): UngroupedPart[] => {
+        // The assistant speaks markdown; the user's own text is shown verbatim.
+        if (part.type === 'text') return [{ kind: 'text', content: message.role === 'assistant' ? renderMarkdown(part.text) : part.text }];
+        if (part.parentToolUseId !== undefined) return [];
 
-      const steps = stepsFor(part.toolUseId);
-      return [
-        {
-          kind: 'tool',
-          id: part.toolUseId,
-          label: toolLabel(part.name, part.input),
-          name: toolBadge(part.name, part.input),
-          // Pretty-printed here rather than in the card: the card renders strings.
-          input: JSON.stringify(part.input ?? {}, null, 2),
-          ...(part.result === undefined ? {} : { result: part.result }),
-          status: part.status,
-          ...(steps.length === 0 ? {} : { steps }),
-        },
-      ];
-    }),
+        const steps = stepsFor(part.toolUseId);
+        return [
+          {
+            kind: 'tool',
+            item: {
+              id: part.toolUseId,
+              label: toolLabel(part.name, part.input),
+              name: toolBadge(part.name, part.input),
+              // Pretty-printed here rather than in the card: the card renders strings.
+              input: JSON.stringify(part.input ?? {}, null, 2),
+              ...(part.result === undefined ? {} : { result: part.result }),
+              status: part.status,
+              ...(steps.length === 0 ? {} : { steps }),
+            },
+          },
+        ];
+      })
+    ),
   };
 };
 
@@ -226,7 +233,7 @@ export const ChatPage: FC<ChatPageProps> = ({ conversationId, view, model, onHyd
         value={draft}
         isStreaming={view.isStreaming}
         canSend={draft.trim().length > 0 && !view.isStreaming}
-        placeholder="Send a message…"
+        placeholder="Ask Marcel, or type / for a skill"
         attachments={attachments.items.map((item) => ({ id: item.relativePath, name: item.name }))}
         menuOpen={menuOpen}
         menuItems={MENU_ITEMS}

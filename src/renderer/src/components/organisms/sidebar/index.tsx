@@ -125,7 +125,7 @@ export const Sidebar: FC<SidebarProps> = ({
     </div>
 
     <div className="flex flex-1 flex-col overflow-y-auto px-2 pb-2">
-      <p className="px-2 pb-1 pt-3 text-xs font-medium text-ink-faint">Recents</p>
+      <p className="px-2 pb-1 pt-3 text-[11px] font-medium uppercase tracking-wider text-ink-faint">Conversations</p>
       <ul className="flex flex-col gap-y-0.5">
         {conversations.map((conversation) => (
           <ConversationItem
