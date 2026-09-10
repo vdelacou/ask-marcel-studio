@@ -8,7 +8,11 @@ export type SpinnerProps = { label: string; isLabelHidden?: boolean };
 // The label is for screen readers, not decoration: a bare spinning div announces
 // nothing. aria-live lets it be picked up when it appears mid-conversation.
 export const Spinner: FC<SpinnerProps> = ({ label, isLabelHidden }) => (
-  <span role="status" aria-live="polite" className="inline-flex items-center gap-x-2 text-xs text-ink-muted">
+  // relative, so an sr-only label is contained here rather than escaping to whatever
+  // positioned ancestor happens to be up the tree. A scroller between the two cannot
+  // clip an absolutely positioned box whose containing block sits outside it, and the
+  // document grows to reach it instead.
+  <span role="status" aria-live="polite" className="relative inline-flex items-center gap-x-2 text-xs text-ink-muted">
     <span aria-hidden="true" className="size-3 animate-spin rounded-full border-2 border-border-subtle border-t-accent" />
     <span className={isLabelHidden === true ? 'sr-only' : ''}>{label}</span>
   </span>

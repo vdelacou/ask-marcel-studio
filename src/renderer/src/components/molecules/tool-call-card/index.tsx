@@ -108,7 +108,9 @@ const StatusGlyph: FC<{ status: ToolCallStatus }> = ({ status }) => {
       </span>
     );
   return (
-    <span className={`shrink-0 ${status === 'error' ? 'text-danger' : 'text-ink-faint'}`}>
+    // relative for the same reason the spinner is: sr-only is absolutely positioned, and
+    // an uncontained one escapes the thread's scroller and stretches the document.
+    <span className={`relative shrink-0 ${status === 'error' ? 'text-danger' : 'text-ink-faint'}`}>
       {status === 'error' ? <CrossIcon /> : <CheckIcon />}
       <span className="sr-only">{labelFor(status)}</span>
     </span>
