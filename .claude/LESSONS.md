@@ -670,3 +670,28 @@ place. A `?? fallback`, a `?.`, or a ternary arm added behind a guard that alrea
 state is invisible to it, and `src/renderer/**` has no second net either: `mutate:changed` and
 `mutate:staged` filter to `^src/shared/`, so no mutant ever probes renderer lib logic. Read the
 guard and the fallback as one expression, and delete the half the other has made unreachable.
+
+## [gotcha] 2026-09-10 | An sr-only label inside a scroller stretches the whole document
+
+The working card gave every tool row a hidden status word, `sr-only` so a screen reader still
+hears "Done" where a sighted reader sees a tick. Expanding a delegated row's nested steps then
+scrolled the WHOLE app: the sidebar and the conversation header went off the top and the frame
+left blank space at the bottom, which reads as a broken layout rather than a CSS bug.
+
+Cause: Tailwind's `sr-only` is `position: absolute`. Neither hidden label had a positioned
+ancestor inside the thread's scroller, so its containing block resolved to the chat column
+(`main` and the drop target, both `position: relative`), which sits OUTSIDE the scroller. An
+overflow scroller does not clip an absolutely positioned descendant whose containing block is
+above it, so each label kept its static offset, tens of thousands of pixels down a long
+transcript, and the document grew to reach it: `documentElement.scrollHeight` 26650 against an
+800 viewport, measured on a real thread with both delegated rows and all 34 nested steps open.
+Focusing a row then scrolled the document instead of the thread.
+
+Fix: `relative` on the two wrappers that hold the label, the spinner root and the glyph span.
+Document back to 800 = clientHeight, thread still the only scroller at 60058 / 686.
+
+Rule for next time: `sr-only`, and any absolutely positioned box, placed inside a scroll
+container needs a positioned ancestor inside that same container. After adding one to a long
+list, assert `document.documentElement.scrollHeight === document.documentElement.clientHeight`;
+nothing in lint, typecheck or the test suite sees this, and it only shows on a transcript long
+enough to push the label past the viewport.
