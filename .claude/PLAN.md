@@ -1,3 +1,41 @@
+# Current run: memory notes as lists, phase 1 (approved 2026-09-26)
+
+The three notes (jargon, team, people) are markdown documents edited in a rich editor, so
+removing one word means selecting text and saving the whole file. Every line of a real note
+is already `- **term**: detail`, so a list loses nothing. Phase 1 turns "Words we use" into
+a list, and merges My team + People I work with into one "People I work with" list with a
+My team / Other chip per person (still two files underneath, so the prompt blocks do not
+change). Per entry: edit in place, delete with an Undo bar, add, filter, a duplicate hint,
+and a quiet "Edit as text" link per file. Phases 2 (review cards) and 3 (menu regroup,
+document autosave) are out of scope.
+
+1. [x] Shared core `src/shared/memory-entry-edit.ts`: `wantedEntry` (new-entry checks),
+       `parseMemoryEntryEdit` (IPC trust boundary), `entryLineAt`, `applyMemoryEntryEdit`
+       (add, update, remove, restore, move; addressed by the exact entry read, so a stale
+       view is refused as not-found rather than overwriting). Done: tests green, 100% tier,
+       mutation >= 90 on the staged file. DONE: 28 tests, 100%, mutation 97.88 (5 survivors:
+       2 equivalent, 3 message strings).
+2. [x] Main: `memory-service.ts` `edit(input)` returns all three notes; note writers
+       (edit, write, resolve) run one at a time. Channel `memory:edit` in the contract,
+       register.ts, preload. Done: new service tests green, ipc-contract test updated
+       (confirmed), typecheck clean. DONE: both concurrency tests fail 3/3 without the queue.
+3. [x] Renderer lib `src/renderer/src/lib/memory-list.ts`: rows from note texts (A to Z,
+       people merged with a team flag), filter (case/accent-blind, term + meaning), team
+       filter, duplicates, clash check for a draft, initials, token estimate, unread-line
+       count. Done: 100% renderer-lib tier. DONE: 14 tests; row keys are content + occurrence so
+       an open editor survives a neighbour's removal.
+4. [x] Design system: molecules `action-notice`, `memory-entry-row`, `memory-entry-editor`;
+       organism `memory-list-panel`. Done: lint 0/0 (rules 21-22, a11y), no hooks.
+5. [x] Wiring: `hooks/use-memory-notes.ts`, `page/memory-list-section.tsx`, `memory-page.tsx`
+       nav (team + people become one item) and sections. Done: typecheck + lint clean.
+6. [x] Verified in the built app: add, edit, delete + undo, filter, move between team and
+       other, duplicate banner, edit as text, and document scrollHeight == clientHeight.
+       DONE: 28/28 checks on a scratch userData (never the real one); caught Escape in the
+       editor also closing the whole sheet, fixed with stopPropagation.
+7. [ ] Commits proposed module-before-consumer, each <= 10 files / 300 lines, each on a yes.
+
+---
+
 # Current run: remove the elevated-health subsystem (approved 2026-08-16)
 
 The ask-marcel-office CLI moved get-user (colleague lookups) onto the main token, and the
