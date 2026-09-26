@@ -713,3 +713,56 @@ Rule for next time: before trusting a run-studio dump, read the end of the threa
 "Working…" means the dump is early, whatever the driver logged, and the answer is not in it. For
 a turn that delegates, wait for that line to go as well as the Stop button. And never report a
 turn as lost from its dump alone: open the conversation afterwards and look.
+
+## [gotcha] 2026-09-26 | bun 1.4.2's toMatchObject with an asymmetric matcher fails on an object it has already compared
+
+A refusal helper built as `expect(result).toMatchObject({ ok: false, error: { kind, message:
+expect.stringMatching(/./) } })` passed on fresh error objects and failed, with an empty diff
+("- Expected - 0 / + Received + 0"), whenever the received error was a shared constant such as
+`NOT_A_CHANGE` or `CHANGED` in `src/shared/memory-entry-edit.ts`. A scratch probe pinned it: the
+same received object passes the first `toMatchObject` with an asymmetric matcher and fails the
+second, while a fresh object passes every time, and `toEqual` against a reused matcher is fine.
+The four failures looked like wrong error kinds and were not: every value was right.
+
+Rule for next time: when a `toMatchObject` fails with an empty diff, suspect the matcher before
+the code. Assert refusals with plain comparisons (`expect(error?.kind).toBe(kind)`,
+`expect(error?.message.length).toBeGreaterThan(0)`), and keep `expect.stringMatching` and its
+kin out of `toMatchObject` on values a module hands out as constants.
+
+## [gotcha] 2026-09-26 | Escape in an inline editor also closes the sheet around it
+
+`app.tsx` closes whatever is on top on Escape, from a `keydown` listener on `window`: the memory
+sheet among them. The memory lists' inline editor (`molecules/memory-entry-editor`) cancels on
+Escape too, and the first version only called `preventDefault()`. The event kept bubbling to
+`window`, so one Escape cancelled the edit AND closed the whole memory sheet. The driver's
+"Escape closes the entry without saving" check passed anyway, because an editor inside a
+closed sheet is also gone; it only failed on the next step, which could not find "Add a word".
+
+Fix: `event.stopPropagation()` next to `preventDefault()` in the editor's Escape branch. React's
+synthetic `stopPropagation` stops the native event at the root, before `window` hears it.
+
+Rule for next time: any component that gives Escape a meaning of its own owns that Escape and
+stops it, since the app's handler cannot tell an inner cancel from a request to close. And an
+end-to-end check that something closed must also check that its container did not.
+
+## [gotcha] 2026-09-26 | Driving the built app on a scratch user-data folder: seed the account, or it relaunches away
+
+Verifying the memory lists meant adding, editing and deleting entries, so the run-studio
+driver's real userData was out. Electron honours `--user-data-dir=<dir>`, and the app boots on
+it: `current-account.json`, `accounts/` and `bin/` all land there. Two traps, one after the
+other. A fresh folder starts signed out, and on a machine whose office CLI is signed in the app
+adopts the `signed-out` folder into the user's account a few seconds in and RELAUNCHES itself as
+a new process: Playwright's handle goes dead ("Target page, context or browser has been
+closed", then "UI never came up") and the relaunched instance keeps running, window and all,
+until killed (`pkill -f "<scratch dir>"`). Seeding the account pointer stops the relaunch, but
+then no identity loads, and without one the user button opens Settings instead of the menu that
+holds Memory.
+
+What worked: before launch, copy the real `current-account.json` into the scratch folder and
+the account's `claude-config/quick-context.json` into `accounts/<key>/claude-config/`, seed
+synthetic notes beside it, drive, and delete the scratch folder at the end, since it now holds
+a copy of the user's identity.
+
+Rule for next time: for any in-app check that writes, run on a scratch `--user-data-dir` seeded
+with the account pointer and quick context, never on the real folder; afterwards check that no
+process still names the scratch folder, and remove the folder.
