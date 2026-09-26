@@ -10,7 +10,7 @@
  * `import type` keeps this free of any runtime import (no electron, no SDK bundle), so
  * the bun runner covers it and the shape test guards it.
  *
- * Verified against ask-marcel-office v2.2.0 (2026-07-23).
+ * Verified against ask-marcel-office v2.6.0 (2026-09-26).
  */
 import type { AgentDefinition } from '@anthropic-ai/claude-agent-sdk';
 

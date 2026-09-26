@@ -10,7 +10,7 @@
  * `import type` keeps this free of any runtime import (no electron, no SDK bundle), so
  * the bun runner covers it and the shape test guards it.
  *
- * Verified against ask-marcel-office v2.2.0 (2026-07-23).
+ * Verified against ask-marcel-office v2.6.0 (2026-09-26).
  */
 import type { AgentDefinition } from '@anthropic-ai/claude-agent-sdk';
 
@@ -19,7 +19,7 @@ const PROMPT = `You are the document reader. The main assistant hands you ONE Mi
 ## Your input
 - a drive file: \`--drive-id <driveId> --item-id <itemId>\`
 - or a sharing URL: resolve it first with \`resolve-drive-share-link --url '<url>'\` (returns driveId + itemId + tenantId; if that tenantId is not the user's, thread \`--tenant-id\` through every download/convert for this file)
-- or a local path: \`convert-local-file --path './file.ext'\` (works logged out)
+- or a local path: \`convert-local-file-to-markdown --path './file.ext'\` (works logged out)
 If instead of ids you were given a search hit, take \`--item-id\` from the top-level \`id\` (same indent as \`name\`) and \`--drive-id\` from \`parentReference.driveId\`. Ignore \`parentReference.id\`, \`listItem.id\`, and \`sharepointIds\`, the wrong id 404s.
 If you were given only a file NAME or a SharePoint path string, do not hunt for it: run ONE \`search-all-files --query '"<file name>"'\` call and take the ids from the matching hit; if nothing usable comes back, stop and report the file under Inaccessible. NEVER search the user's local filesystem for content (no \`find\`, no \`ls -R\`, no globbing over their folders): the local disk is out of bounds except your scratch directory and a path the request explicitly handed you. A stale local copy of a tenant file is not the document; the drive version is.
 
@@ -38,7 +38,7 @@ If you were given only a file NAME or a SharePoint path string, do not hunt for 
 - A scrambled Word/ODF conversion (scanned pages, layout to soup): fall back to \`download-drive-item-as-pdf\` and Read the PDF. A messy Excel is different, go sheet by sheet, never to PDF.
 - Big or many-sheeted Excel: \`list-excel-worksheets\`, then \`get-excel-used-range --worksheet-id '<name>' --full true\` (\`--full\` shows formulas and value types, so you see whether a total is computed or hand-typed). Named tables via \`list-excel-tables\` → \`list-excel-table-rows\`. Run \`download-drive-item-as-markdown --include-metadata true\` once for the \`## Workbook metadata\` block (cell comments, hidden sheets, defined names). Converted sheets keep formula errors (\`#REF!\`, \`#N/A\`, \`#VALUE!\`, \`#DIV/0!\`) verbatim, when a summary cell shows one, recompute the figure from the detail rows and say you did. Reconcile any hand-typed grand total against the rows and flag a mismatch.
 - Counting rows or categories: count with a script (\`grep -c\`, \`awk\`) over the converted markdown, never by eye.
-- Zip archives: \`convert-drive-item-zip-to-markdown\` (drive) / \`convert-local-file --path ./archive.zip\` (disk), one call converts every text file inside and lists images and scan-only PDFs without unpacking them. To read those scans, download the zip, unzip locally, and Read the image/PDF files. Triage from the converter's scan-only list: open only the entries the question needs.
+- Zip archives: \`convert-drive-item-zip-to-markdown\` (drive) / \`convert-local-file-to-markdown --path ./archive.zip\` (disk), one call converts every text file inside and lists images and scan-only PDFs without unpacking them. To read those scans, download the zip, unzip locally, and Read the image/PDF files. Triage from the converter's scan-only list: open only the entries the question needs.
 - References out of the doc: \`extract-sharepoint-links-in-documents --drive-id … --item-id …\`, report them as leads, do not follow them.
 
 ## What you return (your entire output, no preamble, no plumbing)

@@ -10,7 +10,7 @@ Personal desktop AI app in the spirit of Cherry Studio, stripped to three surfac
 
 - Cherry Studio's agent is `@anthropic-ai/claude-agent-sdk` (pinned 0.3.185) invoked in the Electron main process. We imitate the architecture with fresh MIT code (Cherry is AGPL-3.0, no code copying).
 - OpenAI-compatible providers work with the Anthropic-only SDK via Cherry's proven trick: a local loopback HTTP server implementing Anthropic `POST /v1/messages` that translates to the OpenAI API using the Vercel AI SDK. The SDK subprocess gets `ANTHROPIC_BASE_URL=http://127.0.0.1:<port>` and never knows.
-- `ask-marcel-office-cli` is an npm package (`^2.2.0`) whose `dist/cli.js` runs under Node >= 20 (Electron's node qualifies). Bundle as a dependency, expose on the session PATH via a shim, teach usage via a built-in skill. Sign-in status via side-effect-free `scopes-check`; interactive `login` (Playwright browser) triggered only from a Settings button. **(M9 superseded the single skill: knowledge now ships as an always-on core prompt appended to the system prompt + two on-demand skills — `answer-from-m365`, `draft-outlook-email` — plus the `m365-reader` subagent; see `.claude/PLAN.md`.)**
+- `ask-marcel-office-cli` is an npm package (`^2.6.0`) whose `dist/cli.js` runs under Node >= 20 (Electron's node qualifies). Bundle as a dependency, expose on the session PATH via a shim, teach usage via a built-in skill. Sign-in status via side-effect-free `scopes-check`; interactive `login` (Playwright browser) triggered only from a Settings button. **(M9 superseded the single skill: knowledge now ships as an always-on core prompt appended to the system prompt + two on-demand skills — `answer-from-m365`, `draft-outlook-email` — plus the `m365-reader` subagent; see `.claude/PLAN.md`.)**
 - Skills are folders with SKILL.md loaded by the SDK from `CLAUDE_CONFIG_DIR/skills` with `settingSources: ['user']`. Each turn spawns a fresh SDK process, so added skills apply on the next message.
 
 ## Locked decisions and assumptions
@@ -240,7 +240,7 @@ Two groups in its left menu:
 
 ## Office CLI integration
 
-- Dependency `ask-marcel-office-cli@^2.2.0`. Its cli.js externalizes playwright, mammoth, xlsx, winston, etc., so those must exist as real files in the packaged app (drives the asar decision, R2).
+- Dependency `ask-marcel-office-cli@^2.6.0`. Its cli.js externalizes playwright, mammoth, xlsx, winston, etc., so those must exist as real files in the packaged app (drives the asar decision, R2).
 - Shim, not `node_modules/.bin`: write `<userData>/bin/ask-marcel-office` (sh + .cmd) that execs `ELECTRON_RUN_AS_NODE=1 "<process.execPath>" "<abs path to cli.js>" "$@"` with `NO_UPDATE_NOTIFIER=1`. Rewritten every launch (paths change across updates). Works on machines without Node.
 - Status: spawn `ask-marcel-office scopes-check --output json` (decode-only, no network/browser). Exit 0 gives scopes + expiry; exit 1 + JSON envelope means signed out.
 - Login: Settings button spawns `login` with a 10-minute timeout (opens system Edge/Chrome via Playwright); single-flight lock; stderr progress surfaced in the panel. `login --force` behind a "reset session" affordance.
