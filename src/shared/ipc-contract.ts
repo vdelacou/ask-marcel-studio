@@ -73,14 +73,17 @@ export const MEMORY_EVENT = 'memory:event';
 
 export type MemoryEvent = { readonly type: 'pending-changed'; readonly count: number };
 
-//   accept  remember this term with this meaning
-//   reject  never mind
+//   accept   remember this term with this meaning, under `kind` when the user refiled it
+//   reject   skip it for good: the word is never asked about again
+//   restore  take a skip back: the candidate, as the window held it, is waiting again
 //
 // `term` is what the user made of the word Marcel proposed: it hears a term inside a
 // sentence and sometimes hears it slightly wrong, so the review list lets them correct it.
 // Absent, or blank, files the term as proposed.
 export type MemoryResolveInput =
-  { readonly id: string; readonly action: 'accept'; readonly detail: string; readonly term?: string } | { readonly id: string; readonly action: 'reject' };
+  | { readonly id: string; readonly action: 'accept'; readonly detail: string; readonly term?: string; readonly kind?: MemoryFileName }
+  | { readonly id: string; readonly action: 'reject' }
+  | { readonly action: 'restore'; readonly candidate: MemoryCandidate };
 
 export type TurnUsage = {
   readonly inputTokens: number;
@@ -186,7 +189,9 @@ export type StoreError =
   | { readonly kind: 'invalid'; readonly message: string }
   | { readonly kind: 'unreadable'; readonly message: string }
   | { readonly kind: 'write-failed'; readonly message: string }
-  | { readonly kind: 'no-encryption'; readonly message: string };
+  | { readonly kind: 'no-encryption'; readonly message: string }
+  // A whole-document write refused because the document changed after the window read it.
+  | { readonly kind: 'conflict'; readonly message: string };
 
 export type CreateConversationInput = {
   // A model reference, 'providerId::modelId'. Optional, and normally absent: main resolves
@@ -311,7 +316,8 @@ export type StudioApi = {
     // Resolves with what is still waiting, so the dialog can move to the next question.
     readonly resolve: (input: MemoryResolveInput) => Promise<Result<readonly MemoryCandidate[], StoreError>>;
     readonly read: (name: MemoryFileName) => Promise<Result<string, StoreError>>;
-    readonly write: (input: { readonly name: MemoryFileName; readonly contents: string }) => Promise<Result<null, StoreError>>;
+    // `expected` is the note as the window opened it; a note changed since is refused.
+    readonly write: (input: { readonly name: MemoryFileName; readonly contents: string; readonly expected?: string }) => Promise<Result<null, StoreError>>;
     // One entry at a time, from the lists; resolves with all three notes as they now read.
     readonly edit: (input: MemoryEntryEdit) => Promise<Result<MemoryNotes, MemoryEditError>>;
     readonly onEvent: (listener: (event: MemoryEvent) => void) => () => void;

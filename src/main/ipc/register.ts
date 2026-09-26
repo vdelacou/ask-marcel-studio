@@ -174,8 +174,8 @@ export const registerIpc = (deps: IpcDeps): void => {
   ipcMain.handle(CHANNEL.memoryResolve, (_event, input: unknown) => deps.memory.resolve(input));
   ipcMain.handle(CHANNEL.memoryRead, (_event, name: unknown) => deps.memory.read(name));
   ipcMain.handle(CHANNEL.memoryWrite, (_event, input: unknown) => {
-    const draft = input as { name?: unknown; contents?: unknown } | undefined;
-    return deps.memory.write(draft?.name, draft?.contents);
+    const draft = input as { name?: unknown; contents?: unknown; expected?: unknown } | undefined;
+    return deps.memory.write(draft?.name, draft?.contents, draft?.expected);
   });
   ipcMain.handle(CHANNEL.memoryEdit, (_event, input: unknown) => deps.memory.edit(input));
 
