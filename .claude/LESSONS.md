@@ -695,3 +695,21 @@ container needs a positioned ancestor inside that same container. After adding o
 list, assert `document.documentElement.scrollHeight === document.documentElement.clientHeight`;
 nothing in lint, typecheck or the test suite sees this, and it only shows on a transcript long
 enough to push the label past the viewport.
+
+## [gotcha] 2026-09-26 | run-studio dumps a delegating turn before it ends, and the turn survives the close
+
+The run-studio driver (`.claude/skills/run-studio/driver.mjs`) treats four consecutive polls
+without a Stop button, about six seconds, as the end of a turn, then dumps the thread, takes the
+final screenshot and closes the app. On a turn that delegates its reads to the `Agent` readers
+(deepseek-v4-pro), it dumped while the turn was still streaming: the thread in the dump ended
+with the thread-level "Working…" line, which `ChatThread` renders only while `isStreaming` is
+true, and held tool rows but no answer. That looked like a killed turn, and was reported as one.
+It was not. Opened later, the same conversation held the finished turn, a sourced answer under
+three working cards, its stats line reading "10m · 108 steps · 31 failed". The app outlived the
+driver's close, contrary to the skill's own warning that quitting early kills the running turn;
+how it survived was not established.
+
+Rule for next time: before trusting a run-studio dump, read the end of the thread. A trailing
+"Working…" means the dump is early, whatever the driver logged, and the answer is not in it. For
+a turn that delegates, wait for that line to go as well as the Stop button. And never report a
+turn as lost from its dump alone: open the conversation afterwards and look.
