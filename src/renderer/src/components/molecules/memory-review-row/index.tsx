@@ -17,6 +17,8 @@ export type MemoryReviewRowProps = {
   kind: MemoryReviewKind;
   quote: string;
   enrichment?: string;
+  // The title of the conversation it was heard in, while that conversation still exists.
+  source?: string;
   meaning: string;
   alternatives: readonly string[];
   canRemember: boolean;
@@ -26,6 +28,7 @@ export type MemoryReviewRowProps = {
   onChangeTerm: (text: string) => void;
   // One of the three lists, as the select names it; the page reads it back into a note name.
   onChangeKind: (kind: string) => void;
+  onOpenSource: () => void;
   onRemember: () => void;
   onSkip: () => void;
 };
@@ -42,6 +45,7 @@ export const MemoryReviewRow: FC<MemoryReviewRowProps> = ({
   kind,
   quote,
   enrichment,
+  source,
   meaning,
   alternatives,
   canRemember,
@@ -50,6 +54,7 @@ export const MemoryReviewRow: FC<MemoryReviewRowProps> = ({
   onChoose,
   onChangeTerm,
   onChangeKind,
+  onOpenSource,
   onRemember,
   onSkip,
 }) => (
@@ -73,6 +78,19 @@ export const MemoryReviewRow: FC<MemoryReviewRowProps> = ({
 
     {quote.length > 0 && <blockquote className="border-l-2 border-border-subtle pl-3 text-xs italic text-ink-muted">{quote}</blockquote>}
     {enrichment !== undefined && <p className="text-xs text-ink-muted">From your directory: {enrichment}</p>}
+    {source !== undefined && (
+      <p className="text-xs text-ink-muted">
+        Heard in{' '}
+        <button
+          type="button"
+          onClick={onOpenSource}
+          aria-label={`Open ${source}`}
+          className="rounded font-medium text-ink underline underline-offset-2 transition hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          {source}
+        </button>
+      </p>
+    )}
 
     <TextArea
       size="compact"

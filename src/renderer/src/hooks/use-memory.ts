@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { MemoryCandidate } from '../../../shared/memory-queue-doc.ts';
 import type { MemoryFileName } from '../../../shared/memory-file-name.ts';
+import type { MemoryAnswer } from '../lib/memory-review.ts';
 
 export type MemoryController = {
   readonly pending: readonly MemoryCandidate[];
@@ -23,6 +24,11 @@ export type MemoryController = {
   // For good: the word is never asked about again, unless the skip is taken back.
   readonly skip: (id: string) => void;
   readonly restore: (candidate: MemoryCandidate) => void;
+  // Every answer, one after another. The first refusal stops the run and says why; what was
+  // answered before it stays answered.
+  readonly rememberAll: (answers: readonly MemoryAnswer[]) => void;
+  // True while Remember all is working through the list: every row waits.
+  readonly isAnsweringAll: boolean;
   readonly dismissError: () => void;
 };
 
@@ -31,6 +37,7 @@ export const useMemory = (): MemoryController => {
   const [savingId, setSavingId] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
   const [lastSkipped, setLastSkipped] = useState<MemoryCandidate | undefined>(undefined);
+  const [isAnsweringAll, setIsAnsweringAll] = useState(false);
 
   const load = useCallback((): void => {
     void (async (): Promise<void> => {
@@ -89,6 +96,23 @@ export const useMemory = (): MemoryController => {
     [answer]
   );
 
+  const rememberAll = useCallback((answers: readonly MemoryAnswer[]): void => {
+    setError(undefined);
+    setIsAnsweringAll(true);
+    void (async (): Promise<void> => {
+      for (const answer of answers) {
+        const left = await studio.memory.resolve({ id: answer.id, action: 'accept', detail: answer.detail, term: answer.term, kind: answer.kind });
+        if (!left.ok) {
+          setError(left.error.message);
+          break;
+        }
+        setPending(left.value);
+      }
+      setIsAnsweringAll(false);
+      setLastSkipped(undefined);
+    })();
+  }, []);
+
   const dismissError = useCallback((): void => setError(undefined), []);
 
   return {
@@ -99,6 +123,8 @@ export const useMemory = (): MemoryController => {
     remember,
     skip,
     restore,
+    rememberAll,
+    isAnsweringAll,
     dismissError,
   };
 };

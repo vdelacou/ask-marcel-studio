@@ -4,6 +4,7 @@ import type { MemoryReviewKind } from '../../molecules/memory-review-row/index.t
 import { ActionNotice } from '../../molecules/action-notice/index.tsx';
 import type { ActionNoticeProps } from '../../molecules/action-notice/index.tsx';
 import { PanelNotice } from '../../molecules/panel-notice/index.tsx';
+import { Button } from '../../atoms/button/index.tsx';
 
 export type MemoryReviewItem = {
   readonly id: string;
@@ -11,6 +12,7 @@ export type MemoryReviewItem = {
   readonly kind: MemoryReviewKind;
   readonly quote: string;
   readonly enrichment?: string;
+  readonly source?: string;
   readonly meaning: string;
   readonly alternatives: readonly string[];
   readonly canRemember: boolean;
@@ -25,22 +27,56 @@ export type MemoryReviewPanelProps = {
   error?: string;
   // What was just done that can still be taken back: the last skip.
   notice?: Omit<ActionNoticeProps, 'tone'>;
+  // Remember all: the button while there are cards to take, and the question it asks first.
+  bulk?: { readonly label: string; readonly onStart: () => void };
+  confirm?: { readonly message: string; readonly confirmLabel: string; readonly cancelLabel: string; readonly onConfirm: () => void; readonly onCancel: () => void };
   onChoose: (id: string, wording: string) => void;
   onChangeMeaning: (id: string, text: string) => void;
   onChangeTerm: (id: string, text: string) => void;
   onChangeKind: (id: string, kind: string) => void;
+  onOpenSource: (id: string) => void;
   onRemember: (id: string) => void;
   onSkip: (id: string) => void;
 };
 
-export const MemoryReviewPanel: FC<MemoryReviewPanelProps> = ({ items, error, notice, onChoose, onChangeMeaning, onChangeTerm, onChangeKind, onRemember, onSkip }) => (
+export const MemoryReviewPanel: FC<MemoryReviewPanelProps> = ({
+  items,
+  error,
+  notice,
+  bulk,
+  confirm,
+  onChoose,
+  onChangeMeaning,
+  onChangeTerm,
+  onChangeKind,
+  onOpenSource,
+  onRemember,
+  onSkip,
+}) => (
   <section className="flex flex-col gap-y-6">
-    <header className="flex flex-col gap-y-1">
-      <h2 className="text-lg font-semibold tracking-tight text-ink">What Marcel noticed</h2>
-      <p className="text-sm text-ink-muted">
-        Words and names it did not know, waiting here until you say what they mean. Nothing is remembered until you say so, and nothing here interrupts you while you work.
-      </p>
+    <header className="flex items-start justify-between gap-x-4">
+      <div className="flex flex-col gap-y-1">
+        <h2 className="text-lg font-semibold tracking-tight text-ink">What Marcel noticed</h2>
+        <p className="text-sm text-ink-muted">
+          Words and names it did not know, waiting here until you say what they mean. Nothing is remembered until you say so, and nothing here interrupts you while you work.
+        </p>
+      </div>
+      {bulk !== undefined && (
+        <Button variant="secondary" onClick={bulk.onStart}>
+          {bulk.label}
+        </Button>
+      )}
     </header>
+
+    {confirm !== undefined && (
+      <div role="alert" className="flex items-center gap-x-3 rounded-md border border-border-subtle bg-surface-raised px-3 py-2 text-sm text-ink">
+        <span className="min-w-0 flex-1">{confirm.message}</span>
+        <Button variant="secondary" onClick={confirm.onCancel}>
+          {confirm.cancelLabel}
+        </Button>
+        <Button onClick={confirm.onConfirm}>{confirm.confirmLabel}</Button>
+      </div>
+    )}
 
     {error !== undefined && <PanelNotice tone="error" message={error} />}
     {notice !== undefined && <ActionNotice tone="neutral" message={notice.message} {...(notice.action === undefined ? {} : { action: notice.action })} />}
@@ -58,6 +94,7 @@ export const MemoryReviewPanel: FC<MemoryReviewPanelProps> = ({ items, error, no
             kind={item.kind}
             quote={item.quote}
             {...(item.enrichment === undefined ? {} : { enrichment: item.enrichment })}
+            {...(item.source === undefined ? {} : { source: item.source })}
             meaning={item.meaning}
             alternatives={item.alternatives}
             canRemember={item.canRemember}
@@ -66,6 +103,7 @@ export const MemoryReviewPanel: FC<MemoryReviewPanelProps> = ({ items, error, no
             onChoose={(wording) => onChoose(item.id, wording)}
             onChangeTerm={(text) => onChangeTerm(item.id, text)}
             onChangeKind={(kind) => onChangeKind(item.id, kind)}
+            onOpenSource={() => onOpenSource(item.id)}
             onRemember={() => onRemember(item.id)}
             onSkip={() => onSkip(item.id)}
           />

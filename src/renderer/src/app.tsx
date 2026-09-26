@@ -350,7 +350,14 @@ export const App: FC = () => {
       )}
       {memoryOpen && (
         <OverlaySheet label="Memory" onClose={() => setMemoryOpen(false)}>
-          <MemoryPage memory={memory} />
+          <MemoryPage
+            memory={memory}
+            conversations={list.conversations}
+            onOpenConversation={(id) => {
+              setMemoryOpen(false);
+              conversations.select(id);
+            }}
+          />
         </OverlaySheet>
       )}
       {conversations.confirmingDeleteId !== undefined && (

@@ -93,6 +93,21 @@ export const answerFor = (draft: MemoryDraft): string | undefined => {
   return answer.length === 0 ? undefined : answer;
 };
 
+// A row ready to be remembered, as it stands: its wording, its word and its list.
+export type MemoryAnswer = { readonly id: string; readonly detail: string; readonly term: string; readonly kind: MemoryFileName };
+
+// Nothing for a row with no meaning or with its word rubbed out: the same two rules that keep
+// its own Remember button refused.
+export const answerOf = (drafts: MemoryDrafts, candidate: MemoryCandidate): MemoryAnswer | undefined => {
+  const detail = answerFor(draftFor(drafts, candidate));
+  const term = termFor(drafts, candidate);
+  return detail === undefined || term === undefined ? undefined : { id: candidate.id, detail, term, kind: kindFor(drafts, candidate) };
+};
+
+// Remember all: every row that can be remembered, in the order they are listed.
+export const answersFor = (drafts: MemoryDrafts, candidates: readonly MemoryCandidate[]): readonly MemoryAnswer[] =>
+  candidates.flatMap((candidate) => answerOf(drafts, candidate) ?? []);
+
 export const forgetDraft = (drafts: MemoryDrafts, id: string): MemoryDrafts => {
   const { [id]: gone, ...rest } = drafts;
   return rest;

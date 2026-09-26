@@ -1,3 +1,32 @@
+# Current run: review list extras, then phase 3 (approved 2026-09-26, "1 then 2 and then 3")
+
+Step A finishes the review list: a Remember all that takes every card as it stands, after an
+inline confirm, and a "Heard in" link on each card that closes Memory and opens the
+conversation the suggestion came from (hidden when that conversation is gone). Step B is phase
+3: the menu regrouped (Waiting for you: To review; What Marcel knows: Words we use, People I
+work with; About you: Who you are, Writing voice, Email signature), which also ends the
+"What Marcel noticed" label wrapping beside its count; and Who you are and Writing voice
+saved automatically (about a second after typing stops, and on leaving), with nothing typed
+during a save lost. The signature keeps its explicit save. Step C appends the scratch-folder
+cleanup lesson.
+
+A1. [x] Lib: `answerOf` / `answersFor` (a row as it stands: wording, word, list; nothing for a
+        row with no meaning or no word). Done: new test file, 100% tier.
+A2. [x] Hook `rememberAll` (one answer at a time, stops at the first refusal); review panel
+        Remember all + inline confirm; row "Heard in" link; page + app wiring.
+A3. [x] Verified in the built app on a scratch folder; review; commits on a yes.
+        DONE: 6/6 in-app checks; one commit, pushed.
+B1. [ ] Lib `autosave.ts`: the draft to keep after a save lands (the saved text, unless more
+        was typed meanwhile). Done: new test file, 100% tier.
+B2. [ ] Hook autosave (debounce, flush on leaving, remount only on reload or rebuild);
+        DocumentEditor auto variant (status instead of Save and Cancel); nav regroup and
+        titles. Done: lint 0/0, typecheck.
+B3. [ ] Verified in the built app: typed text lands on disk without a click, including when
+        the sheet closes right after typing; review; commits on a yes.
+C1. [ ] Lesson appended; committed on a yes.
+
+---
+
 # Current run: memory review cards, phase 2 (approved 2026-09-26)
 
 Every one of the 17 real suggestions across both accounts has zero alternative wordings, so each
