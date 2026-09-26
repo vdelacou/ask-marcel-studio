@@ -13,6 +13,7 @@ import type { Conversation, ConversationMeta, Settings } from './types.ts';
 import type { AgentFileDoc, AgentFileError } from './agent-files.ts';
 import type { MemoryFileName } from './memory-file-name.ts';
 import type { MemoryCandidate } from './memory-queue-doc.ts';
+import type { MemoryEditError, MemoryEntryEdit, MemoryNotes } from './memory-entry-edit.ts';
 import type { AgentView, SubAgent } from './agents-doc.ts';
 import type { ModelTestTarget, ModelTestVerdict } from './model-test.ts';
 import type { OfficeCategory } from './office-catalog.ts';
@@ -59,6 +60,7 @@ export const CHANNEL = {
   memoryResolve: 'memory:resolve',
   memoryRead: 'memory:read',
   memoryWrite: 'memory:write',
+  memoryEdit: 'memory:edit',
   updateStatus: 'update:status',
 } as const;
 
@@ -310,6 +312,8 @@ export type StudioApi = {
     readonly resolve: (input: MemoryResolveInput) => Promise<Result<readonly MemoryCandidate[], StoreError>>;
     readonly read: (name: MemoryFileName) => Promise<Result<string, StoreError>>;
     readonly write: (input: { readonly name: MemoryFileName; readonly contents: string }) => Promise<Result<null, StoreError>>;
+    // One entry at a time, from the lists; resolves with all three notes as they now read.
+    readonly edit: (input: MemoryEntryEdit) => Promise<Result<MemoryNotes, MemoryEditError>>;
     readonly onEvent: (listener: (event: MemoryEvent) => void) => () => void;
   };
   readonly agentFiles: {

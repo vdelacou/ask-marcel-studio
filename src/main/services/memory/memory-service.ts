@@ -9,6 +9,8 @@
  * the whole point of the queue.
  */
 import { TERM_LIMIT, listEntries, mergeMemoryEntries, parseMemoryDoc, serialiseMemoryDoc } from '../../../shared/memory-doc.ts';
+import { applyMemoryEntryEdit, parseMemoryEntryEdit } from '../../../shared/memory-entry-edit.ts';
+import type { MemoryEditError, MemoryEntryEdit, MemoryNotes } from '../../../shared/memory-entry-edit.ts';
 import { memoryFileName } from '../../../shared/memory-file-name.ts';
 import type { MemoryFileName } from '../../../shared/memory-file-name.ts';
 import { EMPTY_MEMORY_QUEUE, addCandidates, findCandidate, parseMemoryQueue, removeCandidate, serialiseMemoryQueue } from '../../../shared/memory-queue-doc.ts';
@@ -35,6 +37,8 @@ export type MemoryService = {
   readonly resolve: (input: unknown) => Promise<Result<readonly MemoryCandidate[], StoreError>>;
   readonly read: (name: unknown) => Promise<Result<string, StoreError>>;
   readonly write: (name: unknown, contents: unknown) => Promise<Result<null, StoreError>>;
+  // One entry added, changed, removed, put back or moved; answers with all three notes.
+  readonly edit: (input: unknown) => Promise<Result<MemoryNotes, MemoryEditError>>;
   // What rides along with every turn. Degrades to nothing rather than failing a turn.
   readonly glossaryBlocks: () => Promise<readonly string[]>;
   readonly addCandidates: (items: readonly RawCandidate[], conversationId: string) => Promise<Result<number, StoreError>>;
@@ -47,6 +51,19 @@ export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
   const readNote = async (name: MemoryFileName): Promise<string> => {
     const text = await readTextFile(memoryFilePath(deps.userData, name));
     return text.ok ? text.value : '';
+  };
+
+  // One note change at a time. Each is a read-modify-write of a whole file, and two in
+  // flight together would each read the note before the other wrote it, so the second
+  // write would bring back what the first took out.
+  let queue: Promise<unknown> = Promise.resolve();
+  const oneAtATime = <T>(job: () => Promise<T>): Promise<T> => {
+    const run = queue.then(job);
+    queue = run.then(
+      () => undefined,
+      () => undefined
+    );
+    return run;
   };
 
   const readQueue = async (): Promise<ReturnType<typeof parseMemoryQueue>> => {
@@ -124,6 +141,28 @@ export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
     return ok(next.items);
   };
 
+  const readNotes = async (): Promise<MemoryNotes> => ({ jargon: await readNote('jargon'), team: await readNote('team'), people: await readNote('people') });
+
+  // The note a person moves into is written first: a failure between the two writes then
+  // leaves them in both lists rather than in neither.
+  const touchedBy = (edit: MemoryEntryEdit): readonly MemoryFileName[] => (edit.action === 'move' ? [edit.to, edit.note] : [edit.note]);
+
+  const edit = async (input: unknown): Promise<Result<MemoryNotes, MemoryEditError>> => {
+    const change = parseMemoryEntryEdit(input);
+    if (!change.ok) return change;
+    const before = await readNotes();
+    const applied = applyMemoryEntryEdit({ jargon: parseMemoryDoc(before.jargon), team: parseMemoryDoc(before.team), people: parseMemoryDoc(before.people) }, change.value);
+    if (!applied.ok) return applied;
+    let after = before;
+    for (const name of touchedBy(change.value)) {
+      const text = serialiseMemoryDoc(applied.value[name]);
+      const written = await writeTextFileAtomic(memoryFilePath(deps.userData, name), text);
+      if (!written.ok) return err({ kind: 'write-failed', message: written.error.message });
+      after = { ...after, [name]: text };
+    }
+    return ok(after);
+  };
+
   const glossaryBlocks = async (): Promise<readonly string[]> =>
     buildGlossaryBlocks({ jargon: await readNote('jargon'), team: await readNote('team'), people: await readNote('people') });
 
@@ -179,5 +218,16 @@ export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
     await writeTextFileAtomic(memoryStatePath(deps.userData), serialiseMemoryState(markExtracted(state.value, conversationId, messageCount, deps.now())));
   };
 
-  return { pending, resolve, read, write, glossaryBlocks, addCandidates: addFound, extractionDue, readSoFar: howFar, markExtracted: rememberRead };
+  return {
+    pending,
+    resolve: (input) => oneAtATime(() => resolve(input)),
+    read,
+    write: (name, contents) => oneAtATime(() => write(name, contents)),
+    edit: (input) => oneAtATime(() => edit(input)),
+    glossaryBlocks,
+    addCandidates: addFound,
+    extractionDue,
+    readSoFar: howFar,
+    markExtracted: rememberRead,
+  };
 };

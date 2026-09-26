@@ -177,6 +177,7 @@ export const registerIpc = (deps: IpcDeps): void => {
     const draft = input as { name?: unknown; contents?: unknown } | undefined;
     return deps.memory.write(draft?.name, draft?.contents);
   });
+  ipcMain.handle(CHANNEL.memoryEdit, (_event, input: unknown) => deps.memory.edit(input));
 
   ipcMain.handle(CHANNEL.agentFileGet, (_event, doc: unknown) => deps.agentFiles.get(doc));
   ipcMain.handle(CHANNEL.agentFileSave, (_event, input: unknown) => {
