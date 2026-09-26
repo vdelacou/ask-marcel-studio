@@ -1,54 +1,55 @@
 import type { FC } from 'react';
 import { Button } from '../../atoms/button/index.tsx';
-import { TextInput } from '../../atoms/text-input/index.tsx';
+import { Select } from '../../atoms/select/index.tsx';
+import { TextArea } from '../../atoms/text-area/index.tsx';
 
 export type MemoryReviewKind = 'jargon' | 'team' | 'people';
 
 // One thing Marcel noticed, waiting for an answer. Props-only (rule 21): the review page
 // owns every draft answer and hands this row the one that belongs to it.
+//
+// The meaning is the text itself, Marcel's suggestion until the user rewords it: across real
+// suggestions Marcel almost never offers a second wording, so a choice between wordings was a
+// radio group with one option in it. The wordings it does offer sit under the text and fill it
+// when picked.
 export type MemoryReviewRowProps = {
-  // The radio group is per row: several rows are on screen at once, and one shared group
-  // name would make picking a wording here clear the wording picked three rows down.
-  id: string;
   term: string;
   kind: MemoryReviewKind;
   quote: string;
   enrichment?: string;
-  choices: readonly string[];
-  // The wording picked, or undefined while the user is writing their own.
-  selected?: string;
-  own: string;
+  meaning: string;
+  alternatives: readonly string[];
   canRemember: boolean;
   isSaving: boolean;
-  onChoose: (choice: string) => void;
-  onChangeOwn: (text: string) => void;
+  onChangeMeaning: (text: string) => void;
+  onChoose: (wording: string) => void;
   onChangeTerm: (text: string) => void;
+  // One of the three lists, as the select names it; the page reads it back into a note name.
+  onChangeKind: (kind: string) => void;
   onRemember: () => void;
   onSkip: () => void;
 };
 
-// Where an answer would be filed. The same three words the notes use in settings, so the
-// row and the note it lands in are recognisably the same thing.
-const KINDS: Record<MemoryReviewKind, string> = {
-  jargon: 'words we use',
-  team: 'my team',
-  people: 'people I work with',
-};
+// Where an answer would be filed, named the way the lists name themselves.
+const KIND_OPTIONS: readonly { value: MemoryReviewKind; label: string }[] = [
+  { value: 'jargon', label: 'Words we use' },
+  { value: 'team', label: 'My team' },
+  { value: 'people', label: 'Other people' },
+];
 
 export const MemoryReviewRow: FC<MemoryReviewRowProps> = ({
-  id,
   term,
   kind,
   quote,
   enrichment,
-  choices,
-  selected,
-  own,
+  meaning,
+  alternatives,
   canRemember,
   isSaving,
+  onChangeMeaning,
   onChoose,
-  onChangeOwn,
   onChangeTerm,
+  onChangeKind,
   onRemember,
   onSkip,
 }) => (
@@ -64,31 +65,38 @@ export const MemoryReviewRow: FC<MemoryReviewRowProps> = ({
         onChange={(event) => onChangeTerm(event.target.value)}
         className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1.5 py-0.5 font-mono text-sm font-semibold text-ink hover:border-border-subtle focus-visible:border-border-subtle focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
       />
-      <span className="shrink-0 rounded-full border border-border-subtle px-2 py-0.5 text-[10px] uppercase tracking-wide text-ink-muted">{KINDS[kind]}</span>
+      <label className="flex shrink-0 items-center gap-x-1.5 text-xs text-ink-muted">
+        File under
+        <Select options={KIND_OPTIONS} value={kind} onChange={(event) => onChangeKind(event.target.value)} />
+      </label>
     </header>
 
     {quote.length > 0 && <blockquote className="border-l-2 border-border-subtle pl-3 text-xs italic text-ink-muted">{quote}</blockquote>}
     {enrichment !== undefined && <p className="text-xs text-ink-muted">From your directory: {enrichment}</p>}
 
-    <fieldset className="flex flex-col gap-y-2">
-      <legend className="sr-only">What this word means where you work</legend>
-      {choices.map((choice) => (
-        <label
-          key={choice}
-          className={`flex cursor-pointer items-start gap-x-2 rounded-md border p-2.5 text-sm ${choice === selected ? 'border-accent bg-surface text-ink' : 'border-border-subtle text-ink-muted'}`}
-        >
-          <input type="radio" name={`memory-${id}`} checked={choice === selected} onChange={() => onChoose(choice)} className="mt-0.5 accent-accent" />
-          {choice}
-        </label>
-      ))}
-      <div className={`flex flex-col gap-y-1.5 rounded-md border p-2.5 ${selected === undefined ? 'border-accent bg-surface' : 'border-border-subtle'}`}>
-        <label className="flex cursor-pointer items-center gap-x-2 text-sm text-ink">
-          <input type="radio" name={`memory-${id}`} checked={selected === undefined} onChange={() => onChangeOwn(own)} className="accent-accent" />
-          In my own words
-        </label>
-        <TextInput value={own} placeholder="What it means here…" aria-label="What it means, in your own words" onChange={(event) => onChangeOwn(event.target.value)} />
+    <TextArea
+      size="compact"
+      value={meaning}
+      placeholder="What it means here…"
+      aria-label="What it means where you work"
+      onChange={(event) => onChangeMeaning(event.target.value)}
+    />
+
+    {alternatives.length > 0 && (
+      <div className="flex flex-wrap items-center gap-1.5 text-xs text-ink-muted">
+        <span>Or:</span>
+        {alternatives.map((wording) => (
+          <button
+            key={wording}
+            type="button"
+            onClick={() => onChoose(wording)}
+            className="rounded-full border border-border-subtle px-2.5 py-0.5 transition hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            {wording}
+          </button>
+        ))}
       </div>
-    </fieldset>
+    )}
 
     <footer className="flex items-center justify-end gap-x-2">
       <Button variant="secondary" onClick={onSkip} disabled={isSaving}>

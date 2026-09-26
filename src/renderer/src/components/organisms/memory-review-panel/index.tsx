@@ -1,6 +1,8 @@
 import type { FC } from 'react';
 import { MemoryReviewRow } from '../../molecules/memory-review-row/index.tsx';
 import type { MemoryReviewKind } from '../../molecules/memory-review-row/index.tsx';
+import { ActionNotice } from '../../molecules/action-notice/index.tsx';
+import type { ActionNoticeProps } from '../../molecules/action-notice/index.tsx';
 import { PanelNotice } from '../../molecules/panel-notice/index.tsx';
 
 export type MemoryReviewItem = {
@@ -9,9 +11,8 @@ export type MemoryReviewItem = {
   readonly kind: MemoryReviewKind;
   readonly quote: string;
   readonly enrichment?: string;
-  readonly choices: readonly string[];
-  readonly selected?: string;
-  readonly own: string;
+  readonly meaning: string;
+  readonly alternatives: readonly string[];
   readonly canRemember: boolean;
   readonly isSaving: boolean;
 };
@@ -22,14 +23,17 @@ export type MemoryReviewItem = {
 export type MemoryReviewPanelProps = {
   items: readonly MemoryReviewItem[];
   error?: string;
-  onChoose: (id: string, choice: string) => void;
-  onChangeOwn: (id: string, text: string) => void;
+  // What was just done that can still be taken back: the last skip.
+  notice?: Omit<ActionNoticeProps, 'tone'>;
+  onChoose: (id: string, wording: string) => void;
+  onChangeMeaning: (id: string, text: string) => void;
   onChangeTerm: (id: string, text: string) => void;
+  onChangeKind: (id: string, kind: string) => void;
   onRemember: (id: string) => void;
   onSkip: (id: string) => void;
 };
 
-export const MemoryReviewPanel: FC<MemoryReviewPanelProps> = ({ items, error, onChoose, onChangeOwn, onChangeTerm, onRemember, onSkip }) => (
+export const MemoryReviewPanel: FC<MemoryReviewPanelProps> = ({ items, error, notice, onChoose, onChangeMeaning, onChangeTerm, onChangeKind, onRemember, onSkip }) => (
   <section className="flex flex-col gap-y-6">
     <header className="flex flex-col gap-y-1">
       <h2 className="text-lg font-semibold tracking-tight text-ink">What Marcel noticed</h2>
@@ -39,6 +43,7 @@ export const MemoryReviewPanel: FC<MemoryReviewPanelProps> = ({ items, error, on
     </header>
 
     {error !== undefined && <PanelNotice tone="error" message={error} />}
+    {notice !== undefined && <ActionNotice tone="neutral" message={notice.message} {...(notice.action === undefined ? {} : { action: notice.action })} />}
 
     {items.length === 0 ? (
       <p className="rounded-panel border border-dashed border-border-subtle p-6 text-center text-sm text-ink-muted">
@@ -49,19 +54,18 @@ export const MemoryReviewPanel: FC<MemoryReviewPanelProps> = ({ items, error, on
         {items.map((item) => (
           <MemoryReviewRow
             key={item.id}
-            id={item.id}
             term={item.term}
             kind={item.kind}
             quote={item.quote}
             {...(item.enrichment === undefined ? {} : { enrichment: item.enrichment })}
-            choices={item.choices}
-            {...(item.selected === undefined ? {} : { selected: item.selected })}
-            own={item.own}
+            meaning={item.meaning}
+            alternatives={item.alternatives}
             canRemember={item.canRemember}
             isSaving={item.isSaving}
-            onChoose={(choice) => onChoose(item.id, choice)}
-            onChangeOwn={(text) => onChangeOwn(item.id, text)}
+            onChangeMeaning={(text) => onChangeMeaning(item.id, text)}
+            onChoose={(wording) => onChoose(item.id, wording)}
             onChangeTerm={(text) => onChangeTerm(item.id, text)}
+            onChangeKind={(kind) => onChangeKind(item.id, kind)}
             onRemember={() => onRemember(item.id)}
             onSkip={() => onSkip(item.id)}
           />

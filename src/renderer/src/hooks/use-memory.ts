@@ -8,15 +8,21 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import type { MemoryCandidate } from '../../../shared/memory-queue-doc.ts';
+import type { MemoryFileName } from '../../../shared/memory-file-name.ts';
 
 export type MemoryController = {
   readonly pending: readonly MemoryCandidate[];
   // The row being written to disk right now, if any: only that row's buttons wait.
   readonly savingId?: string;
   readonly error?: string;
-  // `term` is the word as the user left it: they may have corrected what Marcel heard.
-  readonly remember: (id: string, detail: string, term: string) => void;
+  // The suggestion skipped last, while that skip can still be taken back.
+  readonly lastSkipped?: MemoryCandidate;
+  // `term` is the word as the user left it: they may have corrected what Marcel heard. `kind`
+  // is the list they filed it under, which may not be the one Marcel guessed.
+  readonly remember: (id: string, detail: string, term: string, kind: MemoryFileName) => void;
+  // For good: the word is never asked about again, unless the skip is taken back.
   readonly skip: (id: string) => void;
+  readonly restore: (candidate: MemoryCandidate) => void;
   readonly dismissError: () => void;
 };
 
@@ -24,6 +30,7 @@ export const useMemory = (): MemoryController => {
   const [pending, setPending] = useState<readonly MemoryCandidate[]>([]);
   const [savingId, setSavingId] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
+  const [lastSkipped, setLastSkipped] = useState<MemoryCandidate | undefined>(undefined);
 
   const load = useCallback((): void => {
     void (async (): Promise<void> => {
@@ -40,7 +47,9 @@ export const useMemory = (): MemoryController => {
 
   useEffect(() => studio.memory.onEvent(load), [load]);
 
-  const answer = useCallback((id: string, resolve: () => Promise<Awaited<ReturnType<typeof studio.memory.resolve>>>): void => {
+  // `skipped` is what the answer leaves to be taken back: the candidate after a skip, nothing
+  // after anything else.
+  const answer = useCallback((id: string, resolve: () => Promise<Awaited<ReturnType<typeof studio.memory.resolve>>>, skipped?: MemoryCandidate): void => {
     setError(undefined);
     setSavingId(id);
     void (async (): Promise<void> => {
@@ -51,19 +60,31 @@ export const useMemory = (): MemoryController => {
         return;
       }
       setPending(left.value);
+      setLastSkipped(skipped);
     })();
   }, []);
 
   const remember = useCallback(
-    (id: string, detail: string, term: string): void => {
-      answer(id, () => studio.memory.resolve({ id, action: 'accept', detail, term }));
+    (id: string, detail: string, term: string, kind: MemoryFileName): void => {
+      answer(id, () => studio.memory.resolve({ id, action: 'accept', detail, term, kind }));
     },
     [answer]
   );
 
   const skip = useCallback(
     (id: string): void => {
-      answer(id, () => studio.memory.resolve({ id, action: 'reject' }));
+      answer(
+        id,
+        () => studio.memory.resolve({ id, action: 'reject' }),
+        pending.find((candidate) => candidate.id === id)
+      );
+    },
+    [answer, pending]
+  );
+
+  const restore = useCallback(
+    (candidate: MemoryCandidate): void => {
+      answer(candidate.id, () => studio.memory.resolve({ action: 'restore', candidate }));
     },
     [answer]
   );
@@ -74,8 +95,10 @@ export const useMemory = (): MemoryController => {
     pending,
     ...(savingId === undefined ? {} : { savingId }),
     ...(error === undefined ? {} : { error }),
+    ...(lastSkipped === undefined ? {} : { lastSkipped }),
     remember,
     skip,
+    restore,
     dismissError,
   };
 };

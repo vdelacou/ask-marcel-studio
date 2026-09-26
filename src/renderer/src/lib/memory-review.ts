@@ -14,6 +14,7 @@
  * Pure: no react, no electron, so `bun test` runs it.
  */
 import type { MemoryCandidate } from '../../../shared/memory-queue-doc.ts';
+import type { MemoryFileName } from '../../../shared/memory-file-name.ts';
 
 export type MemoryDraft = {
   // The wording picked from the offered ones, or undefined while the user writes their own.
@@ -23,6 +24,8 @@ export type MemoryDraft = {
   // it and it stands as proposed; '' means they cleared the box and are mid-retype, which
   // is why this is not simply defaulted to the proposed word.
   readonly term?: string;
+  // The list the user filed it under instead of the one Marcel guessed, if they picked one.
+  readonly kind?: MemoryFileName;
 };
 
 export type MemoryDrafts = Readonly<Record<string, MemoryDraft>>;
@@ -53,12 +56,20 @@ export const withChoice = (drafts: MemoryDrafts, candidate: MemoryCandidate, cho
   [candidate.id]: { ...draftFor(drafts, candidate), selected: choice },
 });
 
-// Moving to your own words drops the wording that was picked, which is what makes the
-// radio move; a word corrected on the way past is not part of that and stays.
+// Moving to your own words drops the wording that was picked; a word corrected on the way
+// past, and a list picked for it, are not part of that and stay.
 export const withOwnWords = (drafts: MemoryDrafts, candidate: MemoryCandidate, text: string): MemoryDrafts => {
-  const held = draftFor(drafts, candidate);
-  return { ...drafts, [candidate.id]: { own: text, ...(held.term === undefined ? {} : { term: held.term }) } };
+  const { selected, ...kept } = draftFor(drafts, candidate);
+  return { ...drafts, [candidate.id]: { ...kept, own: text } };
 };
+
+export const withKind = (drafts: MemoryDrafts, candidate: MemoryCandidate, kind: MemoryFileName): MemoryDrafts => ({
+  ...drafts,
+  [candidate.id]: { ...draftFor(drafts, candidate), kind },
+});
+
+// Where the answer would be filed: the list the user picked, or the one Marcel guessed.
+export const kindFor = (drafts: MemoryDrafts, candidate: MemoryCandidate): MemoryFileName => drafts[candidate.id]?.kind ?? candidate.kind;
 
 export const withTerm = (drafts: MemoryDrafts, candidate: MemoryCandidate, text: string): MemoryDrafts => ({
   ...drafts,

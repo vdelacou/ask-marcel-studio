@@ -22,11 +22,12 @@ import { SheetNav } from '../components/organisms/sheet-nav/index.tsx';
 import type { SheetNavGroup } from '../components/organisms/sheet-nav/index.tsx';
 import { MarkdownEditor } from '../render/markdown-editor.tsx';
 import { MemoryListSection } from './memory-list-section.tsx';
-import { answerFor, choicesFor, draftFor, emptyDrafts, forgetDraft, termFor, termTextFor, withChoice, withOwnWords, withTerm } from '../lib/memory-review.ts';
+import { answerFor, choicesFor, draftFor, emptyDrafts, forgetDraft, kindFor, termFor, termTextFor, withChoice, withKind, withOwnWords, withTerm } from '../lib/memory-review.ts';
 import type { MemoryDrafts } from '../lib/memory-review.ts';
 import { useAgentFile } from '../hooks/use-agent-file.ts';
 import type { MemoryController } from '../hooks/use-memory.ts';
 import type { MemoryCandidate } from '../../../shared/memory-queue-doc.ts';
+import { memoryFileName } from '../../../shared/memory-file-name.ts';
 
 export type MemoryPageProps = {
   // Owned by the shell, so the count in the sidebar and this list are the same list.
@@ -59,15 +60,17 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory }) => {
 
   const items: readonly MemoryReviewItem[] = memory.pending.map((candidate) => {
     const draft = draftFor(drafts, candidate);
+    // The meaning box shows the wording picked, Marcel's suggestion to begin with, or what the
+    // user wrote over it; the other wordings Marcel offered wait underneath.
+    const meaning = draft.selected ?? draft.own;
     return {
       id: candidate.id,
       term: termTextFor(drafts, candidate),
-      kind: candidate.kind,
+      kind: kindFor(drafts, candidate),
       quote: candidate.quote,
       ...(candidate.enrichment === undefined ? {} : { enrichment: candidate.enrichment }),
-      choices: choicesFor(candidate),
-      ...(draft.selected === undefined ? {} : { selected: draft.selected }),
-      own: draft.own,
+      meaning,
+      alternatives: choicesFor(candidate).filter((choice) => choice !== meaning),
       canRemember: answerFor(draft) !== undefined && termFor(drafts, candidate) !== undefined,
       isSaving: memory.savingId === candidate.id,
     };
@@ -85,10 +88,17 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory }) => {
     setDrafts((current) => withTerm(current, candidate, text));
   };
 
-  const changeOwn = (id: string, text: string): void => {
+  const changeMeaning = (id: string, text: string): void => {
     const candidate = candidateFor(id);
     if (candidate === undefined) return;
     setDrafts((current) => withOwnWords(current, candidate, text));
+  };
+
+  const changeKind = (id: string, value: string): void => {
+    const candidate = candidateFor(id);
+    const kind = memoryFileName(value);
+    if (candidate === undefined || !kind.ok) return;
+    setDrafts((current) => withKind(current, candidate, kind.value));
   };
 
   const remember = (id: string): void => {
@@ -101,7 +111,7 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory }) => {
     // under no word at all.
     if (detail === undefined || term === undefined) return;
     setDrafts((current) => forgetDraft(current, id));
-    memory.remember(id, detail, term);
+    memory.remember(id, detail, term, kindFor(drafts, candidate));
   };
 
   const skip = (id: string): void => {
@@ -109,15 +119,21 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory }) => {
     memory.skip(id);
   };
 
+  const skipped = memory.lastSkipped;
+
   return (
     <SheetLayout nav={<SheetNav groups={navGroups} activeId={section} onSelect={setSection} />}>
       {section === 'waiting' && (
         <MemoryReviewPanel
           items={items}
           {...(memory.error === undefined ? {} : { error: memory.error })}
+          {...(skipped === undefined
+            ? {}
+            : { notice: { message: `Skipped ${skipped.term}. Marcel will not ask about it again.`, action: { label: 'Undo', onAction: () => memory.restore(skipped) } } })}
           onChoose={choose}
-          onChangeOwn={changeOwn}
+          onChangeMeaning={changeMeaning}
           onChangeTerm={changeTerm}
+          onChangeKind={changeKind}
           onRemember={remember}
           onSkip={skip}
         />
