@@ -16,13 +16,17 @@ A2. [x] Hook `rememberAll` (one answer at a time, stops at the first refusal); r
         Remember all + inline confirm; row "Heard in" link; page + app wiring.
 A3. [x] Verified in the built app on a scratch folder; review; commits on a yes.
         DONE: 6/6 in-app checks; one commit, pushed.
-B1. [ ] Lib `autosave.ts`: the draft to keep after a save lands (the saved text, unless more
+B1. [x] Lib `autosave.ts`: the draft to keep after a save lands (the saved text, unless more
         was typed meanwhile). Done: new test file, 100% tier.
-B2. [ ] Hook autosave (debounce, flush on leaving, remount only on reload or rebuild);
+B2. [x] Hook autosave (debounce, flush on leaving, remount only on reload or rebuild);
         DocumentEditor auto variant (status instead of Save and Cancel); nav regroup and
         titles. Done: lint 0/0, typecheck.
-B3. [ ] Verified in the built app: typed text lands on disk without a click, including when
+B3. [x] Verified in the built app: typed text lands on disk without a click, including when
         the sheet closes right after typing; review; commits on a yes.
+        DONE: 10/10 checks. Crepe reports a change 200 ms late and cancels the report when
+        destroyed, so the editor now hands its final text over as it closes; the review then
+        caught that a replaced editor (a rebuild, the first read) would save its older text
+        over the newer one, fixed with a revision check in lib/autosave (3 tests).
 C1. [ ] Lesson appended; committed on a yes.
 
 ---

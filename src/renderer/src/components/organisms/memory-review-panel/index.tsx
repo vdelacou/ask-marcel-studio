@@ -56,9 +56,10 @@ export const MemoryReviewPanel: FC<MemoryReviewPanelProps> = ({
   <section className="flex flex-col gap-y-6">
     <header className="flex items-start justify-between gap-x-4">
       <div className="flex flex-col gap-y-1">
-        <h2 className="text-lg font-semibold tracking-tight text-ink">What Marcel noticed</h2>
+        <h2 className="text-lg font-semibold tracking-tight text-ink">To review</h2>
         <p className="text-sm text-ink-muted">
-          Words and names it did not know, waiting here until you say what they mean. Nothing is remembered until you say so, and nothing here interrupts you while you work.
+          Words and names Marcel noticed in your conversations and did not know, waiting here until you say what they mean. Nothing is remembered until you say so, and nothing here
+          interrupts you while you work.
         </p>
       </div>
       {bulk !== undefined && (

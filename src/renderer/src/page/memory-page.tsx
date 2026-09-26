@@ -16,7 +16,6 @@ import type { MemoryReviewItem } from '../components/organisms/memory-review-pan
 import { AboutYouPanel } from '../components/organisms/about-you-panel/index.tsx';
 import { SignaturePanel } from '../components/organisms/signature-panel/index.tsx';
 import { VoicePanel } from '../components/organisms/voice-panel/index.tsx';
-import { DocumentEditor } from '../components/organisms/document-editor/index.tsx';
 import { SheetLayout } from '../components/organisms/sheet-layout/index.tsx';
 import { SheetNav } from '../components/organisms/sheet-nav/index.tsx';
 import type { SheetNavGroup } from '../components/organisms/sheet-nav/index.tsx';
@@ -25,6 +24,10 @@ import { MemoryListSection } from './memory-list-section.tsx';
 import { answerOf, answersFor, choicesFor, draftFor, emptyDrafts, forgetDraft, kindFor, termTextFor, withChoice, withKind, withOwnWords, withTerm } from '../lib/memory-review.ts';
 import type { MemoryDrafts } from '../lib/memory-review.ts';
 import { useAgentFile } from '../hooks/use-agent-file.ts';
+import { useAutosavedFile } from '../hooks/use-autosaved-file.ts';
+import type { AutosavedFile } from '../hooks/use-autosaved-file.ts';
+import { AutosavedDocument } from '../components/organisms/autosaved-document/index.tsx';
+import type { AutosavedDocumentProps } from '../components/organisms/autosaved-document/index.tsx';
 import type { MemoryController } from '../hooks/use-memory.ts';
 import type { MemoryCandidate } from '../../../shared/memory-queue-doc.ts';
 import { memoryFileName } from '../../../shared/memory-file-name.ts';
@@ -33,6 +36,13 @@ import { memoryFileName } from '../../../shared/memory-file-name.ts';
 const stayingNote = (count: number): string => {
   if (count === 0) return '';
   return count === 1 ? ' One without a meaning stays here.' : ` ${String(count)} without a meaning stay here.`;
+};
+
+// Where the saving of a document typed into is, in words.
+const statusOf = (file: AutosavedFile): Pick<AutosavedDocumentProps, 'status' | 'tone'> => {
+  if (file.status.kind === 'error') return { status: file.status.message, tone: 'error' };
+  if (file.status.kind === 'saving') return { status: 'Saving…', tone: 'quiet' };
+  return { status: file.status.kind === 'saved' ? 'Saved' : 'Changes save as you type.', tone: 'quiet' };
 };
 
 export type MemoryPageProps = {
@@ -47,21 +57,28 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory, conversations, onOpenC
   const [section, setSection] = useState('waiting');
   const [drafts, setDrafts] = useState<MemoryDrafts>(emptyDrafts);
   const [isConfirmingAll, setIsConfirmingAll] = useState(false);
-  const about = useAgentFile('global-context');
+  const about = useAutosavedFile('global-context');
   const signature = useAgentFile('signature');
-  const voice = useAgentFile('voice-profile');
+  const voice = useAutosavedFile('voice-profile');
   const [isEditingSignature, setIsEditingSignature] = useState(false);
 
+  // Three groups: what waits for an answer, what Marcel knows about the world around the user,
+  // and what it knows about the user themselves.
   const navGroups: readonly SheetNavGroup[] = [
-    { heading: 'Waiting for you', items: [{ id: 'waiting', label: 'What Marcel noticed', icon: 'memory', badge: memory.pending.length }] },
+    { heading: 'Waiting for you', items: [{ id: 'waiting', label: 'To review', icon: 'memory', badge: memory.pending.length }] },
     {
       heading: 'What Marcel knows',
       items: [
         { id: 'words', label: 'Words we use', icon: 'memory' },
         { id: 'people', label: 'People I work with', icon: 'agents' },
-        { id: 'about', label: 'About you', icon: 'memory' },
-        { id: 'signature', label: 'Email signature', icon: 'signature' },
+      ],
+    },
+    {
+      heading: 'About you',
+      items: [
+        { id: 'about', label: 'Who you are', icon: 'memory' },
         { id: 'voice', label: 'Writing voice', icon: 'voice' },
+        { id: 'signature', label: 'Email signature', icon: 'signature' },
       ],
     },
   ];
@@ -179,17 +196,19 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory, conversations, onOpenC
 
       {section === 'about' && (
         <AboutYouPanel>
-          <DocumentEditor
-            mode="rich"
-            richNode={<MarkdownEditor key={about.stored} defaultValue={about.draft} onChange={about.setDraft} />}
-            markdownValue={about.draft}
-            emptyHint="Nothing yet. Tell Marcel who you are, what you are responsible for, and anything it should always keep in mind."
-            isSaving={about.isSaving}
-            isDirty={about.isDirty}
-            {...(about.notice === undefined ? {} : { notice: about.notice })}
-            onChangeMarkdown={about.setDraft}
-            onSave={about.save}
-            onCancel={about.cancel}
+          <AutosavedDocument
+            editor={
+              <MarkdownEditor
+                key={`about-${String(about.revision)}`}
+                defaultValue={about.draft}
+                onChange={about.setDraft}
+                onLeave={(text) => about.saveOnLeave(text, about.revision)}
+              />
+            }
+            {...(about.draft.trim().length === 0
+              ? { emptyHint: 'Nothing yet. Tell Marcel who you are, what you are responsible for, and anything it should always keep in mind.' }
+              : {})}
+            {...statusOf(about)}
           />
         </AboutYouPanel>
       )}
@@ -218,17 +237,17 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory, conversations, onOpenC
 
       {section === 'voice' && (
         <VoicePanel isRegenerating={voice.isRegenerating} canRegenerate={voice.canRegenerate} onRegenerate={voice.regenerate}>
-          <DocumentEditor
-            mode="rich"
-            richNode={<MarkdownEditor key={voice.stored} defaultValue={voice.draft} onChange={voice.setDraft} />}
-            markdownValue={voice.draft}
-            emptyHint="Nothing yet. Marcel writes one from your sent mail the first time it can, or you can write your own."
-            isSaving={voice.isSaving}
-            isDirty={voice.isDirty}
-            {...(voice.notice === undefined ? {} : { notice: voice.notice })}
-            onChangeMarkdown={voice.setDraft}
-            onSave={voice.save}
-            onCancel={voice.cancel}
+          <AutosavedDocument
+            editor={
+              <MarkdownEditor
+                key={`voice-${String(voice.revision)}`}
+                defaultValue={voice.draft}
+                onChange={voice.setDraft}
+                onLeave={(text) => voice.saveOnLeave(text, voice.revision)}
+              />
+            }
+            {...(voice.draft.trim().length === 0 ? { emptyHint: 'Nothing yet. Marcel writes one from your sent mail the first time it can, or you can write your own.' } : {})}
+            {...statusOf(voice)}
           />
         </VoicePanel>
       )}

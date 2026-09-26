@@ -1,6 +1,7 @@
 /*
- * One of the two documents the user writes about themselves (their signature, their
- * writing voice): load it, edit it, save it, or ask the app to rebuild it.
+ * A document the user edits and then saves on purpose (their email signature): load it,
+ * edit it, save it, or ask the app to rebuild it. Who they are and how they write save as
+ * they are typed instead, through use-autosaved-file.
  *
  * Wiring only. The panels decide how it is edited; this owns the IPC and the draft.
  */

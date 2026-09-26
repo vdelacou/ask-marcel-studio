@@ -9,8 +9,8 @@ export type AboutYouPanelProps = {
 export const AboutYouPanel: FC<AboutYouPanelProps> = ({ children }) => (
   <section className="flex flex-col gap-y-4">
     <header className="flex flex-col gap-y-1">
-      <h2 className="text-lg font-semibold tracking-tight text-ink">About you</h2>
-      <p className="text-sm text-ink-muted">Who you are and what matters to you. Marcel reads this at the start of every conversation, so it does not have to be told twice.</p>
+      <h2 className="text-lg font-semibold tracking-tight text-ink">Who you are</h2>
+      <p className="text-sm text-ink-muted">What you do and what matters to you. Marcel reads this at the start of every conversation, so it does not have to be told twice.</p>
     </header>
     {children}
   </section>
