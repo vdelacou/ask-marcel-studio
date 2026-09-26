@@ -31,7 +31,7 @@ export const MemoryListSection: FC<MemoryListSectionProps> = ({ list }) => {
   const [undo, setUndo] = useState<MemoryListUndo | undefined>(undefined);
   const [failure, setFailure] = useState<string | undefined>(undefined);
   const [isSaving, setIsSaving] = useState(false);
-  const [asText, setAsText] = useState<{ readonly note: MemoryFileName; readonly text: string } | undefined>(undefined);
+  const [asText, setAsText] = useState<{ readonly note: MemoryFileName; readonly text: string; readonly opened: string } | undefined>(undefined);
 
   const copy = COPY[list];
   const rows = rowsOf(memory.notes, list);
@@ -108,13 +108,15 @@ export const MemoryListSection: FC<MemoryListSectionProps> = ({ list }) => {
     if (note === undefined) return;
     setDraft(undefined);
     setFailure(undefined);
-    setAsText({ note, text: memory.notes[note] });
+    setAsText({ note, text: memory.notes[note], opened: memory.notes[note] });
   };
 
-  const saveText = (note: MemoryFileName, text: string): void => {
+  // A refusal, the note having changed since it was opened, leaves the text on screen so
+  // nothing typed is lost.
+  const saveText = (note: MemoryFileName, text: string, opened: string): void => {
     setIsSaving(true);
     void (async (): Promise<void> => {
-      const saved = await memory.save(note, text);
+      const saved = await memory.save(note, text, opened);
       setIsSaving(false);
       if (saved.ok) return setAsText(undefined);
       setFailure(saved.error.message);
@@ -126,16 +128,16 @@ export const MemoryListSection: FC<MemoryListSectionProps> = ({ list }) => {
   if (!memory.isLoaded) return null;
 
   if (asText !== undefined) {
-    const { note, text } = asText;
+    const { note, text, opened } = asText;
     return (
       <AsText
         note={note}
         text={text}
-        stored={memory.notes[note]}
+        opened={opened}
         isSaving={isSaving}
         failure={failure}
-        onChange={(next) => setAsText({ note, text: next })}
-        onSave={() => saveText(note, text)}
+        onChange={(next) => setAsText({ note, text: next, opened })}
+        onSave={() => saveText(note, text, opened)}
         onClose={() => setAsText(undefined)}
       />
     );

@@ -26,7 +26,10 @@ Out of scope: Remember all, a link to the source conversation, keyboard triage, 
 6. [x] Verified in the built app on a scratch folder with a synthetic queue.
        DONE: 16/16 checks, from a chip filling the meaning to a text save refused over a note
        changed underneath; the scratch folder is deleted on exit.
-7. [ ] Review, then commits proposed module-before-consumer, each on a yes.
+7. [x] Review, then commits proposed module-before-consumer, each on a yes.
+       DONE: 4 commits (3b2704a..this one), each through the 8-gate hook, pushed.
+       Left for later: Remember all, a link to the source conversation, keyboard triage, a way
+       to clear old skips, and the nav label that wraps beside its count.
 
 ---
 

@@ -187,7 +187,9 @@ export const editorOf = (copy: MemoryListCopy, list: MemoryListKind, draft: Memo
 export type AsTextProps = {
   note: MemoryFileName;
   text: string;
-  stored: string;
+  // The note as the view opened it: what the text is measured against, and what the save
+  // promises main it is replacing.
+  opened: string;
   isSaving: boolean;
   failure: string | undefined;
   onChange: (text: string) => void;
@@ -195,7 +197,7 @@ export type AsTextProps = {
   onClose: () => void;
 };
 
-export const AsText: FC<AsTextProps> = ({ note, text, stored, isSaving, failure, onChange, onSave, onClose }) => (
+export const AsText: FC<AsTextProps> = ({ note, text, opened, isSaving, failure, onChange, onSave, onClose }) => (
   <NotePanel
     title={AS_TEXT[note].title}
     description={`One entry per line, written like ${AS_TEXT[note].example}. A line in any other shape is kept as it is, and Marcel still reads it.`}
@@ -204,7 +206,7 @@ export const AsText: FC<AsTextProps> = ({ note, text, stored, isSaving, failure,
       mode="markdown"
       markdownValue={text}
       isSaving={isSaving}
-      isDirty={text !== stored}
+      isDirty={text !== opened}
       {...(failure === undefined ? {} : { notice: { tone: 'error' as const, message: failure } })}
       onChangeMarkdown={onChange}
       onSave={onSave}
