@@ -3,16 +3,16 @@
  *
  * Two kinds of thing live here, which is why the menu has two groups: what it noticed and
  * has not been told about yet, and what it has been told and reads before every message
- * (the three notes, who the user is, their signature, how they write). Settings is for
- * configuring the app; this is the app's picture of the user, and it is theirs to edit.
+ * (the words and the people, who the user is, their signature, how they write). Settings is
+ * for configuring the app; this is the app's picture of the user, and it is theirs to edit.
  *
- * Owns the state (rule 21 keeps it out of the design system) and hands plain props down.
+ * Owns the state (rule 21 keeps it out of the design system) and hands plain props down. The
+ * two lists own theirs in memory-list-section, since only one is ever on screen.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { FC } from 'react';
 import { MemoryReviewPanel } from '../components/organisms/memory-review-panel/index.tsx';
 import type { MemoryReviewItem } from '../components/organisms/memory-review-panel/index.tsx';
-import { NotePanel } from '../components/organisms/note-panel/index.tsx';
 import { AboutYouPanel } from '../components/organisms/about-you-panel/index.tsx';
 import { SignaturePanel } from '../components/organisms/signature-panel/index.tsx';
 import { VoicePanel } from '../components/organisms/voice-panel/index.tsx';
@@ -21,35 +21,12 @@ import { SheetLayout } from '../components/organisms/sheet-layout/index.tsx';
 import { SheetNav } from '../components/organisms/sheet-nav/index.tsx';
 import type { SheetNavGroup } from '../components/organisms/sheet-nav/index.tsx';
 import { MarkdownEditor } from '../render/markdown-editor.tsx';
+import { MemoryListSection } from './memory-list-section.tsx';
 import { answerFor, choicesFor, draftFor, emptyDrafts, forgetDraft, termFor, termTextFor, withChoice, withOwnWords, withTerm } from '../lib/memory-review.ts';
 import type { MemoryDrafts } from '../lib/memory-review.ts';
 import { useAgentFile } from '../hooks/use-agent-file.ts';
 import type { MemoryController } from '../hooks/use-memory.ts';
 import type { MemoryCandidate } from '../../../shared/memory-queue-doc.ts';
-import type { MemoryFileName } from '../../../shared/memory-file-name.ts';
-
-// The three notes, and the words that explain each one. Kept here rather than in the panel
-// so the menu row and the heading cannot drift apart.
-const NOTES: Record<MemoryFileName, { readonly label: string; readonly title: string; readonly description: string; readonly emptyHint: string }> = {
-  jargon: {
-    label: 'Words we use',
-    title: 'Words we use',
-    description: 'The words your organisation uses that nobody outside it would know. Marcel reads these before every message.',
-    emptyHint: 'Nothing yet. Marcel adds to this as it comes across words you use, and always asks first.',
-  },
-  team: {
-    label: 'My team',
-    title: 'My team',
-    description: 'Who works with you, and what each of them does. Enough that Marcel knows who is meant when you use a first name.',
-    emptyHint: 'Nothing yet. Marcel adds to this as it works out who is who, and always asks first.',
-  },
-  people: {
-    label: 'People I work with',
-    title: 'People I work with',
-    description: 'People outside your team who come up often: their role, and where they fit.',
-    emptyHint: 'Nothing yet. Marcel adds to this as names come up, and always asks first.',
-  },
-};
 
 export type MemoryPageProps = {
   // Owned by the shell, so the count in the sidebar and this list are the same list.
@@ -59,46 +36,18 @@ export type MemoryPageProps = {
 export const MemoryPage: FC<MemoryPageProps> = ({ memory }) => {
   const [section, setSection] = useState('waiting');
   const [drafts, setDrafts] = useState<MemoryDrafts>(emptyDrafts);
-  const [noteText, setNoteText] = useState('');
-  const [noteStored, setNoteStored] = useState('');
-  const [noteSaving, setNoteSaving] = useState(false);
   const about = useAgentFile('global-context');
   const signature = useAgentFile('signature');
   const voice = useAgentFile('voice-profile');
   const [isEditingSignature, setIsEditingSignature] = useState(false);
-
-  // Which note is on screen, when one is. The section id doubles as the file name for the
-  // three notes, so nothing has to map between them.
-  const note = section === 'jargon' || section === 'team' || section === 'people' ? section : undefined;
-
-  useEffect(() => {
-    if (note === undefined) return;
-    void (async (): Promise<void> => {
-      const read = await studio.memory.read(note);
-      const text = read.ok ? read.value : '';
-      setNoteStored(text);
-      setNoteText(text);
-    })();
-  }, [note]);
-
-  const saveNote = useCallback((): void => {
-    if (note === undefined) return;
-    setNoteSaving(true);
-    void (async (): Promise<void> => {
-      await studio.memory.write({ name: note, contents: noteText });
-      setNoteSaving(false);
-      setNoteStored(noteText);
-    })();
-  }, [note, noteText]);
 
   const navGroups: readonly SheetNavGroup[] = [
     { heading: 'Waiting for you', items: [{ id: 'waiting', label: 'What Marcel noticed', icon: 'memory', badge: memory.pending.length }] },
     {
       heading: 'What Marcel knows',
       items: [
-        { id: 'jargon', label: NOTES.jargon.label, icon: 'memory' },
-        { id: 'team', label: NOTES.team.label, icon: 'agents' },
-        { id: 'people', label: NOTES.people.label, icon: 'agents' },
+        { id: 'words', label: 'Words we use', icon: 'memory' },
+        { id: 'people', label: 'People I work with', icon: 'agents' },
         { id: 'about', label: 'About you', icon: 'memory' },
         { id: 'signature', label: 'Email signature', icon: 'signature' },
         { id: 'voice', label: 'Writing voice', icon: 'voice' },
@@ -174,23 +123,9 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory }) => {
         />
       )}
 
-      {note !== undefined && (
-        <NotePanel title={NOTES[note].title} description={NOTES[note].description}>
-          <DocumentEditor
-            mode="rich"
-            // Keyed on the stored text so the editor reloads when the note is read back, and
-            // on the note so switching sections does not carry the last one's contents over.
-            richNode={<MarkdownEditor key={`${note}-${noteStored}`} defaultValue={noteText} onChange={setNoteText} />}
-            markdownValue={noteText}
-            emptyHint={NOTES[note].emptyHint}
-            isSaving={noteSaving}
-            isDirty={noteText !== noteStored}
-            onChangeMarkdown={setNoteText}
-            onSave={saveNote}
-            onCancel={() => setNoteText(noteStored)}
-          />
-        </NotePanel>
-      )}
+      {section === 'words' && <MemoryListSection list="words" />}
+
+      {section === 'people' && <MemoryListSection list="people" />}
 
       {section === 'about' && (
         <AboutYouPanel>

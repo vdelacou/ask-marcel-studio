@@ -164,9 +164,11 @@ type MemoryStateDoc = { conversations: Record<string,           // how far each 
 
 ## IPC contract
 
-Invoke channels (all payloads Result-shaped): `conversations:list/create/get/delete/rename/open-workspace`, `chat:send {conversationId,text}`, `chat:cancel`, `settings:get/save`, `skills:list/add/remove`, `office:status`, `office:login`. **(Post-v1 additions, the full list lives in `shared/ipc-contract.ts`: `memory:pending/resolve/read/write`, plus agents, agent-file, models:test, office:commands and update:status.)**
+Invoke channels (all payloads Result-shaped): `conversations:list/create/get/delete/rename/open-workspace`, `chat:send {conversationId,text}`, `chat:cancel`, `settings:get/save`, `skills:list/add/remove`, `office:status`, `office:login`. **(Post-v1 additions, the full list lives in `shared/ipc-contract.ts`: `memory:pending/resolve/read/write/edit`, plus agents, agent-file, models:test, office:commands and update:status.)**
 
 `memory:resolve` takes `{ id, action: 'accept', detail, term? }` or `{ id, action: 'reject' }`. `term` is what the user made of the word Marcel proposed: it hears a term inside a sentence and sometimes hears it slightly wrong, so the review list lets them correct it before it is filed. Absent or blank files the term as proposed.
+
+`memory:edit` changes one entry of one note: `add`, `update` (with the `previous` entry as it was read), `remove`, `restore` (an undone removal, back on its line `at`) or `move` (a person between `team` and `people`). A change names the exact entry the window showed, so one that no longer matches is refused as `not-found` rather than written over, and main applies note changes one at a time. It answers with all three notes.
 
 Stream events, main to renderer on `chat:event`:
 
@@ -236,7 +238,7 @@ The surface. Nothing appears on its own: the app used to open a confirm dialog o
 Two groups in its left menu:
 
 - **Waiting for you** — one row per candidate: the word (editable), where it was heard, the wordings Marcel offers as radios, a box for the user's own, then Remember it / Skip. Remember is refused until there is both a word and a meaning. Answering returns the items still waiting, so the row leaves the list without a second read.
-- **What Marcel knows** — the three notes, then About you, Email signature and Writing voice. These moved out of Settings, which keeps what configures the app (models, skills, agents, the Microsoft 365 connection).
+- **What Marcel knows** — two lists over the three notes, then About you, Email signature and Writing voice. Words we use is the `jargon` note; People I work with shows `team` and `people` as one list, with a chip on each person saying which note they are in. Both are edited an entry at a time: in place, deleted with an Undo, added, filtered, with a hint when the same entry appears twice, and an Edit as text link per note for pasting many at once. These moved out of Settings, which keeps what configures the app (models, skills, agents, the Microsoft 365 connection).
 
 ## Office CLI integration
 

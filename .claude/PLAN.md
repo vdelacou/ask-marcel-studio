@@ -32,7 +32,12 @@ document autosave) are out of scope.
        other, duplicate banner, edit as text, and document scrollHeight == clientHeight.
        DONE: 28/28 checks on a scratch userData (never the real one); caught Escape in the
        editor also closing the whole sheet, fixed with stopPropagation.
-7. [ ] Commits proposed module-before-consumer, each <= 10 files / 300 lines, each on a yes.
+7. [x] Commits proposed module-before-consumer, each <= 10 files / 300 lines, each on a yes.
+       DONE: 7 commits, each through the 8-gate hook (5f04bd7..this one). The review split the
+       section into memory-list-section + memory-list-view to fit the size gate, and fixed the
+       chip's accessible name, a refused save losing fresh typing, the filtered-empty copy, and
+       the empty-state flash before the first read. Deferred: a versioned `memory:write` for
+       Edit as text (rule 31; unreachable from one window today).
 
 ---
 
