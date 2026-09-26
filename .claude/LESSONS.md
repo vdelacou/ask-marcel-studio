@@ -766,3 +766,44 @@ a copy of the user's identity.
 Rule for next time: for any in-app check that writes, run on a scratch `--user-data-dir` seeded
 with the account pointer and quick context, never on the real folder; afterwards check that no
 process still names the scratch folder, and remove the folder.
+
+## [gotcha] 2026-09-26 | a scratch --user-data-dir cannot be deleted the moment the app closes
+
+The in-app checks drive the built app on a scratch `--user-data-dir` and delete it at the end,
+since it holds a copy of the account pointer and quick context. `fs.rmSync(dir, { recursive:
+true })` straight after `await app.close()` failed with ENOTEMPTY, and `pgrep` on the folder
+still counted four processes at that instant: `close()` resolves before Electron's helper
+processes finish writing (Local Storage, logs), so the tree was still growing under the delete.
+A few seconds later the processes were gone and the delete succeeded.
+
+Rule for next time: after `app.close()`, wait about two seconds, then delete with
+`{ recursive: true, force: true, maxRetries: 10, retryDelay: 300 }`, from a
+`process.on('exit')` hook so a failed step still cleans up; then check that no process names
+the folder.
+
+## [gotcha] 2026-09-26 | Crepe drops the last keystrokes when an editor closes
+
+Milkdown's listener plugin reports `markdownUpdated` through a 200 ms lodash debounce, and its
+view's `destroy` calls `debouncedHandler.cancel()`
+(`node_modules/@milkdown/plugin-listener/lib/index.js`). So anything typed in the 200 ms before a
+`MarkdownEditor` unmounts never reaches `onChange`: with autosave, typing into Writing voice and
+pressing Escape at once left the file unchanged, and the old Save button had the same blind
+spot. The fix is in `render/markdown-editor.tsx`: an optional `onLeave` prop handed
+`crepe.getMarkdown()` in the effect's cleanup, once `crepe.create()` has resolved.
+
+Rule for next time: an editor built on Milkdown that must not lose text has to read the
+document itself as it closes. Its change events are late by design and cancelled on destroy.
+
+## [gotcha] 2026-09-26 | a replaced editor's close-time save writes the older text over the newer
+
+The same hand-over bit back. The rich editor is remounted by key when its document is replaced
+(the first read landing, "Rebuild from my sent mail"), and the leaving instance's cleanup hands
+over ITS text, which is the old version. Saved, that would undo a rebuild the moment it
+landed, or write an empty document over the real one when the first read beat the user's click.
+No in-app check could see it: a rebuild needs a model, and the race needs a click within
+milliseconds. `shouldSaveOnLeave` in `lib/autosave.ts` saves a closing editor's text only when
+the revision it was showing is still the current one, the file has been read, and the text
+differs; three tests pin it.
+
+Rule for next time: any "save on unmount" beside a key-based remount must know which version
+the unmounting instance was showing, and drop its text when a newer one replaced it.

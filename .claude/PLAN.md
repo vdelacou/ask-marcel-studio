@@ -31,7 +31,8 @@ D1. [x] Clear all memories (asked mid-run, scope "Everything on Memory"): the th
         queue with its skipped words, and the three documents emptied in one call; the reading
         progress kept. A confirm that names everything and says the voice and signature come
         back from the mailbox on the next launch. DONE: 3 tests, 8/8 in-app checks.
-C1. [ ] Lesson appended; committed on a yes.
+C1. [x] Lesson appended; committed on a yes. DONE: three gotchas (scratch folder delete race,
+        Crepe dropping the last keystrokes, a replaced editor's close-time save).
 
 ---
 
