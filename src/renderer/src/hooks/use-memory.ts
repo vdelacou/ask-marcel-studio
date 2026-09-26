@@ -29,6 +29,8 @@ export type MemoryController = {
   readonly rememberAll: (answers: readonly MemoryAnswer[]) => void;
   // True while Remember all is working through the list: every row waits.
   readonly isAnsweringAll: boolean;
+  // After everything was cleared, an earlier skip is no longer something to take back.
+  readonly forgetSkip: () => void;
   readonly dismissError: () => void;
 };
 
@@ -113,6 +115,8 @@ export const useMemory = (): MemoryController => {
     })();
   }, []);
 
+  const forgetSkip = useCallback((): void => setLastSkipped(undefined), []);
+
   const dismissError = useCallback((): void => setError(undefined), []);
 
   return {
@@ -125,6 +129,7 @@ export const useMemory = (): MemoryController => {
     restore,
     rememberAll,
     isAnsweringAll,
+    forgetSkip,
     dismissError,
   };
 };

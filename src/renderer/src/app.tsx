@@ -51,6 +51,12 @@ export const App: FC = () => {
   // The review surface. Nothing opens it but the user: what Marcel noticed waits in a list
   // until they come to it.
   const [memoryOpen, setMemoryOpen] = useState(false);
+  // Clear all memories: the question asked first, the clearing itself, what went wrong, and the
+  // key that reopens Memory on what is left once it is done.
+  const [isClearingMemory, setIsClearingMemory] = useState(false);
+  const [isMemoryBusy, setIsMemoryBusy] = useState(false);
+  const [memoryError, setMemoryError] = useState<string | undefined>(undefined);
+  const [memoryKey, setMemoryKey] = useState(0);
   const [boot, setBoot] = useState<Boot>({ step: 'loading' });
   // Same read guard the hook documents: StrictMode double-invokes the effect and
   // closing settings re-runs bootstrap.
@@ -106,6 +112,7 @@ export const App: FC = () => {
   const office = useOfficeHealth();
   const identity = useUserIdentity();
   const memory = useMemory();
+  const { forgetSkip } = memory;
   const [officeOpen, setOfficeOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   // The conversation header's actions menu. Declared here, above the Escape handler, so that
@@ -163,12 +170,26 @@ export const App: FC = () => {
       if (headerMenuOpen) return setHeaderMenuOpen(false);
       if (officeOpen) return setOfficeOpen(false);
       if (settingsOpen) return closeSettings();
+      if (isClearingMemory) return setIsClearingMemory(false);
       if (memoryOpen) return setMemoryOpen(false);
       return undefined;
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [confirmingDeleteId, cancelDelete, menuOpenId, toggleRowMenu, headerMenuOpen, officeOpen, settingsOpen, closeSettings, memoryOpen]);
+  }, [confirmingDeleteId, cancelDelete, menuOpenId, toggleRowMenu, headerMenuOpen, officeOpen, settingsOpen, closeSettings, isClearingMemory, memoryOpen]);
+
+  // Memory reopens on whatever is left either way: a failure may still have cleared the rest.
+  const clearAllMemories = useCallback((): void => {
+    setIsMemoryBusy(true);
+    void (async (): Promise<void> => {
+      const cleared = await studio.memory.clearAll();
+      setIsMemoryBusy(false);
+      setIsClearingMemory(false);
+      setMemoryKey((key) => key + 1);
+      if (!cleared.ok) return setMemoryError(cleared.error.message);
+      return forgetSkip();
+    })();
+  }, [forgetSkip]);
 
   const isReady = boot.step === 'ready';
   // Only worth a picker when there is a choice to make.
@@ -351,12 +372,14 @@ export const App: FC = () => {
       {memoryOpen && (
         <OverlaySheet label="Memory" onClose={() => setMemoryOpen(false)}>
           <MemoryPage
+            key={memoryKey}
             memory={memory}
             conversations={list.conversations}
             onOpenConversation={(id) => {
               setMemoryOpen(false);
               conversations.select(id);
             }}
+            onClearAll={() => setIsClearingMemory(true)}
           />
         </OverlaySheet>
       )}
@@ -369,7 +392,18 @@ export const App: FC = () => {
           onCancel={conversations.cancelDelete}
         />
       )}
+      {isClearingMemory && (
+        <ConfirmDialog
+          title="Clear all memories?"
+          body="This clears everything on Memory: your words and people, the suggestions waiting and the words you skipped, and Who you are, Writing voice and your email signature. Your writing voice and signature come back from your mailbox the next time the app starts, as on a first launch. This can't be undone."
+          confirmLabel="Clear everything"
+          isBusy={isMemoryBusy}
+          onConfirm={clearAllMemories}
+          onCancel={() => setIsClearingMemory(false)}
+        />
+      )}
       {conversations.error !== undefined && <Toast message={conversations.error} onDismiss={conversations.dismissError} />}
+      {memoryError !== undefined && <Toast message={memoryError} onDismiss={() => setMemoryError(undefined)} />}
     </>
   );
 };

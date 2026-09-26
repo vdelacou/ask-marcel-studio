@@ -27,6 +27,10 @@ B3. [x] Verified in the built app: typed text lands on disk without a click, inc
         destroyed, so the editor now hands its final text over as it closes; the review then
         caught that a replaced editor (a rebuild, the first read) would save its older text
         over the newer one, fixed with a revision check in lib/autosave (3 tests).
+D1. [x] Clear all memories (asked mid-run, scope "Everything on Memory"): the three notes, the
+        queue with its skipped words, and the three documents emptied in one call; the reading
+        progress kept. A confirm that names everything and says the voice and signature come
+        back from the mailbox on the next launch. DONE: 3 tests, 8/8 in-app checks.
 C1. [ ] Lesson appended; committed on a yes.
 
 ---

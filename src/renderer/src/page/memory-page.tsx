@@ -17,6 +17,7 @@ import { AboutYouPanel } from '../components/organisms/about-you-panel/index.tsx
 import { SignaturePanel } from '../components/organisms/signature-panel/index.tsx';
 import { VoicePanel } from '../components/organisms/voice-panel/index.tsx';
 import { SheetLayout } from '../components/organisms/sheet-layout/index.tsx';
+import { Button } from '../components/atoms/button/index.tsx';
 import { SheetNav } from '../components/organisms/sheet-nav/index.tsx';
 import type { SheetNavGroup } from '../components/organisms/sheet-nav/index.tsx';
 import { MarkdownEditor } from '../render/markdown-editor.tsx';
@@ -51,9 +52,11 @@ export type MemoryPageProps = {
   // To name the conversation a suggestion was heard in, and to open it.
   conversations: readonly { readonly id: string; readonly title: string }[];
   onOpenConversation: (conversationId: string) => void;
+  // Asks the shell to clear everything on this page, after its own question.
+  onClearAll: () => void;
 };
 
-export const MemoryPage: FC<MemoryPageProps> = ({ memory, conversations, onOpenConversation }) => {
+export const MemoryPage: FC<MemoryPageProps> = ({ memory, conversations, onOpenConversation, onClearAll }) => {
   const [section, setSection] = useState('waiting');
   const [drafts, setDrafts] = useState<MemoryDrafts>(emptyDrafts);
   const [isConfirmingAll, setIsConfirmingAll] = useState(false);
@@ -170,7 +173,14 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory, conversations, onOpenC
   const skipped = memory.lastSkipped;
 
   return (
-    <SheetLayout nav={<SheetNav groups={navGroups} activeId={section} onSelect={setSection} />}>
+    <SheetLayout
+      nav={<SheetNav groups={navGroups} activeId={section} onSelect={setSection} />}
+      footer={
+        <Button variant="danger" onClick={onClearAll}>
+          Clear all memories
+        </Button>
+      }
+    >
       {section === 'waiting' && (
         <MemoryReviewPanel
           items={items}
