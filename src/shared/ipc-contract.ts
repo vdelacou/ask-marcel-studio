@@ -61,6 +61,7 @@ export const CHANNEL = {
   memoryRead: 'memory:read',
   memoryWrite: 'memory:write',
   memoryEdit: 'memory:edit',
+  memoryClearAll: 'memory:clear-all',
   updateStatus: 'update:status',
 } as const;
 
@@ -320,6 +321,9 @@ export type StudioApi = {
     readonly write: (input: { readonly name: MemoryFileName; readonly contents: string; readonly expected?: string }) => Promise<Result<null, StoreError>>;
     // One entry at a time, from the lists; resolves with all three notes as they now read.
     readonly edit: (input: MemoryEntryEdit) => Promise<Result<MemoryNotes, MemoryEditError>>;
+    // Everything on the Memory page: the notes, the suggestions and skipped words, and the
+    // three documents about the user.
+    readonly clearAll: () => Promise<Result<null, StoreError>>;
     readonly onEvent: (listener: (event: MemoryEvent) => void) => () => void;
   };
   readonly agentFiles: {

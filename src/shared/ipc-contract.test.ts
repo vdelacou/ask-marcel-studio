@@ -48,6 +48,7 @@ describe('the channels main and the renderer agree on', () => {
       memoryRead: 'memory:read',
       memoryWrite: 'memory:write',
       memoryEdit: 'memory:edit',
+      memoryClearAll: 'memory:clear-all',
       updateStatus: 'update:status',
     });
   });

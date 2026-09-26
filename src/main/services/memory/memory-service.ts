@@ -11,7 +11,7 @@
 import { TERM_LIMIT, listEntries, mergeMemoryEntries, parseMemoryDoc, serialiseMemoryDoc } from '../../../shared/memory-doc.ts';
 import { applyMemoryEntryEdit, parseMemoryEntryEdit } from '../../../shared/memory-entry-edit.ts';
 import type { MemoryEditError, MemoryEntryEdit, MemoryNotes } from '../../../shared/memory-entry-edit.ts';
-import { memoryFileName } from '../../../shared/memory-file-name.ts';
+import { MEMORY_FILES, memoryFileName } from '../../../shared/memory-file-name.ts';
 import type { MemoryFileName } from '../../../shared/memory-file-name.ts';
 import {
   EMPTY_MEMORY_QUEUE,
@@ -51,6 +51,8 @@ export type MemoryService = {
   readonly write: (name: unknown, contents: unknown, expected?: unknown) => Promise<Result<null, StoreError>>;
   // One entry added, changed, removed, put back or moved; answers with all three notes.
   readonly edit: (input: unknown) => Promise<Result<MemoryNotes, MemoryEditError>>;
+  // The three notes emptied, and the queue with its skipped words; the reading progress stays.
+  readonly clearAll: () => Promise<Result<null, StoreError>>;
   // What rides along with every turn. Degrades to nothing rather than failing a turn.
   readonly glossaryBlocks: () => Promise<readonly string[]>;
   readonly addCandidates: (items: readonly RawCandidate[], conversationId: string) => Promise<Result<number, StoreError>>;
@@ -198,6 +200,14 @@ export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
     return ok(after);
   };
 
+  const clearAll = async (): Promise<Result<null, StoreError>> => {
+    for (const name of MEMORY_FILES) {
+      const written = await writeTextFileAtomic(memoryFilePath(deps.userData, name), '');
+      if (!written.ok) return err({ kind: 'write-failed', message: written.error.message });
+    }
+    return writeQueue(EMPTY_MEMORY_QUEUE);
+  };
+
   const glossaryBlocks = async (): Promise<readonly string[]> =>
     buildGlossaryBlocks({ jargon: await readNote('jargon'), team: await readNote('team'), people: await readNote('people') });
 
@@ -259,6 +269,7 @@ export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
     read,
     write: (name, contents, expected) => oneAtATime(() => write(name, contents, expected)),
     edit: (input) => oneAtATime(() => edit(input)),
+    clearAll: () => oneAtATime(clearAll),
     glossaryBlocks,
     addCandidates: addFound,
     extractionDue,

@@ -31,6 +31,7 @@ import type { UpdateChecker } from './services/update/update-checker.ts';
 import { createMemoryService } from './services/memory/memory-service.ts';
 import { createMemoryExtractor } from './services/memory/memory-extractor.ts';
 import { createIdleWatcher } from './services/memory/idle-watcher.ts';
+import { createClearAll } from './services/memory/clear-all.ts';
 import { createBackgroundJobs } from './services/background/background-jobs.ts';
 import { createRunAgentText } from './services/background/background-agent-io.ts';
 import { createVoiceProfileJob } from './services/background/voice-profile-job.ts';
@@ -410,6 +411,7 @@ const buildRuntime = (
     agentsStore,
     agentFiles,
     memory,
+    clearAll: createClearAll({ clearMemory: memory.clearAll, clearDocument: (doc) => agentFiles.save(doc, '') }),
     // Rebuilding a document is the same job the app runs on its own, asked for
     // explicitly. It resolves with the new contents so the panel shows them at once.
     regenerateAgentFile: async (doc) => {

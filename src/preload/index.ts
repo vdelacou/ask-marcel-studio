@@ -81,6 +81,7 @@ const api: StudioApi = {
     read: (name) => ipcRenderer.invoke(CHANNEL.memoryRead, name),
     write: (input) => ipcRenderer.invoke(CHANNEL.memoryWrite, input),
     edit: (input) => ipcRenderer.invoke(CHANNEL.memoryEdit, input),
+    clearAll: () => ipcRenderer.invoke(CHANNEL.memoryClearAll),
     onEvent: (listener) => {
       // Wrapped for the same reason the chat stream is: the raw handler receives an
       // IpcRendererEvent first, and handing that across the bridge would leak a
