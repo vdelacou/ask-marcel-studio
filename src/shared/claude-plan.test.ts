@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { claudeCodeBinarySpecifier, parseClaudeAuthStatus } from './claude-plan.ts';
+import { claudeCodeBinarySpecifier, explainTurnError, parseClaudeAuthStatus } from './claude-plan.ts';
 
 // What `claude auth status --json` prints, captured from Claude Code 2.1.185.
 const signedInOnPlan = JSON.stringify({
@@ -60,5 +60,26 @@ describe('finding the Claude Code the agent itself runs', () => {
 
   test('on windows the binary carries its exe', () => {
     expect(claudeCodeBinarySpecifier('win32', 'x64')).toBe('@anthropic-ai/claude-agent-sdk-win32-x64/claude.exe');
+  });
+});
+
+describe('telling a turn that cannot run where to sign in', () => {
+  // What the agent reports for a turn on a plan nobody is signed in to: once from the
+  // result message, once more when the SDK ends the run on it.
+  const SDK_ENDED = 'Claude Code returned an error result: Not logged in · Please run /login';
+  const RESULT = 'Not logged in · Please run /login';
+  const WHERE = 'You’re not signed in to your Claude plan. Open Settings, then Models, and press Sign in with Claude.';
+
+  test('a turn on the Claude plan when nobody is signed in says where to sign in', () => {
+    expect(explainTurnError(SDK_ENDED, 'claude-plan')).toBe(WHERE);
+    expect(explainTurnError(RESULT, 'claude-plan')).toBe(WHERE);
+  });
+
+  test('any other failure keeps Claude Code’s own words', () => {
+    expect(explainTurnError('Claude Code returned an error result: Overloaded', 'claude-plan')).toBe('Claude Code returned an error result: Overloaded');
+  });
+
+  test('the same not-logged-in text on an api-key provider is left unchanged', () => {
+    expect(explainTurnError(SDK_ENDED, 'anthropic')).toBe(SDK_ENDED);
   });
 });

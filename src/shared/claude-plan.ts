@@ -10,6 +10,7 @@
  * is present or well typed. Pure: it reads text and names a file, the service spawns.
  */
 import type { Result } from './result.ts';
+import type { ProviderKind } from './types.ts';
 import { err, ok } from './result.ts';
 
 export type ClaudePlanStatus = { readonly signedIn: false } | { readonly signedIn: true; readonly email?: string; readonly plan?: string };
@@ -47,3 +48,12 @@ export const parseClaudeAuthStatus = (stdout: string): Result<ClaudePlanStatus, 
 };
 
 export const claudeCodeBinarySpecifier = (platform: string, arch: string): string => `${BINARY_PACKAGE}-${platform}-${arch}/claude${platform === 'win32' ? '.exe' : ''}`;
+
+// What Claude Code says when a turn has no sign-in to run on. Its own advice, /login, names a
+// command this app does not have, so a plan turn says where the sign-in actually is.
+const NOT_SIGNED_IN = 'Not logged in';
+const WHERE_TO_SIGN_IN = 'You’re not signed in to your Claude plan. Open Settings, then Models, and press Sign in with Claude.';
+
+// Only a plan turn is rewritten: an api-key provider that somehow reports the same words has
+// a key to fix, not a sign-in.
+export const explainTurnError = (message: string, kind: ProviderKind): string => (kind === 'claude-plan' && message.includes(NOT_SIGNED_IN) ? WHERE_TO_SIGN_IN : message);

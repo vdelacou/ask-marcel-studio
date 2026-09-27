@@ -1,3 +1,66 @@
+# Current run: run the agent on a Claude plan (approved 2026-09-26)
+
+The user wants their Claude subscription (Pro, Max, Team, Enterprise) to pay for the agent
+instead of an API key. Anthropic's Claude Code legal page (read 2026-09-26) allows an end
+user to sign in to the unmodified Claude Code with their own subscription, provided sign-in
+completes through Anthropic's own flow and the app never collects, stores or relays the
+token. The Claude Code bundled with SDK 0.3.185 (2.1.185) has `auth login --claudeai` and
+`auth status --json`, and its macOS keychain item is named after a sha256 of
+CLAUDE_CONFIG_DIR, so a sign-in made with the account's claude-config is exactly the one the
+agent's turns find, and never the user's own terminal login.
+
+v1 assumptions, confirmed by the user: no Test button on a plan model (a real check spends
+plan usage and needs a second launch path); no sign-out (signing in again replaces the
+account); the sign-in lives with the account folder, like the notes.
+
+1. [x] Shared `claude-plan.ts`: `parseClaudeAuthStatus` (Claude Code's `auth status` JSON to
+       signed in or out, a plan sign-in only when `authMethod` is `claude.ai`) and
+       `claudeCodeBinarySpecifier` (the platform package's `claude`, as the SDK resolves it).
+       Done: tests green, 100% tier, mutation >= 90 on the staged file. DONE: 8 tests, 100%,
+       mutation 90.63 before two survivors were closed (a strict assertion, a dead guard).
+2. [x] Sign-in plumbing: session-env `buildSignInEnv`; ipc-contract `ClaudePlanError`,
+       `claude-plan:status`, `claude-plan:login`, `StudioApi.claudePlan`; main
+       `claude-plan-service.ts` (single-flight login, 15 s status and 10 min login deadlines)
+       and `claude-plan-io.ts` (spawns the binary, no shell); register.ts, preload, index.ts.
+       Done: service tests green, ipc-contract test updated (confirmed), typecheck clean.
+       DONE: 7 service tests + 2 env tests, 100%; smoke run against the real binary with a
+       scratch config folder read `signedIn: false` with an inherited API key stripped.
+3. [x] Provider kind `claude-plan` in main and the shared types: settings-doc (no key; any
+       key or address sent with it is dropped), settings-store (nothing to seal), session-env
+       plan branch (strips ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_OAUTH_TOKEN,
+       ANTHROPIC_BASE_URL and the three CLAUDE_CODE_USE_* switches; bare model id),
+       provider-draft, and the kind unions the renderer types carry. Not offered in the UI yet.
+       Done: tests green, 100% tiers, mutation >= 90 on the changed shared files. DONE: the
+       plan member types `apiKey?: never` and `baseUrl?: never`, so existing tests reading a
+       provider's key compile unchanged. Mutation: claude-plan 96.61, session-env 97.50,
+       settings-doc 90.83. One survivor on new code: stripping the overrides for every kind
+       breaks no test (proposed as a follow-up, not done).
+4. [x] Settings UI: "Claude plan" in Kind; the form shows a sign-in block instead of the key
+       and address; no Test on plan models; the row flags "Not signed in" instead of "No
+       key"; `lib/claude-plan-view.ts` (+test) and `hooks/use-claude-plan.ts`.
+       Done: lint 0/0, typecheck clean, renderer lib tier 100%. DONE: 10 view tests; the row's
+       `hasKey` became a typed `flag` computed in lib; full suite 1864 pass, coverage green.
+5. [x] README: the Claude plan provider, what the app does and never does with the sign-in,
+       where usage is billed. Done: README matches the surface. DONE: new section plus the
+       settings line; the empty-state card now names the plan too.
+6. [x] Verified in the built app on a scratch user-data folder: the kind, the sign-in block,
+       "Not signed in" on the row, a save and reload keeping the provider keyless, the Sign
+       in button launching Claude Code's login; a signed-in turn answered on the plan, with
+       the user completing the browser step. Scratch keychain item removed with `auth logout`.
+       DONE: 19/19 on a scratch --user-data-dir with BROWSER pointed at a recorder, so nothing
+       opened on screen; the login reached claude.com/cai/oauth/authorize from the bundled
+       binary and was then killed, so no keychain item was made. The review (atelier-review-me)
+       found three things, all fixed with approval: a signed-out plan turn now says where to
+       sign in instead of Claude Code's "/login", a neutral handle in the new test, required
+       sign-in props. STILL OPEN: a signed-in turn, which needs the user's own browser sign-in.
+7. [x] Commits proposed module-before-consumer, each <= 10 files / 300 lines, each on a yes.
+       DONE: six commits (5405d13..this one), each through the 8-gate hook; the gate counts
+       test files toward its 10, so the series is six rather than five. session-env,
+       provider-form, provider-row and settings-page were staged in parts, each slice
+       typechecked in a scratch index before anything was committed.
+
+---
+
 # Current run: memory notes as lists, phase 1 (approved 2026-09-26)
 
 The three notes (jargon, team, people) are markdown documents edited in a rich editor, so
