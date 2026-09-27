@@ -355,25 +355,25 @@ describe('what a conversation is called before the app has thought about it', ()
   });
 
   test('a path typed at the start is not mistaken for a command', () => {
-    expect(titleFromFirstMessage('/Users/vincent/report.xlsx please read this')).toBe('/Users/vincent/report.xlsx please read this');
+    expect(titleFromFirstMessage('/Users/example/report.xlsx please read this')).toBe('/Users/example/report.xlsx please read this');
   });
 });
 
 describe('the title the app generates later', () => {
-  const base = { ...newConversation('3f2504e0-4f89-41d3-9a0c-0305e82c3301' as never, 'p::m', '2026-07-24T00:00:00.000Z'), title: 'the b27 email' };
+  const base = { ...newConversation('3f2504e0-4f89-41d3-9a0c-0305e82c3301' as never, 'p::m', '2026-07-24T00:00:00.000Z'), title: 'the Q3 email' };
 
   test('a better title replaces the one derived from the first message', () => {
-    const applied = applyGeneratedTitle(base, 'Hervé’s B27 budget figures');
+    const applied = applyGeneratedTitle(base, 'Finance’s Q3 budget figures');
 
     expect(applied.changed).toBe(true);
-    expect(applied.conversation.title).toBe('Hervé’s B27 budget figures');
+    expect(applied.conversation.title).toBe('Finance’s Q3 budget figures');
   });
 
   test('a name the user typed themselves is never overwritten', () => {
     const applied = applyGeneratedTitle({ ...base, userRenamed: true }, 'Something the model preferred');
 
     expect(applied.changed).toBe(false);
-    expect(applied.conversation.title).toBe('the b27 email');
+    expect(applied.conversation.title).toBe('the Q3 email');
   });
 
   test('an empty answer changes nothing, rather than blanking the sidebar', () => {
@@ -381,7 +381,7 @@ describe('the title the app generates later', () => {
   });
 
   test('the same title again is not a change worth writing', () => {
-    expect(applyGeneratedTitle(base, 'the b27 email').changed).toBe(false);
+    expect(applyGeneratedTitle(base, 'the Q3 email').changed).toBe(false);
   });
 });
 

@@ -48,7 +48,7 @@ const parseJson = (raw: string): unknown => {
   }
 };
 
-// Western order, which is what this tenant's directory uses ("Vincent DELACOURT"). A
+// Western order, which is what this tenant's directory uses ("Example USER"). A
 // surname-first directory would need its own rule; there is no signal here to detect one,
 // so guessing would be worse than taking the first word.
 const firstNameOf = (displayName: string): string => displayName.trim().split(/\s+/)[0] ?? '';

@@ -201,13 +201,13 @@ describe('never letting the environment leak the wrong way', () => {
 
 describe('keeping one account out of another account’s session', () => {
   test('the agent is pointed at the signed-in account’s own config, not the shared folder', () => {
-    const env = buildSessionEnv({ provider: anthropic, modelId: 'm', configRoot: `${USER_DATA}/accounts/vincent-x1`, toolsRoot: USER_DATA, inheritedEnv: INHERITED });
+    const env = buildSessionEnv({ provider: anthropic, modelId: 'm', configRoot: `${USER_DATA}/accounts/user-x1`, toolsRoot: USER_DATA, inheritedEnv: INHERITED });
 
-    expect(env['CLAUDE_CONFIG_DIR']).toBe(`${USER_DATA}/accounts/vincent-x1/claude-config`);
+    expect(env['CLAUDE_CONFIG_DIR']).toBe(`${USER_DATA}/accounts/user-x1/claude-config`);
   });
 
   test('the shims stay shared, because they are the machine’s tools and nobody’s data', () => {
-    const env = buildSessionEnv({ provider: anthropic, modelId: 'm', configRoot: `${USER_DATA}/accounts/vincent-x1`, toolsRoot: USER_DATA, inheritedEnv: INHERITED });
+    const env = buildSessionEnv({ provider: anthropic, modelId: 'm', configRoot: `${USER_DATA}/accounts/user-x1`, toolsRoot: USER_DATA, inheritedEnv: INHERITED });
 
     expect(env['PATH']?.startsWith(`${USER_DATA}/bin`)).toBe(true);
   });

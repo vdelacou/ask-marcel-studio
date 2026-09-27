@@ -450,9 +450,9 @@ describe('naming a conversation after the fact', () => {
     const created = await store.create({ model: 'p::m' });
     if (!created.ok) throw new Error('expected ok');
 
-    const named = await store.setGeneratedTitle(created.value.id, 'Hervé’s B27 budget figures');
+    const named = await store.setGeneratedTitle(created.value.id, 'Finance’s Q3 budget figures');
 
-    expect(named.ok && named.value.title).toBe('Hervé’s B27 budget figures');
+    expect(named.ok && named.value.title).toBe('Finance’s Q3 budget figures');
   });
 
   test('a name the user typed is never overwritten by one the app thought of', async () => {
