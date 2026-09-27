@@ -18,6 +18,8 @@ import type { SkillsService } from '../services/skills/skills-service.ts';
 import { parseModelTestTarget } from '../../shared/model-test.ts';
 import type { ModelTestService } from '../services/models/model-test-service.ts';
 import type { OfficeService } from '../services/office/office-service.ts';
+import type { ClaudePlanService } from '../services/claude-plan/claude-plan-service.ts';
+import type { ClaudePlanModels } from '../services/claude-plan/claude-plan-models.ts';
 import type { QuickContextService } from '../services/office/quick-context-service.ts';
 import type { OfficeCatalog } from '../services/office/office-catalog-io.ts';
 import type { ConversationsStore } from '../services/store/conversations-store.ts';
@@ -39,6 +41,8 @@ export type IpcDeps = {
   readonly office: OfficeService;
   readonly quickContext: QuickContextService;
   readonly officeCatalog: OfficeCatalog;
+  readonly claudePlan: ClaudePlanService;
+  readonly claudePlanModels: ClaudePlanModels;
   readonly agentsStore: AgentsStore;
   readonly agentFiles: AgentFilesStore;
   readonly memory: MemoryService;
@@ -142,6 +146,12 @@ export const registerIpc = (deps: IpcDeps): void => {
   ipcMain.handle(CHANNEL.officeLogout, () => deps.office.logout());
   ipcMain.handle(CHANNEL.officeQuickContext, () => Promise.resolve(deps.quickContext.current()));
   ipcMain.handle(CHANNEL.officeCommands, () => Promise.resolve(deps.officeCatalog.categories()));
+
+  // Neither takes an argument: Claude Code reads its own sign-in, and the sign-in is a
+  // single-flight action with nothing to choose.
+  ipcMain.handle(CHANNEL.claudePlanStatus, () => deps.claudePlan.status());
+  ipcMain.handle(CHANNEL.claudePlanLogin, () => deps.claudePlan.login());
+  ipcMain.handle(CHANNEL.claudePlanModels, () => deps.claudePlanModels.list());
 
   ipcMain.handle(CHANNEL.updateStatus, () => Promise.resolve(deps.updateChecker.current()));
 

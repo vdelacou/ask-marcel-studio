@@ -17,6 +17,7 @@ import { emptyFailures, recordFailure, repeatedlyFailed } from '../../../shared/
 import type { CommandFailures } from '../../../shared/command-failures.ts';
 import { buildSessionEnv } from '../../../shared/session-env.ts';
 import { formatModelRef, parseModelRef } from '../../../shared/model-ref.ts';
+import { explainTurnError } from '../../../shared/claude-plan.ts';
 import { appendTurn } from '../../../shared/conversation-doc.ts';
 import { rewriteSlashSkill } from '../../../shared/slash-skill.ts';
 import { formatError } from '../../../shared/utilities/format-error.ts';
@@ -121,6 +122,10 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
     let fold = emptyFold(messageId);
     deps.emit({ type: 'turn-start', conversationId: conversation.id, messageId });
 
+    // Every failure this turn reports is said for the provider it ran on: a plan turn with
+    // nobody signed in points at Settings instead of at Claude Code's own /login.
+    const emit = (event: UIEvent): void => deps.emit(event.type === 'error' ? { ...event, message: explainTurnError(event.message, provider.kind) } : event);
+
     // A Bash command that errored is a candidate for the repeat-failure guard, but only
     // if it was the command failing on its own terms. A guard denial (a category switched
     // off, a login, a destructive shape) also surfaces as an errored result, and counting
@@ -202,14 +207,14 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
         fold = step.state;
         for (const event of step.events) {
           noteFailure(event);
-          deps.emit(event);
+          emit(event);
         }
       }
     } catch (e) {
       // An abort throws here. It is a user action, not a failure, and must not
       // surface as an error toast.
       if (!controller.signal.aborted) {
-        deps.emit({ type: 'error', conversationId: conversation.id, message: formatError(e) });
+        emit({ type: 'error', conversationId: conversation.id, message: formatError(e) });
       }
     } finally {
       // Persisted BEFORE the conversation leaves the running map: a second send that

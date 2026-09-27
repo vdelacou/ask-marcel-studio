@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { buildSessionEnv } from './session-env.ts';
+import { buildSessionEnv, buildSignInEnv } from './session-env.ts';
 import type { Provider } from './types.ts';
 
 const USER_DATA = '/Users/someone/Library/Application Support/ask-marcel-studio';
@@ -210,5 +210,90 @@ describe('keeping one account out of another account’s session', () => {
     const env = buildSessionEnv({ provider: anthropic, modelId: 'm', configRoot: `${USER_DATA}/accounts/user-x1`, toolsRoot: USER_DATA, inheritedEnv: INHERITED });
 
     expect(env['PATH']?.startsWith(`${USER_DATA}/bin`)).toBe(true);
+  });
+});
+
+// Everything Claude Code would use ahead of a plan sign-in, or would send it somewhere else.
+const OUTRANKING = {
+  ANTHROPIC_API_KEY: 'sk-ant-dev',
+  ANTHROPIC_AUTH_TOKEN: 'bearer-dev',
+  CLAUDE_CODE_OAUTH_TOKEN: 'oauth-dev',
+  ANTHROPIC_BASE_URL: 'http://127.0.0.1:9999',
+  CLAUDE_CODE_USE_BEDROCK: '1',
+  CLAUDE_CODE_USE_VERTEX: '1',
+  CLAUDE_CODE_USE_FOUNDRY: '1',
+};
+
+describe('running a turn on a Claude plan', () => {
+  const plan: Provider = { id: 'claude', kind: 'claude-plan', label: 'Claude', modelIds: ['claude-sonnet-5'] };
+
+  const onPlan = (inheritedEnv: Readonly<Record<string, string>>): Record<string, string> =>
+    buildSessionEnv({ provider: plan, modelId: 'claude-sonnet-5', configRoot: USER_DATA, toolsRoot: USER_DATA, inheritedEnv });
+
+  test('a Claude plan turn carries no key of any kind, so Claude Code uses the plan sign-in', () => {
+    const env = onPlan({ ...INHERITED, ...OUTRANKING });
+
+    expect('ANTHROPIC_API_KEY' in env).toBe(false);
+    expect('ANTHROPIC_AUTH_TOKEN' in env).toBe(false);
+    expect('CLAUDE_CODE_OAUTH_TOKEN' in env).toBe(false);
+  });
+
+  test('a Claude plan turn never sends its sign-in to an inherited base url', () => {
+    expect('ANTHROPIC_BASE_URL' in onPlan({ ...INHERITED, ANTHROPIC_BASE_URL: 'http://127.0.0.1:9999' })).toBe(false);
+  });
+
+  test('an inherited cloud switch cannot move a Claude plan turn off the plan', () => {
+    const env = onPlan({ ...INHERITED, ...OUTRANKING });
+
+    expect('CLAUDE_CODE_USE_BEDROCK' in env).toBe(false);
+    expect('CLAUDE_CODE_USE_VERTEX' in env).toBe(false);
+    expect('CLAUDE_CODE_USE_FOUNDRY' in env).toBe(false);
+  });
+
+  test('a plan turn on a Claude Code alias leaves the alias to Claude Code', () => {
+    // Pinned to the alias, Claude Code sends the literal "sonnet"; an inherited pin swaps the
+    // model outright (probed 2026-09-27: haiku went out as claude-sonnet-4-6).
+    const env = buildSessionEnv({
+      provider: plan,
+      modelId: 'sonnet',
+      configRoot: USER_DATA,
+      toolsRoot: USER_DATA,
+      inheritedEnv: {
+        ...INHERITED,
+        ANTHROPIC_DEFAULT_OPUS_MODEL: 'claude-sonnet-4-6',
+        ANTHROPIC_DEFAULT_SONNET_MODEL: 'claude-haiku-4-5',
+        ANTHROPIC_DEFAULT_HAIKU_MODEL: 'claude-sonnet-4-6',
+      },
+    });
+
+    expect(env['ANTHROPIC_MODEL']).toBe('sonnet');
+    expect('ANTHROPIC_DEFAULT_OPUS_MODEL' in env).toBe(false);
+    expect('ANTHROPIC_DEFAULT_SONNET_MODEL' in env).toBe(false);
+    expect('ANTHROPIC_DEFAULT_HAIKU_MODEL' in env).toBe(false);
+  });
+
+  test('a Claude plan turn pins every model slot to the bare model id', () => {
+    const env = onPlan(INHERITED);
+
+    expect(env['ANTHROPIC_MODEL']).toBe('claude-sonnet-5');
+    expect(env['ANTHROPIC_DEFAULT_OPUS_MODEL']).toBe('claude-sonnet-5');
+    expect(env['ANTHROPIC_DEFAULT_SONNET_MODEL']).toBe('claude-sonnet-5');
+    expect(env['ANTHROPIC_DEFAULT_HAIKU_MODEL']).toBe('claude-sonnet-5');
+  });
+});
+
+describe('signing in to a Claude plan through Claude Code', () => {
+  test('signing in uses the agent’s own config folder, so the sign-in lands where turns look for it', () => {
+    const env = buildSignInEnv({ configRoot: `${USER_DATA}/accounts/someone-x1`, inheritedEnv: INHERITED });
+
+    expect(env['CLAUDE_CONFIG_DIR']).toBe(`${USER_DATA}/accounts/someone-x1/claude-config`);
+  });
+
+  test('signing in strips everything that would outrank the plan, and keeps the rest', () => {
+    const env = buildSignInEnv({ configRoot: USER_DATA, inheritedEnv: { ...INHERITED, ...OUTRANKING } });
+
+    for (const name of Object.keys(OUTRANKING)) expect(name in env).toBe(false);
+    expect(env['PATH']).toBe('/usr/bin:/bin');
+    expect(env['HOME']).toBe('/Users/someone');
   });
 });

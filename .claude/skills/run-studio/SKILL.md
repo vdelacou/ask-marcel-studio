@@ -69,6 +69,22 @@ grep -n -B2 -A6 "Sources" run.txt                          # what the answer cit
   leaves a conversation in the sidebar; delete test conversations in-app when done.
 - Occurrence counts and answers vary with the pinned model; flash-lite is the weakest
   and therefore the honest floor for prompt-doctrine checks.
+- Four absent polls is not the end of a turn that delegates to the `Agent` readers: the
+  driver can dump mid-turn. Read the end of the dump first; a trailing "Working…" (the
+  line `ChatThread` renders only while streaming) means it is early, whatever the driver
+  logged. One such turn outlived the driver's close and finished, so open the
+  conversation before reporting a turn lost.
+- A check that writes (adds, edits, deletes) runs on a scratch `--user-data-dir`, never
+  the real folder. Seed it first with the real `current-account.json` and the account's
+  `claude-config/quick-context.json` under `accounts/<key>/claude-config/`, or the app
+  adopts the folder and relaunches away from Playwright; afterwards check that no
+  process still names it (`pkill -f "<scratch dir>"`) and delete it, since it holds a
+  copy of the user's identity.
+- A browser sign-in (the Claude plan's `claude auth login`) opens its page through
+  `$BROWSER`, falling back to `open`. Launch with `BROWSER` pointed at a script that
+  records its first argument, so nothing opens on the user's screen, then kill the
+  waiting login (`pkill -f "<binary path> auth login"`); an unfinished sign-in stores
+  nothing in the keychain.
 
 ## After testing
 
