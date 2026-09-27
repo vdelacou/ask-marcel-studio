@@ -13,6 +13,9 @@ import { MemoryListPanel } from '../components/organisms/memory-list-panel/index
 import { NOTES_OF, approximateTokens, draftProblem, duplicateTerms, rowsOf, unreadLines, visibleRows } from '../lib/memory-list.ts';
 import type { MemoryListKind, MemoryListRow, MemoryTeamFilter } from '../lib/memory-list.ts';
 import { useMemoryNotes } from '../hooks/use-memory-notes.ts';
+import { useListFocus } from '../hooks/use-list-focus.ts';
+import { useFocusSoon } from '../hooks/use-focus-soon.ts';
+import { landingOf } from '../lib/list-focus.ts';
 import { AS_TEXT, AsText, COPY, editorOf, emptyOf, isTeamFilter, itemOf, noteForNew, noticesOf, segmentsOf, summaryOf, twinsNotice, unreadNotice } from './memory-list-view.tsx';
 import type { MemoryListDraft, MemoryListUndo } from './memory-list-view.tsx';
 import type { MemoryEditError, MemoryEntryEdit } from '../../../shared/memory-entry-edit.ts';
@@ -38,6 +41,10 @@ export const MemoryListSection: FC<MemoryListSectionProps> = ({ list }) => {
   const twins = duplicateTerms(rows);
   const isShowingTwins = twinsOnly && twins.length > 0;
   const rowFor = (key: string | undefined): MemoryListRow | undefined => rows.find((row) => row.key === key);
+  // The rows on screen, in order: what the list shows, and where the focus goes after a change.
+  const shown = visibleRows(rows, { query, team, duplicatesOnly: isShowingTwins });
+  const focusAfter = useListFocus(shown);
+  const focusSoon = useFocusSoon();
 
   // Every change goes through here. A refusal because the entry moved on means this view is
   // stale, so the notes are read again before the user tries a second time.
@@ -78,6 +85,7 @@ export const MemoryListSection: FC<MemoryListSectionProps> = ({ list }) => {
     const closed = (): void => {
       setDraft(undefined);
       setUndo(undefined);
+      focusAfter(landingOf(change));
     };
     // A refusal lands on the draft as it is now, so words typed while main was answering stay.
     run(change, closed, (error) => setDraft((current) => (current === undefined ? undefined : { ...current, error: error.message })));
@@ -87,21 +95,50 @@ export const MemoryListSection: FC<MemoryListSectionProps> = ({ list }) => {
     const row = rowFor(key);
     if (row === undefined) return;
     const restore: MemoryEntryEdit = { action: 'restore', note: row.note, entry: row.entry, at: row.line };
-    run({ action: 'remove', note: row.note, entry: row.entry }, () => setUndo({ message: `Removed ${row.entry.term}.`, change: restore }), refuse);
+    const place = shown.findIndex((shownRow) => shownRow.key === key);
+    const removed = (): void => {
+      setUndo({ message: `Removed ${row.entry.term}.`, change: restore });
+      focusAfter({ kind: 'place', index: place });
+    };
+    run({ action: 'remove', note: row.note, entry: row.entry }, removed, refuse);
   };
 
   const move = (key: string): void => {
     const row = rowFor(key);
     if (row === undefined) return;
     const to: MemoryFileName = row.note === 'team' ? 'people' : 'team';
+    const change: MemoryEntryEdit = { action: 'move', note: row.note, to, entry: row.entry };
     const back: MemoryEntryEdit = { action: 'move', note: to, to: row.note, entry: row.entry };
     const where = to === 'team' ? 'My team' : 'Other people';
-    run({ action: 'move', note: row.note, to, entry: row.entry }, () => setUndo({ message: `Moved ${row.entry.term} to ${where}.`, change: back }), refuse);
+    const moved = (): void => {
+      setUndo({ message: `Moved ${row.entry.term} to ${where}.`, change: back });
+      focusAfter(landingOf(change));
+    };
+    run(change, moved, refuse);
   };
 
   // Once only: a second click while the first is on its way would put the entry back twice.
   const takeBack = (): void => {
-    if (undo !== undefined && !isSaving) run(undo.change, () => setUndo(undefined), refuse);
+    if (undo === undefined || isSaving) return;
+    const { change } = undo;
+    const undone = (): void => {
+      setUndo(undefined);
+      focusAfter(landingOf(change));
+    };
+    run(change, undone, refuse);
+  };
+
+  // The focus goes back to the entry that was open, or to Add for a new one.
+  const cancel = (): void => {
+    const editing = rowFor(draft?.key);
+    setDraft(undefined);
+    focusAfter(editing === undefined ? { kind: 'add' } : { kind: 'entry', note: editing.note, term: editing.entry.term });
+  };
+
+  // Back from the text view, the focus goes to the link that opened it.
+  const closeText = (note: MemoryFileName): void => {
+    setAsText(undefined);
+    focusSoon(`[data-memory-text-mode="${note}"]`);
   };
 
   // The offer to take a change back lapses here: what is typed as text may already have put the
@@ -122,7 +159,7 @@ export const MemoryListSection: FC<MemoryListSectionProps> = ({ list }) => {
     void (async (): Promise<void> => {
       const saved = await memory.save(note, text, opened);
       setIsSaving(false);
-      if (saved.ok) return setAsText(undefined);
+      if (saved.ok) return closeText(note);
       setFailure(saved.error.message);
     })();
   };
@@ -142,13 +179,13 @@ export const MemoryListSection: FC<MemoryListSectionProps> = ({ list }) => {
         failure={failure}
         onChange={(next) => setAsText({ note, text: next, opened })}
         onSave={() => saveText(note, text, opened)}
-        onClose={() => setAsText(undefined)}
+        onClose={() => closeText(note)}
       />
     );
   }
 
   const unread = unreadLines(memory.notes, list);
-  const editor = draft === undefined ? undefined : editorOf(copy, list, draft, isSaving, { onChange: setDraft, onSave: save, onCancel: () => setDraft(undefined) });
+  const editor = draft === undefined ? undefined : editorOf(copy, list, draft, isSaving, { onChange: setDraft, onSave: save, onCancel: cancel });
 
   return (
     <MemoryListPanel
@@ -160,7 +197,7 @@ export const MemoryListSection: FC<MemoryListSectionProps> = ({ list }) => {
       queryLabel={`Filter ${copy.things}`}
       queryPlaceholder={`Filter ${String(rows.length)} ${copy.things}`}
       {...(list === 'people' ? { segments: segmentsOf(rows, team) } : {})}
-      items={visibleRows(rows, { query, team, duplicatesOnly: isShowingTwins }).map((row) => itemOf(list, row))}
+      items={shown.map((row) => itemOf(list, row))}
       {...(editor === undefined ? {} : { editor })}
       empty={emptyOf(copy, query, rows.length > 0, unread > 0, startAdd)}
       summary={summaryOf(rows.length, unread, approximateTokens(memory.notes, list))}

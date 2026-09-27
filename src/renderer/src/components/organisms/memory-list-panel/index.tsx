@@ -88,7 +88,9 @@ export const MemoryListPanel: FC<MemoryListPanelProps> = ({
         <h2 className="text-lg font-semibold tracking-tight text-ink">{title}</h2>
         <p className="text-sm text-ink-muted">{description}</p>
       </div>
-      <Button onClick={onAdd}>{addLabel}</Button>
+      <Button onClick={onAdd} data-memory-add>
+        {addLabel}
+      </Button>
     </header>
 
     {notices.map((notice) => (
@@ -154,7 +156,7 @@ export const MemoryListPanel: FC<MemoryListPanelProps> = ({
     <footer className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-faint">
       <span>{summary}</span>
       {textModes.map((mode) => (
-        <button key={mode.id} type="button" onClick={() => onTextMode(mode.id)} className={linkStyle}>
+        <button key={mode.id} type="button" onClick={() => onTextMode(mode.id)} data-memory-text-mode={mode.id} className={linkStyle}>
           {mode.label}
         </button>
       ))}

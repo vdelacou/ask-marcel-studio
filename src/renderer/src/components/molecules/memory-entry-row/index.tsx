@@ -47,6 +47,7 @@ export const MemoryEntryRow: FC<MemoryEntryRowProps> = ({ term, detail, person, 
     <button
       type="button"
       onClick={onEdit}
+      data-memory-row
       className={`flex min-w-0 flex-1 cursor-text gap-x-3 rounded text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${person === undefined ? 'items-baseline' : 'flex-col gap-y-0.5'}`}
     >
       <span className={`shrink-0 break-words text-sm font-medium text-ink ${person === undefined ? 'w-28 font-mono text-[13px]' : ''}`}>{term}</span>
