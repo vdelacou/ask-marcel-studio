@@ -4,7 +4,7 @@ import type { FC } from 'react';
 // the screen reads as "here is what you have set up" rather than as four stacked forms.
 export type ProviderRowProps = {
   label: string;
-  kind: 'anthropic' | 'openai';
+  kind: 'anthropic' | 'openai' | 'claude-plan';
   modelCount: number;
   // Only ever announced when it is missing: "Key set" on every row is a row of green
   // ticks saying nothing, while a provider with no key is the one thing worth flagging.
@@ -13,7 +13,7 @@ export type ProviderRowProps = {
   onToggle: () => void;
 };
 
-const KIND_LABEL: Record<ProviderRowProps['kind'], string> = { anthropic: 'Anthropic', openai: 'OpenAI compatible' };
+const KIND_LABEL: Record<ProviderRowProps['kind'], string> = { anthropic: 'Anthropic', openai: 'OpenAI compatible', 'claude-plan': 'Claude plan' };
 
 const modelsLabel = (count: number): string => (count === 1 ? '1 model' : `${String(count)} models`);
 

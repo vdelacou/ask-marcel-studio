@@ -12,7 +12,7 @@ import type { ModelTestRow } from '../model-list/index.tsx';
 export type ProviderDraft = {
   readonly rowId: string;
   readonly id: string;
-  readonly kind: 'anthropic' | 'openai';
+  readonly kind: 'anthropic' | 'openai' | 'claude-plan';
   readonly label: string;
   readonly baseUrl: string;
   readonly apiKey: string;

@@ -224,6 +224,42 @@ const OUTRANKING = {
   CLAUDE_CODE_USE_FOUNDRY: '1',
 };
 
+describe('running a turn on a Claude plan', () => {
+  const plan: Provider = { id: 'claude', kind: 'claude-plan', label: 'Claude', modelIds: ['claude-sonnet-5'] };
+
+  const onPlan = (inheritedEnv: Readonly<Record<string, string>>): Record<string, string> =>
+    buildSessionEnv({ provider: plan, modelId: 'claude-sonnet-5', configRoot: USER_DATA, toolsRoot: USER_DATA, inheritedEnv });
+
+  test('a Claude plan turn carries no key of any kind, so Claude Code uses the plan sign-in', () => {
+    const env = onPlan({ ...INHERITED, ...OUTRANKING });
+
+    expect('ANTHROPIC_API_KEY' in env).toBe(false);
+    expect('ANTHROPIC_AUTH_TOKEN' in env).toBe(false);
+    expect('CLAUDE_CODE_OAUTH_TOKEN' in env).toBe(false);
+  });
+
+  test('a Claude plan turn never sends its sign-in to an inherited base url', () => {
+    expect('ANTHROPIC_BASE_URL' in onPlan({ ...INHERITED, ANTHROPIC_BASE_URL: 'http://127.0.0.1:9999' })).toBe(false);
+  });
+
+  test('an inherited cloud switch cannot move a Claude plan turn off the plan', () => {
+    const env = onPlan({ ...INHERITED, ...OUTRANKING });
+
+    expect('CLAUDE_CODE_USE_BEDROCK' in env).toBe(false);
+    expect('CLAUDE_CODE_USE_VERTEX' in env).toBe(false);
+    expect('CLAUDE_CODE_USE_FOUNDRY' in env).toBe(false);
+  });
+
+  test('a Claude plan turn pins every model slot to the bare model id', () => {
+    const env = onPlan(INHERITED);
+
+    expect(env['ANTHROPIC_MODEL']).toBe('claude-sonnet-5');
+    expect(env['ANTHROPIC_DEFAULT_OPUS_MODEL']).toBe('claude-sonnet-5');
+    expect(env['ANTHROPIC_DEFAULT_SONNET_MODEL']).toBe('claude-sonnet-5');
+    expect(env['ANTHROPIC_DEFAULT_HAIKU_MODEL']).toBe('claude-sonnet-5');
+  });
+});
+
 describe('signing in to a Claude plan through Claude Code', () => {
   test('signing in uses the agent’s own config folder, so the sign-in lands where turns look for it', () => {
     const env = buildSignInEnv({ configRoot: `${USER_DATA}/accounts/someone-x1`, inheritedEnv: INHERITED });

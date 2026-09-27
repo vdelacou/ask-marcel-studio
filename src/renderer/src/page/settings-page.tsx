@@ -194,7 +194,8 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
   const onTestModel = useCallback(
     (model: string): void => {
       const draft = drafts.find((candidate) => candidate.rowId === expandedRowId);
-      if (draft === undefined) return;
+      // A plan model has no Test: there is no key to try, and a real turn would spend the plan.
+      if (draft === undefined || draft.kind === 'claude-plan') return;
       runModelTest({ kind: draft.kind, baseUrl: draft.baseUrl, apiKey: draft.apiKey, modelId: model });
     },
     [drafts, expandedRowId, runModelTest]
