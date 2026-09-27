@@ -47,6 +47,11 @@ import { EMPTY_AGENTS_DOC, mergeAgents, toSdkAgents } from '../shared/agents-doc
 import { err, ok } from '../shared/result.ts';
 import { createGateway } from './services/gateway/gateway-server.ts';
 import { createOfficeService } from './services/office/office-service.ts';
+import { createClaudePlanService } from './services/claude-plan/claude-plan-service.ts';
+import { createClaudeModelList, createClaudeRun } from './services/claude-plan/claude-plan-io.ts';
+import { createClaudePlanModels } from './services/claude-plan/claude-plan-models.ts';
+import { claudeCodeBinarySpecifier } from '../shared/claude-plan.ts';
+import { buildSignInEnv } from '../shared/session-env.ts';
 import { createQuickContextService } from './services/office/quick-context-service.ts';
 import { createAccountService } from './services/account/account-service.ts';
 import type { AccountService } from './services/account/account-service.ts';
@@ -144,6 +149,11 @@ const officeCliLocation = (): OfficeCliLocation => {
   const resolveFrom = createRequire(__filename);
   return { execPath: process.execPath, cliPath: join(dirname(resolveFrom.resolve('ask-marcel-office-cli/package.json')), 'dist', 'cli.js') };
 };
+
+// The Claude Code the SDK launches for every turn, found the way the SDK finds it, so a
+// Claude plan sign-in runs the very binary that will use it. A resolver, not a path: the
+// package is optional and per platform, and its absence must not stop the app opening.
+const resolveClaudeCode = (): string => createRequire(__filename).resolve(claudeCodeBinarySpecifier(process.platform, process.arch));
 
 // The CLI's own description of every command it has, shipped beside its cli.js. Read
 // once so settings can list the categories and the shell guard can place a command in
@@ -276,6 +286,12 @@ const buildRuntime = (
   const location = officeCliLocation();
   const officeRun = createOfficeRun(location, process.env);
   const office = createOfficeService(officeRun);
+  // Signed in under this account's claude-config, the folder every turn is given, so the
+  // sign-in lands where the turns look for it.
+  const signInEnv = buildSignInEnv({ configRoot: userData, inheritedEnv: process.env });
+  const claudePlan = createClaudePlanService(createClaudeRun(resolveClaudeCode, signInEnv));
+  // Asked in the background workspace, an app-owned folder no conversation uses.
+  const claudePlanModels = createClaudePlanModels(createClaudeModelList({ env: signInEnv, cwd: backgroundWorkspaceDir(userData) }));
   // Built before the agent, which reads its block on every send.
   const quickContext = createQuickContextService({
     run: officeRun,
@@ -410,6 +426,8 @@ const buildRuntime = (
     office,
     quickContext,
     officeCatalog,
+    claudePlan,
+    claudePlanModels,
     agentsStore,
     agentFiles,
     memory,

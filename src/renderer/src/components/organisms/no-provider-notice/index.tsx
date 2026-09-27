@@ -12,7 +12,7 @@ export const NoProviderNotice: FC<NoProviderNoticeProps> = ({ onOpenSettings }) 
   <section className="flex flex-1 [-webkit-app-region:drag]">
     <div className="m-auto flex max-w-sm flex-col items-center gap-y-4 p-8 text-center [-webkit-app-region:no-drag]">
       <h2 className="text-lg font-semibold tracking-tight text-ink">No model yet</h2>
-      <p className="text-sm text-ink-muted">Add an Anthropic key, or any OpenAI-compatible endpoint, and this becomes a conversation.</p>
+      <p className="text-sm text-ink-muted">Add an Anthropic key, an OpenAI-compatible endpoint or your Claude plan, and this becomes a conversation.</p>
       <Button onClick={onOpenSettings}>Open settings</Button>
     </div>
   </section>

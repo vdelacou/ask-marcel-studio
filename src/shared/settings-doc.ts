@@ -14,7 +14,7 @@
  */
 import { MODEL_REF_SEPARATOR } from './model-ref.ts';
 import { ALWAYS_ENABLED_CATEGORY } from './office-policy.ts';
-import type { OfficePolicy, Provider, Settings, SkillsPolicy, StoredProvider, StoredSettings } from './types.ts';
+import type { OfficePolicy, Provider, ProviderKind, Settings, SkillsPolicy, StoredProvider, StoredSettings } from './types.ts';
 import type { Result } from './result.ts';
 import { err, ok } from './result.ts';
 
@@ -65,12 +65,16 @@ const skillsPolicyField = (raw: unknown): Result<SkillsPolicy | undefined, strin
   return ok({ disabledFolders: [...new Set(folders)].sort((a, b) => a.localeCompare(b)) });
 };
 
+type CommonProviderFields = { id: string; kind: ProviderKind; label: string; modelIds: string[]; baseUrl?: string };
+
+const isProviderKind = (kind: unknown): kind is ProviderKind => kind === 'anthropic' || kind === 'openai' || kind === 'claude-plan';
+
 // Fields shared by both shapes. Returns the common part or a reason.
-const commonProviderFields = (raw: unknown): Result<{ id: string; kind: 'anthropic' | 'openai'; label: string; modelIds: string[]; baseUrl?: string }, SettingsDocError> => {
+const commonProviderFields = (raw: unknown): Result<CommonProviderFields, SettingsDocError> => {
   if (!isRecord(raw)) return unreadable('provider must be an object');
   const { id, kind, label, modelIds, baseUrl } = raw;
   if (typeof id !== 'string' || id.length === 0) return unreadable('provider id must be a non-empty string');
-  if (kind !== 'anthropic' && kind !== 'openai') return unreadable(`provider kind must be anthropic or openai, got ${String(kind)}`);
+  if (!isProviderKind(kind)) return unreadable(`provider kind must be anthropic, openai or claude-plan, got ${String(kind)}`);
   if (typeof label !== 'string' || label.length === 0) return unreadable('provider label must be a non-empty string');
   if (!isStringArray(modelIds)) return unreadable('provider modelIds must be an array of strings');
   if (baseUrl !== undefined && typeof baseUrl !== 'string') return unreadable('provider baseUrl must be a string');
@@ -79,9 +83,20 @@ const commonProviderFields = (raw: unknown): Result<{ id: string; kind: 'anthrop
   return ok({ id, kind, label, modelIds, ...(baseUrl === undefined ? {} : { baseUrl }) });
 };
 
+// A Claude plan provider is its name and its models, and nothing else survives: a plan turn
+// uses no key and no address, and nothing that could redirect its sign-in should sit beside
+// it. The same on disk and over IPC, because a plan provider holds no secret in either.
+const planProvider = (common: CommonProviderFields): Extract<Provider, { kind: 'claude-plan' }> => ({
+  id: common.id,
+  kind: 'claude-plan',
+  label: common.label,
+  modelIds: common.modelIds,
+});
+
 const parseStoredProvider = (raw: unknown): Result<StoredProvider, SettingsDocError> => {
   const common = commonProviderFields(raw);
   if (!common.ok) return common;
+  if (common.value.kind === 'claude-plan') return ok(planProvider(common.value));
   const apiKey = isRecord(raw) ? raw['apiKey'] : undefined;
   // A plain string here means someone pasted a raw key over the sealed envelope.
   if (!isSealed(apiKey)) return unreadable('provider apiKey must be a sealed { enc } envelope');
@@ -119,6 +134,7 @@ const validateProvider = (raw: unknown): Result<Provider, SettingsDocError> => {
   // 'a::b' would parse back as provider 'a' + model 'b', so a provider whose id
   // contains the separator could never be addressed by a model reference.
   if (id.includes(MODEL_REF_SEPARATOR)) return invalid(`provider id cannot contain '${MODEL_REF_SEPARATOR}': ${id}`);
+  if (common.value.kind === 'claude-plan') return ok(planProvider(common.value));
   if (baseUrl !== undefined && !isHttpUrl(baseUrl)) return invalid(`provider baseUrl must be an http(s) url: ${baseUrl}`);
 
   const apiKey = isRecord(raw) ? raw['apiKey'] : undefined;

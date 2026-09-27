@@ -14,14 +14,20 @@ import type { ConversationId } from './conversation-id.ts';
 // out of src/shared/**.
 export type SealedSecret = { readonly enc: string };
 
-export type ProviderKind = 'anthropic' | 'openai';
+export type ProviderKind = 'anthropic' | 'openai' | 'claude-plan';
 
 // One union, parameterised by how the secret is carried, so the sealed and
 // plaintext shapes cannot drift apart. `baseUrl` is optional for anthropic
 // (defaults to the real API) and required for openai (there is no default).
+//
+// A claude-plan provider has neither: the agent runs on the Claude subscription the user
+// signed in to through Claude Code itself, whose token Claude Code keeps and this app never
+// holds. It is a name and a list of models, and nothing that could redirect the sign-in:
+// `never` says so, and lets code that reads a provider's key see "none" rather than fail.
 type ProviderOf<TSecret> =
   | { readonly id: string; readonly kind: 'anthropic'; readonly label: string; readonly baseUrl?: string; readonly apiKey: TSecret; readonly modelIds: readonly string[] }
-  | { readonly id: string; readonly kind: 'openai'; readonly label: string; readonly baseUrl: string; readonly apiKey: TSecret; readonly modelIds: readonly string[] };
+  | { readonly id: string; readonly kind: 'openai'; readonly label: string; readonly baseUrl: string; readonly apiKey: TSecret; readonly modelIds: readonly string[] }
+  | { readonly id: string; readonly kind: 'claude-plan'; readonly label: string; readonly baseUrl?: never; readonly apiKey?: never; readonly modelIds: readonly string[] };
 
 // In memory, after the store's shell has decrypted. What the app works with.
 export type Provider = ProviderOf<string>;

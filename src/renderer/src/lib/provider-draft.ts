@@ -32,9 +32,10 @@ const toDraft = (provider: Provider): ProviderDraft => ({
   id: provider.id,
   kind: provider.kind,
   label: provider.label,
-  // An absent baseUrl must render as an empty field, never as the string 'undefined'.
+  // An absent baseUrl must render as an empty field, never as the string 'undefined'. A
+  // Claude plan provider has no key either: its sign-in is Claude Code's.
   baseUrl: provider.baseUrl ?? '',
-  apiKey: provider.apiKey,
+  apiKey: provider.apiKey ?? '',
   modelIds: [...provider.modelIds],
 });
 
@@ -52,6 +53,8 @@ const toProvider = (draft: ProviderDraft): Provider => {
     modelIds: draft.modelIds.map((m) => m.trim()).filter((m) => m.length > 0),
   };
   if (draft.kind === 'openai') return { ...common, kind: 'openai', baseUrl };
+  // Name and models only: a key or address left over from another kind has nowhere to go.
+  if (draft.kind === 'claude-plan') return { id: common.id, kind: 'claude-plan', label: common.label, modelIds: common.modelIds };
   // Omitted, not blank: settings-doc distinguishes an absent baseUrl (use the real
   // Anthropic API) from a present empty one (a mistake).
   return { ...common, kind: 'anthropic', ...(baseUrl.length === 0 ? {} : { baseUrl }) };

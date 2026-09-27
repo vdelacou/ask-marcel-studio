@@ -2,8 +2,9 @@ import type { FC } from 'react';
 import { Button } from '../../atoms/button/index.tsx';
 import { ProviderForm } from '../../molecules/provider-form/index.tsx';
 import { ProviderRow } from '../../molecules/provider-row/index.tsx';
-import type { ProviderDraft } from '../../molecules/provider-form/index.tsx';
+import type { PlanModelsView, PlanSignInView, ProviderDraft } from '../../molecules/provider-form/index.tsx';
 import type { ModelTestRow } from '../../molecules/model-list/index.tsx';
+import type { ProviderRowFlag } from '../../molecules/provider-row/index.tsx';
 
 // A saved/error/idle banner. A typed variant, not a free-form className, so the
 // app cannot style it (rule 22).
@@ -17,12 +18,19 @@ export type ProvidersPanelProps = {
   modelTests?: Readonly<Record<string, ModelTestRow>>;
   // The result of the last save (a provider's Save button persists the whole set).
   notice?: PanelNotice;
+  // What each row still lacks, keyed by row: a key, or a Claude plan sign-in.
+  rowFlags?: Readonly<Record<string, ProviderRowFlag>>;
+  // The one Claude plan sign-in, shown in any Claude plan provider's form.
+  planSignIn: PlanSignInView;
+  planModels: PlanModelsView;
   onToggleRow: (rowId: string) => void;
   onChangeDraft: (rowId: string, patch: Partial<ProviderDraft>) => void;
   onRemoveDraft: (rowId: string) => void;
   onAddDraft: () => void;
   onSave: () => void;
   onTestModel: (model: string) => void;
+  onSignIn: () => void;
+  onLoadModels: () => void;
 };
 
 const noticeStyles: Record<PanelNotice['tone'], string> = {
@@ -40,18 +48,23 @@ export const ProvidersPanel: FC<ProvidersPanelProps> = ({
   expandedRowId,
   modelTests,
   notice,
+  rowFlags,
+  planSignIn,
+  planModels,
   onToggleRow,
   onChangeDraft,
   onRemoveDraft,
   onAddDraft,
   onSave,
   onTestModel,
+  onSignIn,
+  onLoadModels,
 }) => (
   <section className="flex flex-col gap-y-4">
     <header className="flex items-baseline justify-between">
       <div className="flex flex-col gap-y-1">
         <h2 className="text-lg font-semibold tracking-tight text-ink">Models</h2>
-        <p className="text-sm text-ink-muted">Add an Anthropic or OpenAI-compatible provider.</p>
+        <p className="text-sm text-ink-muted">Add an Anthropic or OpenAI-compatible provider, or run on your Claude plan.</p>
       </div>
       <div className="shrink-0">
         <Button variant="secondary" onClick={onAddDraft}>
@@ -71,7 +84,7 @@ export const ProvidersPanel: FC<ProvidersPanelProps> = ({
             label={rowLabel(draft)}
             kind={draft.kind}
             modelCount={draft.modelIds.filter((m) => m.trim().length > 0).length}
-            hasKey={draft.apiKey.trim().length > 0}
+            flag={rowFlags?.[draft.rowId]}
             isExpanded={draft.rowId === expandedRowId}
             onToggle={() => onToggleRow(draft.rowId)}
           />
@@ -79,6 +92,10 @@ export const ProvidersPanel: FC<ProvidersPanelProps> = ({
             <ProviderForm
               draft={draft}
               {...(modelTests === undefined ? {} : { modelTests })}
+              planSignIn={planSignIn}
+              planModels={planModels}
+              onSignIn={onSignIn}
+              onLoadModels={onLoadModels}
               onChange={(patch) => onChangeDraft(draft.rowId, patch)}
               onRemove={() => onRemoveDraft(draft.rowId)}
               onSave={onSave}

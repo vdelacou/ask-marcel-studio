@@ -101,3 +101,26 @@ describe('saving what the user typed', () => {
     expect(draftsToSettings(settingsToDrafts(settings), settings.defaultModel).defaultModel).toBe('anthropic-work::claude-opus-4-8');
   });
 });
+
+describe('a provider that runs on the user’s Claude plan', () => {
+  test('a Claude plan draft saves with only its name and models', () => {
+    const draft = {
+      ...emptyDraft(),
+      kind: 'claude-plan' as const,
+      label: ' Claude ',
+      apiKey: 'left over',
+      baseUrl: 'https://elsewhere.example',
+      modelIds: [' claude-sonnet-5 ', ''],
+    };
+
+    expect(draftsToSettings([draft]).providers).toStrictEqual([{ id: 'claude', kind: 'claude-plan', label: 'Claude', modelIds: ['claude-sonnet-5'] }]);
+  });
+
+  test('a saved Claude plan provider opens with blank key and address fields', () => {
+    const [draft] = settingsToDrafts({ providers: [{ id: 'claude', kind: 'claude-plan', label: 'Claude', modelIds: ['claude-sonnet-5'] }] });
+
+    expect(draft?.kind).toBe('claude-plan');
+    expect(draft?.apiKey).toBe('');
+    expect(draft?.baseUrl).toBe('');
+  });
+});

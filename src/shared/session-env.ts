@@ -18,9 +18,12 @@
 import { delimiter } from 'node:path';
 import { binDir, claudeConfigDir } from './paths.ts';
 import { formatModelRef } from './model-ref.ts';
+import { isClaudeCodeAlias } from './claude-plan.ts';
 import type { Provider } from './types.ts';
 
 // node:path is path manipulation, not IO, so it is allowed anywhere (rule 20).
+
+type GatewayAddress = { readonly baseUrl: string; readonly apiKey: string };
 
 export type SessionEnvInput = {
   readonly provider: Provider;
@@ -34,8 +37,8 @@ export type SessionEnvInput = {
   readonly toolsRoot: string;
   readonly inheritedEnv: Readonly<Record<string, string | undefined>>;
   // Where the local gateway is listening, and its per-run key. Required for an
-  // openai provider; ignored for anthropic, which talks to the real API.
-  readonly gateway?: { readonly baseUrl: string; readonly apiKey: string };
+  // openai provider; ignored for anthropic and claude-plan, which talk to the real API.
+  readonly gateway?: GatewayAddress;
   // Defaults to the OS path.delimiter (authoritative in the main process); injected in
   // tests to prove the Windows ';' join without a Windows box.
   readonly pathDelimiter?: string;
@@ -65,9 +68,62 @@ const withoutUndefined = (env: Readonly<Record<string, string | undefined>>): Re
   return copy;
 };
 
+// Everything Claude Code would use ahead of a Claude plan sign-in, or that would carry the
+// plan's token to another address. A key exported in the shell that launched the app would
+// otherwise quietly bill every turn to it, with the plan sitting unused.
+const PLAN_OVERRIDES: ReadonlySet<string> = new Set([
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_AUTH_TOKEN',
+  'CLAUDE_CODE_OAUTH_TOKEN',
+  'ANTHROPIC_BASE_URL',
+  'CLAUDE_CODE_USE_BEDROCK',
+  'CLAUDE_CODE_USE_VERTEX',
+  'CLAUDE_CODE_USE_FOUNDRY',
+]);
+
+const withoutPlanOverrides = (env: Readonly<Record<string, string>>): Record<string, string> =>
+  Object.fromEntries(Object.entries(env).filter(([name]) => !PLAN_OVERRIDES.has(name)));
+
+export type SignInEnvInput = {
+  // The account whose claude-config the agent's turns use.
+  readonly configRoot: string;
+  readonly inheritedEnv: Readonly<Record<string, string | undefined>>;
+};
+
+// Where `claude auth status` and `claude auth login` run. Claude Code names its keychain item
+// after CLAUDE_CONFIG_DIR, so this has to be the folder a turn is given, or a sign-in would
+// land where no turn ever looks.
+export const buildSignInEnv = (input: SignInEnvInput): Record<string, string> => ({
+  ...withoutPlanOverrides(withoutUndefined(input.inheritedEnv)),
+  CLAUDE_CONFIG_DIR: claudeConfigDir(input.configRoot),
+});
+
+// Which key and address the agent authenticates with. An openai provider never sees its own
+// key or endpoint: the agent talks to the gateway, and the gateway holds the real
+// credentials. A plan provider has neither to give: Claude Code finds its own sign-in under
+// CLAUDE_CONFIG_DIR, and everything that could outrank it is already gone.
+const applyCredentials = (env: Record<string, string>, provider: Provider, gateway: GatewayAddress | undefined): void => {
+  if (gateway !== undefined) {
+    env['ANTHROPIC_BASE_URL'] = gateway.baseUrl;
+    env['ANTHROPIC_API_KEY'] = gateway.apiKey;
+    return;
+  }
+  if (provider.kind === 'claude-plan') return;
+  env['ANTHROPIC_API_KEY'] = provider.apiKey;
+  // No provider base url means the real Anthropic API. An inherited one would silently
+  // redirect the traffic, so it is removed rather than left in place.
+  if (provider.baseUrl === undefined || provider.baseUrl.length === 0) {
+    delete env['ANTHROPIC_BASE_URL'];
+    return;
+  }
+  env['ANTHROPIC_BASE_URL'] = normaliseBaseUrl(provider.baseUrl);
+};
+
 export const buildSessionEnv = (input: SessionEnvInput): Record<string, string> => {
-  // Copy first: process.env is shared mutable state and must never be written to.
-  const env = withoutUndefined(input.inheritedEnv);
+  // Copy first: process.env is shared mutable state and must never be written to. A plan
+  // turn's copy leaves out everything that would outrank its sign-in.
+  const inherited = withoutUndefined(input.inheritedEnv);
+  const env = input.provider.kind === 'claude-plan' ? withoutPlanOverrides(inherited) : inherited;
   const inheritedPath = env['PATH'];
 
   env['CLAUDE_CONFIG_DIR'] = claudeConfigDir(input.configRoot);
@@ -77,26 +133,12 @@ export const buildSessionEnv = (input: SessionEnvInput): Record<string, string> 
   env['PATH'] = inheritedPath === undefined ? binDir(input.toolsRoot) : `${binDir(input.toolsRoot)}${pathSeparator}${inheritedPath}`;
   env['NO_UPDATE_NOTIFIER'] = '1';
 
-  // An openai provider never sees its own key or endpoint: the agent talks to the
-  // gateway, and the gateway holds the real credentials. The model reference keeps
-  // its providerId so the gateway knows which upstream to call.
+  // Only an openai provider goes through the gateway. The model reference then keeps its
+  // providerId so the gateway knows which upstream to call.
   // Narrowed once into a local: `viaGateway && input.gateway !== undefined` reads as a
   // redundant second check, because a boolean const does not narrow the property.
   const gateway = input.provider.kind === 'openai' ? input.gateway : undefined;
-  if (gateway !== undefined) {
-    env['ANTHROPIC_BASE_URL'] = gateway.baseUrl;
-    env['ANTHROPIC_API_KEY'] = gateway.apiKey;
-  } else {
-    env['ANTHROPIC_API_KEY'] = input.provider.apiKey;
-    const baseUrl = input.provider.baseUrl;
-    if (baseUrl === undefined || baseUrl.length === 0) {
-      // No provider base url means the real Anthropic API. An inherited one would
-      // silently redirect the traffic, so it is removed rather than left in place.
-      delete env['ANTHROPIC_BASE_URL'];
-    } else {
-      env['ANTHROPIC_BASE_URL'] = normaliseBaseUrl(baseUrl);
-    }
-  }
+  applyCredentials(env, input.provider, gateway);
 
   // All four pinned to the same model. The agent makes background calls (titles,
   // summaries, fast paths) that would otherwise quietly bill a different model on
@@ -104,6 +146,15 @@ export const buildSessionEnv = (input: SessionEnvInput): Record<string, string> 
   // gateway routes on the providerId.
   const model = gateway === undefined ? input.modelId : formatModelRef({ providerId: input.provider.id, modelId: input.modelId });
   env['ANTHROPIC_MODEL'] = model;
+  // A Claude Code alias (`sonnet`, `opus[1m]`) is resolved through these same three variables:
+  // pinned to the alias, Claude Code sends the literal "sonnet", and an inherited pin swaps the
+  // model outright. So a plan turn on an alias leaves all three to Claude Code.
+  if (input.provider.kind === 'claude-plan' && isClaudeCodeAlias(model)) {
+    delete env['ANTHROPIC_DEFAULT_OPUS_MODEL'];
+    delete env['ANTHROPIC_DEFAULT_SONNET_MODEL'];
+    delete env['ANTHROPIC_DEFAULT_HAIKU_MODEL'];
+    return env;
+  }
   env['ANTHROPIC_DEFAULT_OPUS_MODEL'] = model;
   env['ANTHROPIC_DEFAULT_SONNET_MODEL'] = model;
   env['ANTHROPIC_DEFAULT_HAIKU_MODEL'] = model;
