@@ -6,6 +6,27 @@ Each entry is one of `[mistake]`, `[decision]`, or `[gotcha]`. Newest first.
 
 ---
 
+## [decision] 2026-09-27 | one settingsEnvelope carries the non-provider fields, so a new one is not dropped by half the callers
+
+`Settings` and `StoredSettings` differ only in how a provider holds its key, so four functions
+each rebuilt the same non-provider envelope around a swapped `providers` list: `parseStoredSettings`
+and `validateSettings` (pure core) plus `sealAll` and `unsealAll` (the electron store shell).
+`skillsPolicy` was added to the two in the core but not to the two in the shell, so it was dropped
+on every write and every read: a skill the user switched off came back on after a restart, and
+`listSkillFolders` (index.ts) never withheld it from the agent's "/" recognition. The four-way copy
+is now one pure `settingsEnvelope` in `src/shared/settings-doc.ts` that all four route through, so a
+field added to `Settings` is carried everywhere or nowhere.
+
+Two things worth keeping. The store shell imports electron's safeStorage and so sits outside
+`bun test` ([decision] stores split into a pure core plus a thin IO shell): the bug lived precisely
+in the untested half, and the fix was to move the droppable logic into the pure half where the
+coverage and mutation gates reach it, not to try to test the shell. And the shell is where a shared
+field quietly rots, because the core's own tests stay green while the shell drifts; verified the
+real round trip by driving the BUILT app on a scratch `--user-data-dir` (switch a skill off,
+relaunch, `settings.get()` still returns it) rather than trusting the green core suite.
+Applies to: any field added to `Settings`, and any other store split into a pure core plus an
+electron IO shell.
+
 ## [decision] 2026-07-26 | flash-lite's missing Sources footer is accepted, not fixed
 
 The agent's answer format requires a trailing Sources footer (`resources/agent-core/core.md`,

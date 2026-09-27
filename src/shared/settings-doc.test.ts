@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { EMPTY_STORED_SETTINGS, parseStoredSettings, serialiseStoredSettings, validateSettings } from './settings-doc.ts';
+import { EMPTY_STORED_SETTINGS, parseStoredSettings, serialiseStoredSettings, settingsEnvelope, validateSettings } from './settings-doc.ts';
 import type { StoredSettings } from './types.ts';
 
 const sealedAnthropic = {
@@ -381,6 +381,34 @@ describe('remembering which skills are switched off', () => {
     const validated = validateSettings({ providers: [], skillsPolicy: { disabledFolders: ['weekly'] } });
 
     expect(validated.ok && validated.value.skillsPolicy).toEqual({ disabledFolders: ['weekly'] });
+  });
+});
+
+describe('carrying the non-provider settings through seal and unseal', () => {
+  // sealAll and unsealAll rebuild Settings around a providers list whose api keys have been
+  // swapped (sealed <-> plaintext). settingsEnvelope is the single place that copies every
+  // OTHER field across; skillsPolicy was silently dropped by both until it existed.
+  test('every non-provider field is carried across, not just providers', () => {
+    const envelope = settingsEnvelope({
+      providers: [],
+      defaultModel: 'anthropic-work::claude-opus-4-8',
+      officePolicy: { disabledCategories: ['calendar'] },
+      skillsPolicy: { disabledFolders: ['weekly'] },
+    });
+
+    expect(envelope).toEqual({
+      defaultModel: 'anthropic-work::claude-opus-4-8',
+      officePolicy: { disabledCategories: ['calendar'] },
+      skillsPolicy: { disabledFolders: ['weekly'] },
+    });
+  });
+
+  test('a section that was never set leaves no key behind', () => {
+    const envelope = settingsEnvelope({ providers: [] });
+
+    expect('defaultModel' in envelope).toBe(false);
+    expect('officePolicy' in envelope).toBe(false);
+    expect('skillsPolicy' in envelope).toBe(false);
   });
 });
 
