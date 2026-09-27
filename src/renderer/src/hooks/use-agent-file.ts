@@ -11,9 +11,7 @@ import type { AgentFileDoc } from '../../../shared/agent-files.ts';
 export type AgentFileNotice = { readonly tone: 'saved' | 'error'; readonly message: string };
 
 export type AgentFileController = {
-  readonly stored: string;
   readonly draft: string;
-  readonly isDirty: boolean;
   readonly isSaving: boolean;
   readonly isRegenerating: boolean;
   // False once the app has said it cannot rebuild this yet, so the button is disabled
@@ -89,9 +87,7 @@ export const useAgentFile = (doc: AgentFileDoc): AgentFileController => {
   }, [doc, apply]);
 
   return {
-    stored,
     draft,
-    isDirty: draft !== stored,
     isSaving,
     isRegenerating,
     canRegenerate,

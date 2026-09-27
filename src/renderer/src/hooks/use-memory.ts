@@ -37,7 +37,6 @@ export type MemoryController = {
   readonly isAnsweringAll: boolean;
   // After everything was cleared, an earlier skip is no longer something to take back.
   readonly forgetSkip: () => void;
-  readonly dismissError: () => void;
   // What is written on each card, by candidate.
   readonly drafts: MemoryDrafts;
   readonly changeDrafts: (change: (current: MemoryDrafts) => MemoryDrafts) => void;
@@ -129,8 +128,6 @@ export const useMemory = (): MemoryController => {
 
   const forgetSkip = useCallback((): void => setLastSkipped(undefined), []);
 
-  const dismissError = useCallback((): void => setError(undefined), []);
-
   return {
     pending,
     ...(savingId === undefined ? {} : { savingId }),
@@ -142,7 +139,6 @@ export const useMemory = (): MemoryController => {
     rememberAll,
     isAnsweringAll,
     forgetSkip,
-    dismissError,
     drafts,
     changeDrafts: setDrafts,
   };

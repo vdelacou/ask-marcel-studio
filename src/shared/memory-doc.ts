@@ -2,10 +2,11 @@
  * The notes the app keeps for the user: the words their team uses, who is on it, and
  * who they deal with most.
  *
- * Markdown, one entry per line, because the user reads and edits these in settings and
- * the agent reads them as part of its prompt. A format that survives a hand edit
- * matters more here than a tidy one: anything this cannot parse is kept exactly as it
- * was found and written back out unchanged, so an edit is never silently eaten.
+ * Markdown, one entry per line, because the user edits these on Memory, an entry at a time
+ * or as text, and the agent reads them as part of its prompt. A format that survives a hand
+ * edit matters more here than a tidy one: anything this cannot parse is kept as it was found
+ * and written back out unchanged, so an edit is never silently eaten. The one line dropped is
+ * a title on the top line, which notes no longer carry (see withoutHeading).
  *
  *   - **TLA**: three-letter acronym, how finance labels quick wins
  *

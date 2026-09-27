@@ -7,9 +7,9 @@
  * left half-written stays half-written while its neighbours are dealt with.
  *
  * A row starts on the wording Marcel suggested, which is what makes "Remember it" a single
- * click for the common case. `selected` undefined means the user has moved to their own
- * words; what they had picked before is simply gone, and what they typed survives picking a
- * wording again, so switching between the two loses nothing.
+ * click for the common case. Its box shows the wording picked until the user types over it:
+ * `selected` undefined means the box holds their own words. Picking another of the wordings
+ * Marcel offered puts that one in the box instead.
  *
  * Pure: no react, no electron, so `bun test` runs it.
  */
