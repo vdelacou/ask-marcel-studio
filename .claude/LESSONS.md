@@ -766,3 +766,23 @@ a copy of the user's identity.
 Rule for next time: for any in-app check that writes, run on a scratch `--user-data-dir` seeded
 with the account pointer and quick context, never on the real folder; afterwards check that no
 process still names the scratch folder, and remove the folder.
+
+## [decision] 2026-09-27 | a claude plan runs on claude code's own sign-in, never on a token the app holds
+
+Anthropic's Claude Code legal page (read 2026-09-26) lets an end user sign in to the unmodified Claude Code with their own subscription, and forbids an app from offering its own Claude.ai login or from collecting, storing or relaying Claude.ai credentials. So a `claude-plan` provider carries no key and no address: Settings runs the SDK's bundled binary as `claude auth login --claudeai`, reads only `claude auth status --json`, and its turns strip every variable that would outrank that sign-in (`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_BASE_URL`, `CLAUDE_CODE_USE_*`). Claude Code 2.1.185 names its macOS keychain item after the first 8 hex characters of a sha256 of `CLAUDE_CONFIG_DIR`, so the sign-in belongs to the account folder, never touches the user's terminal login, and a Microsoft 365 account switch means signing in again. Rejected: pasting a `claude setup-token` token into settings, which would make the app store a Claude token, and keying the item on a shared folder through the undocumented `CLAUDE_SECURESTORAGE_CONFIG_DIR`.
+Applies to: any change to how the agent authenticates, and to shipping the app to other people, which falls under Anthropic's Commercial Terms for running Claude Code in a product.
+
+## [gotcha] 2026-09-27 | claude auth status exits 1 when signed out, and loggedin is true for an api key
+
+On the bundled Claude Code 2.1.185, `auth status` prints its JSON whether or not anyone is signed in and exits 1 when nobody is, so a caller that reads the exit code as failure would report every signed-out user as an error. `loggedIn` is also true for an API key in the environment (`authMethod: "api_key"`), an environment token (`"oauth_token"`), an apiKeyHelper or a cloud provider (`"third_party"`), so only `authMethod: "claude.ai"` means the plan, which is what `parseClaudeAuthStatus` keys on. And `claude auth login --help` prints no help: it falls through to a prompt run and answers "Not logged in · Please run /login", while `claude auth help login` works.
+Rule for next time: capture a status command's real output for every state before writing its parser, and trust its fields over its exit code.
+
+## [gotcha] 2026-09-27 | claude code opens its sign-in page with $browser, so a check can record it
+
+`auth login` opens the OAuth page through `settings.browser ?? $BROWSER`, falling back to `open`, so the scratch run of the built app pointed `BROWSER` at a two-line script that writes its first argument to a file. That proved the sign-in reached claude.com/cai/oauth/authorize from the bundled binary without a tab opening on the user's screen, and `BROWSER` survives `buildSignInEnv` because it is not one of the stripped variables. Killing the waiting login (pkill on the binary path plus `auth login`) then exercised the failed-sign-in copy, and since Claude Code stores tokens only after a completed exchange, no keychain item was left behind.
+Rule for next time: an automated check of a browser sign-in points `BROWSER` at a recorder, never at the user's real browser.
+
+## [gotcha] 2026-09-27 | the commit-size gate counts test files toward its ten; prove partial slices in a scratch index
+
+This sharpens the 2026-07-27 gotcha on slicing a removal consumer-first: `scripts/check-commit-size.sh` leaves tests out of the 300 lines but not out of the 10 files, since it counts every staged path, which turned a planned five-commit series into six. A file split across commits without `git add -p` works by writing the intermediate version to a scratch file, running `git hash-object -w` on it and staging it with `git update-index --cacheinfo 100644,<blob>,<path>`, which leaves the working tree whole. Before asking for approval, every slice was rebuilt cumulatively in a throwaway index (`GIT_INDEX_FILE=<scratch> git read-tree HEAD`, then the same update-index calls), and each tree was archived and typechecked the way gate 6 does. One trap on the way: in zsh `path` is the array tied to `PATH`, so a `while read -r c path src` loop emptied `PATH` and every later command was "not found".
+Rule for next time: count test files when sizing a commit, and prove each partial slice compiles in a scratch index before staging the real one.
