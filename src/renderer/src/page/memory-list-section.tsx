@@ -95,7 +95,7 @@ export const MemoryListSection: FC<MemoryListSectionProps> = ({ list }) => {
     if (row === undefined) return;
     const to: MemoryFileName = row.note === 'team' ? 'people' : 'team';
     const back: MemoryEntryEdit = { action: 'move', note: to, to: row.note, entry: row.entry };
-    const where = to === 'team' ? 'your team' : 'other people';
+    const where = to === 'team' ? 'My team' : 'Other people';
     run({ action: 'move', note: row.note, to, entry: row.entry }, () => setUndo({ message: `Moved ${row.entry.term} to ${where}.`, change: back }), refuse);
   };
 
@@ -147,6 +147,7 @@ export const MemoryListSection: FC<MemoryListSectionProps> = ({ list }) => {
     );
   }
 
+  const unread = unreadLines(memory.notes, list);
   const editor = draft === undefined ? undefined : editorOf(copy, list, draft, isSaving, { onChange: setDraft, onSave: save, onCancel: () => setDraft(undefined) });
 
   return (
@@ -154,19 +155,15 @@ export const MemoryListSection: FC<MemoryListSectionProps> = ({ list }) => {
       title={copy.title}
       description={copy.description}
       addLabel={copy.add}
-      notices={[
-        ...noticesOf(failure, undo, takeBack),
-        ...twinsNotice(twins, isShowingTwins, () => setTwinsOnly(!isShowingTwins)),
-        ...unreadNotice(unreadLines(memory.notes, list)),
-      ]}
+      notices={[...noticesOf(failure, undo, takeBack), ...twinsNotice(twins, isShowingTwins, () => setTwinsOnly(!isShowingTwins)), ...unreadNotice(unread)]}
       query={query}
       queryLabel={`Filter ${copy.things}`}
       queryPlaceholder={`Filter ${String(rows.length)} ${copy.things}`}
       {...(list === 'people' ? { segments: segmentsOf(rows, team) } : {})}
       items={visibleRows(rows, { query, team, duplicatesOnly: isShowingTwins }).map((row) => itemOf(list, row))}
       {...(editor === undefined ? {} : { editor })}
-      empty={emptyOf(copy, query, rows.length > 0, startAdd)}
-      summary={summaryOf(rows.length, approximateTokens(memory.notes, list))}
+      empty={emptyOf(copy, query, rows.length > 0, unread > 0, startAdd)}
+      summary={summaryOf(rows.length, unread, approximateTokens(memory.notes, list))}
       textModes={NOTES_OF[list].map((note) => ({ id: note, label: AS_TEXT[note].link }))}
       onAdd={() => startAdd('')}
       onQuery={setQuery}

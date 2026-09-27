@@ -89,13 +89,14 @@ export const MemoryReviewRow: FC<MemoryReviewRowProps> = ({
       {/* The word itself is a field, not a heading: Marcel hears it inside a sentence and
         sometimes hears it slightly wrong (a capital, a plural, half a name), and correcting
         it here is quicker than skipping the row and editing the note by hand. It is styled
-        as the heading it replaces, so the row still reads as a card rather than a form. */}
+        as the heading it replaces, so the row still reads as a card rather than a form. Set
+        in code type only for a word, as the list sets it; a name reads as a name. */}
       <header className="flex items-center gap-x-2">
         <input
           value={term}
           aria-label="The word to remember"
           onChange={(event) => onChangeTerm(event.target.value)}
-          className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1.5 py-0.5 font-mono text-sm font-semibold text-ink hover:border-border-subtle focus-visible:border-border-subtle focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+          className={`min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1.5 py-0.5 text-sm font-semibold text-ink hover:border-border-subtle focus-visible:border-border-subtle focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${kind === 'jargon' ? 'font-mono' : ''}`}
         />
         <label className="flex shrink-0 items-center gap-x-1.5 text-xs text-ink-muted">
           File under

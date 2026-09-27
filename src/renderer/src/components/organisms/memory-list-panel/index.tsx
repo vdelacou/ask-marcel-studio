@@ -42,7 +42,7 @@ export type MemoryListPanelProps = {
   query: string;
   queryLabel: string;
   queryPlaceholder: string;
-  // A second way to narrow the list, as a row of toggles: My team / Others on the people list.
+  // A second way to narrow the list, as a row of toggles: My team / Other people on the people list.
   segments?: MemoryListSegments;
   items: readonly MemoryListItem[];
   editor?: MemoryListEditor;

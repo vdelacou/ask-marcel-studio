@@ -66,7 +66,7 @@ export const AS_TEXT: Record<MemoryFileName, { readonly link: string; readonly t
 const TEAM_FILTERS: readonly { readonly id: MemoryTeamFilter; readonly label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'team', label: 'My team' },
-  { id: 'others', label: 'Others' },
+  { id: 'others', label: 'Other people' },
 ];
 
 export const isTeamFilter = (id: string): id is MemoryTeamFilter => TEAM_FILTERS.some((filter) => filter.id === id);
@@ -112,7 +112,9 @@ export const noticesOf = (failure: string | undefined, undo: MemoryListUndo | un
   ...(undo === undefined ? [] : [{ id: 'undo', tone: 'neutral' as const, message: undo.message, action: { label: 'Undo', onAction: onUndo } }]),
 ];
 
-export const summaryOf = (count: number, tokens: number): string => {
+// Lines the list cannot show still ride along, so a list showing none is not an empty note.
+export const summaryOf = (count: number, unread: number, tokens: number): string => {
+  if (count === 0 && unread > 0) return `Marcel still reads what is here before every message, about ${String(tokens)} tokens.`;
   if (count === 0) return 'Nothing here rides along with your messages yet.';
   const entries = count === 1 ? 'this entry' : `these ${String(count)} entries`;
   return `Marcel reads ${entries} before every message, about ${String(tokens)} tokens.`;
@@ -121,9 +123,9 @@ export const summaryOf = (count: number, tokens: number): string => {
 // The chip's name starts with the word it shows, so "click My team" finds it by voice too.
 const personOf = (row: MemoryListRow): MemoryEntryPerson => ({
   initials: initialsOf(row.entry.term),
-  tagLabel: row.isTeam ? 'My team' : 'Other',
+  tagLabel: row.isTeam ? 'My team' : 'Other people',
   isTagged: row.isTeam,
-  moveLabel: row.isTeam ? `My team: move ${row.entry.term} to other people` : `Other: move ${row.entry.term} to your team`,
+  moveLabel: row.isTeam ? `My team: move ${row.entry.term} to Other people` : `Other people: move ${row.entry.term} to My team`,
 });
 
 export const itemOf = (list: MemoryListKind, row: MemoryListRow): MemoryListItem => ({
@@ -142,11 +144,12 @@ export const segmentsOf = (rows: readonly MemoryListRow[], team: MemoryTeamFilte
 });
 
 // Why the view is empty, in that order: a search with no match (and the offer to add it), a
-// filter hiding every entry there is, or nothing there at all.
-export const emptyOf = (copy: MemoryListCopy, query: string, hasEntries: boolean, onAdd: (term: string) => void): MemoryListEmpty => {
+// filter hiding every entry there is, lines the list cannot show, or nothing there at all.
+export const emptyOf = (copy: MemoryListCopy, query: string, hasEntries: boolean, hasUnread: boolean, onAdd: (term: string) => void): MemoryListEmpty => {
   const wanted = query.trim();
   if (wanted.length > 0) return { message: `Nothing matches “${wanted}”.`, action: { label: `Add “${wanted}”`, onAction: () => onAdd(wanted) } };
-  return { message: hasEntries ? copy.emptyView : copy.empty };
+  if (hasEntries) return { message: copy.emptyView };
+  return { message: hasUnread ? 'Nothing here the list can show.' : copy.empty };
 };
 
 // Where a new person goes: the team, unless the list is showing everyone else.

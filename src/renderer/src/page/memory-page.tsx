@@ -33,10 +33,10 @@ import type { MemoryController } from '../hooks/use-memory.ts';
 import type { MemoryCandidate } from '../../../shared/memory-queue-doc.ts';
 import { memoryFileName } from '../../../shared/memory-file-name.ts';
 
-// What Remember all leaves behind, said after its question: the cards without a meaning.
+// What Remember all leaves behind, said after its question: the cards without a word or a meaning.
 const stayingNote = (count: number): string => {
   if (count === 0) return '';
-  return count === 1 ? ' One without a meaning stays here.' : ` ${String(count)} without a meaning stay here.`;
+  return count === 1 ? ' One without a word or a meaning stays here.' : ` ${String(count)} without a word or a meaning stay here.`;
 };
 
 // Where the saving of a document typed into is, in words.
@@ -152,7 +152,7 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory, conversations, onOpenC
     memory.remember(id, answer.detail, answer.term, answer.kind);
   };
 
-  // Every card that can be taken as it stands; a card without a meaning stays waiting.
+  // Every card that can be taken as it stands; a card without a word or a meaning stays waiting.
   const answers = answersFor(drafts, memory.pending);
   const leftWaiting = memory.pending.length - answers.length;
   const staying = stayingNote(leftWaiting);
