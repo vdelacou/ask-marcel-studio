@@ -18,7 +18,7 @@ import type { AgentView, SubAgent } from './agents-doc.ts';
 import type { ModelTestTarget, ModelTestVerdict } from './model-test.ts';
 import type { OfficeCategory } from './office-catalog.ts';
 import type { OfficeStatus } from './office-status.ts';
-import type { ClaudePlanStatus } from './claude-plan.ts';
+import type { ClaudePlanStatus, PlanModel } from './claude-plan.ts';
 import type { UpdateStatus } from './update-check.ts';
 import type { QuickContext } from './quick-context.ts';
 import type { Result } from './result.ts';
@@ -59,6 +59,7 @@ export const CHANNEL = {
   officeQuickContext: 'office:quickContext',
   claudePlanStatus: 'claude-plan:status',
   claudePlanLogin: 'claude-plan:login',
+  claudePlanModels: 'claude-plan:models',
   memoryPending: 'memory:pending',
   memoryResolve: 'memory:resolve',
   memoryRead: 'memory:read',
@@ -380,6 +381,8 @@ export type StudioApi = {
     // Opens Claude Code's own browser sign-in and resolves with the status once it ends.
     // Single-flight in main.
     readonly login: () => Promise<Result<ClaudePlanStatus, ClaudePlanError>>;
+    // The models Claude Code offers, read through its own sign-in without sending a turn.
+    readonly models: () => Promise<Result<readonly PlanModel[], ClaudePlanError>>;
   };
   readonly update: {
     // The running version and, if a newer release was found, where to get it. No Result:

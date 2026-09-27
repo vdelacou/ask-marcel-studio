@@ -45,6 +45,7 @@ describe('the channels main and the renderer agree on', () => {
       officeQuickContext: 'office:quickContext',
       claudePlanStatus: 'claude-plan:status',
       claudePlanLogin: 'claude-plan:login',
+      claudePlanModels: 'claude-plan:models',
       memoryPending: 'memory:pending',
       memoryResolve: 'memory:resolve',
       memoryRead: 'memory:read',

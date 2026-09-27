@@ -111,6 +111,7 @@ const api: StudioApi = {
   claudePlan: {
     status: () => ipcRenderer.invoke(CHANNEL.claudePlanStatus),
     login: () => ipcRenderer.invoke(CHANNEL.claudePlanLogin),
+    models: () => ipcRenderer.invoke(CHANNEL.claudePlanModels),
   },
   update: {
     status: () => ipcRenderer.invoke(CHANNEL.updateStatus),

@@ -48,7 +48,8 @@ import { err, ok } from '../shared/result.ts';
 import { createGateway } from './services/gateway/gateway-server.ts';
 import { createOfficeService } from './services/office/office-service.ts';
 import { createClaudePlanService } from './services/claude-plan/claude-plan-service.ts';
-import { createClaudeRun } from './services/claude-plan/claude-plan-io.ts';
+import { createClaudeModelList, createClaudeRun } from './services/claude-plan/claude-plan-io.ts';
+import { createClaudePlanModels } from './services/claude-plan/claude-plan-models.ts';
 import { claudeCodeBinarySpecifier } from '../shared/claude-plan.ts';
 import { buildSignInEnv } from '../shared/session-env.ts';
 import { createQuickContextService } from './services/office/quick-context-service.ts';
@@ -287,7 +288,10 @@ const buildRuntime = (
   const office = createOfficeService(officeRun);
   // Signed in under this account's claude-config, the folder every turn is given, so the
   // sign-in lands where the turns look for it.
-  const claudePlan = createClaudePlanService(createClaudeRun(resolveClaudeCode, buildSignInEnv({ configRoot: userData, inheritedEnv: process.env })));
+  const signInEnv = buildSignInEnv({ configRoot: userData, inheritedEnv: process.env });
+  const claudePlan = createClaudePlanService(createClaudeRun(resolveClaudeCode, signInEnv));
+  // Asked in the background workspace, an app-owned folder no conversation uses.
+  const claudePlanModels = createClaudePlanModels(createClaudeModelList({ env: signInEnv, cwd: backgroundWorkspaceDir(userData) }));
   // Built before the agent, which reads its block on every send.
   const quickContext = createQuickContextService({
     run: officeRun,
@@ -423,6 +427,7 @@ const buildRuntime = (
     quickContext,
     officeCatalog,
     claudePlan,
+    claudePlanModels,
     agentsStore,
     agentFiles,
     memory,
