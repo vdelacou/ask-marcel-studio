@@ -1,3 +1,50 @@
+# Current run: fixes from the second memory pass (approved 2026-09-27, all four groups)
+
+The second pass over the memory work found bugs, most in code from the last two days. Every
+fix lands test-first in a new test file where the decision can live in a pure module, and is
+checked in the built app on a scratch folder otherwise. Commits and the push only on a yes.
+
+H. Data safety.
+H1. [x] A heading line hides only a title at the top: one in the middle of a note hides nothing
+        and survives the next change (memory-doc `withoutHeading`, also the glossary).
+H2. [x] Remember keeps an entry on one line (line breaks in the word or the meaning become
+        spaces), refuses a word with an asterisk, and the parser leaves a line whose word holds
+        an asterisk as it is instead of adding asterisks on every rewrite.
+H3. [x] A note that cannot be read (anything but missing) refuses Remember, list changes and
+        text saves instead of being written over as if empty. Marcel's reading still degrades.
+H4. [x] A close-time save hands its text to the draft, so an older draft is not saved after it.
+H5. [x] New suggestions queue behind answers (one writer); the voice job checks again before
+        writing, so a voice written while it ran is kept.
+H6. [x] An editor closed without a change saves nothing (the editor rewrites markdown in its own
+        style), and nothing is saved while Clear all is asking or running.
+H7. [x] The list's Undo lapses when the note is opened as text, and a second click while the
+        first is on its way does nothing. Page state: checked in the app.
+        DONE (H1-H7): four new test files, 1894 tests, gates green, mutation 96.3%, 17/17 checks
+        in the built app. Found on the way: the editor also saved a document only looked at,
+        through its first report (its own markdown, plus a trailing blank line); an untouched
+        document is now reported as the text it was given. Known edge: a heading that becomes
+        the top line (everything above it deleted) is still taken for an old title.
+I. [x] What you see: known words leave the review list; review drafts outlive closing Memory;
+       Escape in Edit as text and the signature cancels instead of closing; one name for the
+       other people; truthful empty states; Remember all counts the cards without a word; names
+       in the sans font; the signature's mailbox button in the header; a read error stays on
+       screen while the user types over the document.
+       DONE: two new test files (memory-queue-known, autosave-status) plus memory-known for the
+       service, mutation 96.6% on the changed shared files, 26/26 checks in the built app.
+J. [x] Polish: focus after the confirms, Undo, delete, save and cancel, the last card and Clear
+       all; orphans and stale comments.
+       DONE: lib/list-focus decides the row (new test file, 100%); use-list-focus and
+       use-focus-soon move the focus; the review heading takes it after the last card or Remember
+       all; ConfirmDialog opens on Cancel (the conversation delete too); Escape on the Remember
+       all question cancels it. useAgentFile's stored/isDirty and useMemory's dismissError
+       removed; the memory-doc and memory-review headers say what the code does now. 21/21
+       focus checks in the built app, and the H and I checks rerun green on the same build.
+K. [x] The scratch-path lesson, committed (bd4208c).
+L. [ ] Sync main (done: 26 upstream commits in, only this file conflicted), then the commits on
+       a yes, then the push on a yes.
+
+---
+
 # Current run: a Claude plan provider lists its own models (approved 2026-09-27)
 
 Typing model names for a Claude plan is guesswork. The Agent SDK's `supportedModels()` asks
