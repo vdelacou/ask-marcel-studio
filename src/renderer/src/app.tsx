@@ -395,7 +395,7 @@ export const App: FC = () => {
       {isClearingMemory && (
         <ConfirmDialog
           title="Clear all memories?"
-          body="This clears everything on Memory: your words and people, the suggestions waiting and the words you skipped, and Who you are, Writing voice and your email signature. Your writing voice and signature come back from your mailbox the next time the app starts, as on a first launch. This can't be undone."
+          body="This clears everything on Memory: your words and people, the suggestions waiting and the words you skipped, and Who you are, Writing voice and your email signature. Your writing voice and signature stay empty until you rebuild them from your mailbox. This can't be undone."
           confirmLabel="Clear everything"
           isBusy={isMemoryBusy}
           onConfirm={clearAllMemories}

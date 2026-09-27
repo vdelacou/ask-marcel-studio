@@ -60,13 +60,17 @@ const unseal = (sealed: SealedSecret): Result<string, StoreError> => {
   }
 };
 
+// A Claude plan provider holds no secret to seal: its sign-in lives in Claude Code's own
+// store, never in this file.
 const unsealProvider = (stored: StoredProvider): Result<Provider, StoreError> => {
+  if (stored.kind === 'claude-plan') return ok(stored);
   const plaintext = unseal(stored.apiKey);
   if (!plaintext.ok) return plaintext;
   return ok({ ...stored, apiKey: plaintext.value });
 };
 
 const sealProvider = (provider: Provider): Result<StoredProvider, StoreError> => {
+  if (provider.kind === 'claude-plan') return ok(provider);
   const sealed = seal(provider.apiKey);
   if (!sealed.ok) return sealed;
   return ok({ ...provider, apiKey: sealed.value });

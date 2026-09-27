@@ -82,12 +82,12 @@ describe('refusing a settings file that has been corrupted or hand-edited', () =
     {
       why: 'a provider with an unknown kind, rather than silently dropping it',
       file: { providers: [{ ...sealedAnthropic, kind: 'gemini' }] },
-      message: 'provider kind must be anthropic or openai, got gemini',
+      message: 'provider kind must be anthropic, openai or claude-plan, got gemini',
     },
     {
       why: 'a provider missing its kind',
       file: { providers: [{ id: 'a', label: 'A', apiKey: { enc: 'x' }, modelIds: [] }] },
-      message: 'provider kind must be anthropic or openai, got undefined',
+      message: 'provider kind must be anthropic, openai or claude-plan, got undefined',
     },
     {
       why: 'a provider missing its label',
@@ -240,7 +240,35 @@ describe('accepting provider changes the user made in the settings screen', () =
     expect(validated.ok).toBe(false);
     if (validated.ok) return;
     expect(validated.error.kind).toBe('invalid');
-    expect(validated.error.message).toBe('provider kind must be anthropic or openai, got gemini');
+    expect(validated.error.message).toBe('provider kind must be anthropic, openai or claude-plan, got gemini');
+  });
+});
+
+describe('a provider that runs on the user’s Claude plan', () => {
+  const plan = { id: 'claude', kind: 'claude-plan', label: 'Claude', modelIds: ['claude-sonnet-5'] } as const;
+
+  test('a Claude plan provider is saved with no api key', () => {
+    const validated = validateSettings({ providers: [plan] });
+
+    expect(validated.ok).toBe(true);
+    if (!validated.ok) return;
+    expect(validated.value.providers[0]).toStrictEqual(plan);
+  });
+
+  test('a Claude plan provider keeps only its name and models, so no address can be slipped in beside its sign-in', () => {
+    const validated = validateSettings({ providers: [{ ...plan, apiKey: 'sk-ant-leftover', baseUrl: 'https://elsewhere.example' }] });
+
+    expect(validated.ok).toBe(true);
+    if (!validated.ok) return;
+    expect(validated.value.providers[0]).toStrictEqual(plan);
+  });
+
+  test('a Claude plan provider reads back from disk with no sealed key', () => {
+    const parsed = parseStoredSettings({ providers: [plan] });
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.value.providers[0]).toStrictEqual(plan);
   });
 });
 

@@ -1,3 +1,121 @@
+# Current run: a Claude plan provider lists its own models (approved 2026-09-27)
+
+Typing model names for a Claude plan is guesswork. The Agent SDK's `supportedModels()` asks
+the bundled Claude Code for its list through Claude Code's own sign-in, in under a second and
+without sending a turn (probed 2026-09-27: `default`, `opus[1m]`, `sonnet`, `sonnet[1m]`,
+`haiku`). Probed against a capture server, the list's values are aliases Claude Code resolves
+itself (`sonnet` -> `claude-sonnet-4-6`, `opus[1m]` -> `claude-opus-4-8`, via `ANTHROPIC_MODEL`
+and `--model` alike) only while no `ANTHROPIC_DEFAULT_*_MODEL` pins them: pinned to the alias
+it sends the literal `"sonnet"`, and an inherited `ANTHROPIC_DEFAULT_HAIKU_MODEL` turns `haiku`
+into Sonnet. `default` is sent literally in every case, so it is left out of the list.
+
+Built on this branch while PR #1 is open; where it is pushed is decided at the end.
+
+1. [x] Shared: `parsePlanModels` (SDK list to `PlanModel`s, `default` left out, an unusable
+       list refused) and `isClaudeCodeAlias`; session-env leaves an alias plan turn's
+       `ANTHROPIC_DEFAULT_*_MODEL` to Claude Code, inherited ones removed. Done: tests green,
+       100% tier, mutation >= 90 on the staged files. DONE: claude-plan 98.18, session-env
+       97.78 (the alias test's fixture now inherits all three pins, which killed two mutants).
+2. [x] Main: `claude-plan-models.ts` (+test) behind a `ClaudeModelList` seam; the IO shell runs
+       a query whose prompt never yields, reads `supportedModels()`, 15 s deadline,
+       `settingSources: []`, `persistSession: false`, then aborts. Channel `claude-plan:models`
+       in the contract (test updated, confirmed), register, preload, index. Done: tests green,
+       typecheck clean. DONE: the real IO shell answered in 2.7 s cold with `opus[1m]`, `sonnet`,
+       `sonnet[1m]`, `haiku`, no stray rejection after the abort, no process left.
+3. [x] Renderer: `mergeModelsInto` and `shouldLoadPlanModels` (lib, tested), the models button
+       state in `planSignInView`, `loadModels` in the hook, a "Load models from Claude Code"
+       button in the plan block, and a one-time automatic load when a signed-in plan
+       provider with no models is open. Done: lint 0/0, typecheck, lib tier 100%. DONE: the
+       button state is its own `planModelsView`, so the committed sign-in view tests stand.
+4. [x] README line for the list; built app on a scratch folder: the button fills the models
+       (signed out, the list still comes back), save keeps them. Done: checks listed. DONE: 7/7
+       on a scratch folder; the automatic fill after a real sign-in is unit-tested, not seen.
+5. [ ] Commits on a yes, then push or PR per the user's call on #1.
+
+---
+
+# Current run: run the agent on a Claude plan (approved 2026-09-26)
+
+The user wants their Claude subscription (Pro, Max, Team, Enterprise) to pay for the agent
+instead of an API key. Anthropic's Claude Code legal page (read 2026-09-26) allows an end
+user to sign in to the unmodified Claude Code with their own subscription, provided sign-in
+completes through Anthropic's own flow and the app never collects, stores or relays the
+token. The Claude Code bundled with SDK 0.3.185 (2.1.185) has `auth login --claudeai` and
+`auth status --json`, and its macOS keychain item is named after a sha256 of
+CLAUDE_CONFIG_DIR, so a sign-in made with the account's claude-config is exactly the one the
+agent's turns find, and never the user's own terminal login.
+
+v1 assumptions, confirmed by the user: no Test button on a plan model (a real check spends
+plan usage and needs a second launch path); no sign-out (signing in again replaces the
+account); the sign-in lives with the account folder, like the notes.
+
+1. [x] Shared `claude-plan.ts`: `parseClaudeAuthStatus` (Claude Code's `auth status` JSON to
+       signed in or out, a plan sign-in only when `authMethod` is `claude.ai`) and
+       `claudeCodeBinarySpecifier` (the platform package's `claude`, as the SDK resolves it).
+       Done: tests green, 100% tier, mutation >= 90 on the staged file. DONE: 8 tests, 100%,
+       mutation 90.63 before two survivors were closed (a strict assertion, a dead guard).
+2. [x] Sign-in plumbing: session-env `buildSignInEnv`; ipc-contract `ClaudePlanError`,
+       `claude-plan:status`, `claude-plan:login`, `StudioApi.claudePlan`; main
+       `claude-plan-service.ts` (single-flight login, 15 s status and 10 min login deadlines)
+       and `claude-plan-io.ts` (spawns the binary, no shell); register.ts, preload, index.ts.
+       Done: service tests green, ipc-contract test updated (confirmed), typecheck clean.
+       DONE: 7 service tests + 2 env tests, 100%; smoke run against the real binary with a
+       scratch config folder read `signedIn: false` with an inherited API key stripped.
+3. [x] Provider kind `claude-plan` in main and the shared types: settings-doc (no key; any
+       key or address sent with it is dropped), settings-store (nothing to seal), session-env
+       plan branch (strips ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, CLAUDE_CODE_OAUTH_TOKEN,
+       ANTHROPIC_BASE_URL and the three CLAUDE_CODE_USE_* switches; bare model id),
+       provider-draft, and the kind unions the renderer types carry. Not offered in the UI yet.
+       Done: tests green, 100% tiers, mutation >= 90 on the changed shared files. DONE: the
+       plan member types `apiKey?: never` and `baseUrl?: never`, so existing tests reading a
+       provider's key compile unchanged. Mutation: claude-plan 96.61, session-env 97.50,
+       settings-doc 90.83. One survivor on new code: stripping the overrides for every kind
+       breaks no test (proposed as a follow-up, not done).
+4. [x] Settings UI: "Claude plan" in Kind; the form shows a sign-in block instead of the key
+       and address; no Test on plan models; the row flags "Not signed in" instead of "No
+       key"; `lib/claude-plan-view.ts` (+test) and `hooks/use-claude-plan.ts`.
+       Done: lint 0/0, typecheck clean, renderer lib tier 100%. DONE: 10 view tests; the row's
+       `hasKey` became a typed `flag` computed in lib; full suite 1864 pass, coverage green.
+5. [x] README: the Claude plan provider, what the app does and never does with the sign-in,
+       where usage is billed. Done: README matches the surface. DONE: new section plus the
+       settings line; the empty-state card now names the plan too.
+6. [x] Verified in the built app on a scratch user-data folder: the kind, the sign-in block,
+       "Not signed in" on the row, a save and reload keeping the provider keyless, the Sign
+       in button launching Claude Code's login; a signed-in turn answered on the plan, with
+       the user completing the browser step. Scratch keychain item removed with `auth logout`.
+       DONE: 19/19 on a scratch --user-data-dir with BROWSER pointed at a recorder, so nothing
+       opened on screen; the login reached claude.com/cai/oauth/authorize from the bundled
+       binary and was then killed, so no keychain item was made. The review (atelier-review-me)
+       found three things, all fixed with approval: a signed-out plan turn now says where to
+       sign in instead of Claude Code's "/login", a neutral handle in the new test, required
+       sign-in props. STILL OPEN: a signed-in turn, which needs the user's own browser sign-in.
+7. [x] Commits proposed module-before-consumer, each <= 10 files / 300 lines, each on a yes.
+       DONE: six commits (5405d13..this one), each through the 8-gate hook; the gate counts
+       test files toward its 10, so the series is six rather than five. session-env,
+       provider-form, provider-row and settings-page were staged in parts, each slice
+       typechecked in a scratch index before anything was committed.
+
+---
+
+# Current run: a clear that sticks, then keyboard triage (approved 2026-09-27, "continue")
+
+E: after Clear all memories the writing voice and signature came back on the next launch, because
+the launch jobs refill any document that is empty. They now leave alone a document that exists,
+even empty: emptying it, by hand or with Clear all, is a choice. Only a document never written is
+filled in. Copy follows (the confirm, the two empty hints). F: the review list works from the
+keyboard: on a selected card, Up and Down move, Enter remembers, Backspace skips, and the next
+card takes the focus once one is answered.
+
+E1. [x] `fileExists` in json-file.ts; the voice and signature jobs skip a document that exists;
+        copy. Done: new test file, gates. DONE: the app log confirms both launch jobs skip an
+        emptied file ("there is already a signature", "... a writing voice").
+F1. [x] Lib `cardToFocus` (where the focus goes after a move or an answer). Done: new test file,
+        100% tier.
+F2. [x] Review row keys and focus ring, panel hint, page focus handling. Verified in the app.
+G1. [x] Review; commits on a yes. DONE: 11/11 in-app checks; two commits, pushed.
+
+---
+
 # Current run: review list extras, then phase 3 (approved 2026-09-26, "1 then 2 and then 3")
 
 Step A finishes the review list: a Remember all that takes every card as it stands, after an

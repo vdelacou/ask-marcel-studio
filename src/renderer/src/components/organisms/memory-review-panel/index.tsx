@@ -27,6 +27,8 @@ export type MemoryReviewPanelProps = {
   error?: string;
   // What was just done that can still be taken back: the last skip.
   notice?: Omit<ActionNoticeProps, 'tone'>;
+  // How the cards work from the keyboard, said once under the heading while there are cards.
+  hint?: string;
   // Remember all: the button while there are cards to take, and the question it asks first.
   bulk?: { readonly label: string; readonly onStart: () => void };
   confirm?: { readonly message: string; readonly confirmLabel: string; readonly cancelLabel: string; readonly onConfirm: () => void; readonly onCancel: () => void };
@@ -35,6 +37,7 @@ export type MemoryReviewPanelProps = {
   onChangeTerm: (id: string, text: string) => void;
   onChangeKind: (id: string, kind: string) => void;
   onOpenSource: (id: string) => void;
+  onMove: (id: string, step: number) => void;
   onRemember: (id: string) => void;
   onSkip: (id: string) => void;
 };
@@ -43,6 +46,7 @@ export const MemoryReviewPanel: FC<MemoryReviewPanelProps> = ({
   items,
   error,
   notice,
+  hint,
   bulk,
   confirm,
   onChoose,
@@ -50,6 +54,7 @@ export const MemoryReviewPanel: FC<MemoryReviewPanelProps> = ({
   onChangeTerm,
   onChangeKind,
   onOpenSource,
+  onMove,
   onRemember,
   onSkip,
 }) => (
@@ -61,6 +66,7 @@ export const MemoryReviewPanel: FC<MemoryReviewPanelProps> = ({
           Words and names Marcel noticed in your conversations and did not know, waiting here until you say what they mean. Nothing is remembered until you say so, and nothing here
           interrupts you while you work.
         </p>
+        {hint !== undefined && items.length > 0 && <p className="text-xs text-ink-faint">{hint}</p>}
       </div>
       {bulk !== undefined && (
         <Button variant="secondary" onClick={bulk.onStart}>
@@ -105,6 +111,7 @@ export const MemoryReviewPanel: FC<MemoryReviewPanelProps> = ({
             onChangeTerm={(text) => onChangeTerm(item.id, text)}
             onChangeKind={(kind) => onChangeKind(item.id, kind)}
             onOpenSource={() => onOpenSource(item.id)}
+            onMove={(step) => onMove(item.id, step)}
             onRemember={() => onRemember(item.id)}
             onSkip={() => onSkip(item.id)}
           />

@@ -41,12 +41,17 @@ import { parseAgentFileDoc } from '../shared/agent-files.ts';
 import { createModelTestService } from './services/models/model-test-service.ts';
 import { accountDir, backgroundWorkspaceDir, mainLogPath, quickContextFilePath, sdkProjectsDir, signatureFilePath, voiceProfileFilePath, workspaceDir } from '../shared/paths.ts';
 import { parseStoredQuickContext } from '../shared/quick-context.ts';
-import { readJsonFile, writeJsonFileAtomic } from './services/store/json-file.ts';
+import { fileExists, readJsonFile, writeJsonFileAtomic } from './services/store/json-file.ts';
 import { BUILTIN_AGENTS } from './services/agent/builtin-agents.ts';
 import { EMPTY_AGENTS_DOC, mergeAgents, toSdkAgents } from '../shared/agents-doc.ts';
 import { err, ok } from '../shared/result.ts';
 import { createGateway } from './services/gateway/gateway-server.ts';
 import { createOfficeService } from './services/office/office-service.ts';
+import { createClaudePlanService } from './services/claude-plan/claude-plan-service.ts';
+import { createClaudeModelList, createClaudeRun } from './services/claude-plan/claude-plan-io.ts';
+import { createClaudePlanModels } from './services/claude-plan/claude-plan-models.ts';
+import { claudeCodeBinarySpecifier } from '../shared/claude-plan.ts';
+import { buildSignInEnv } from '../shared/session-env.ts';
 import { createQuickContextService } from './services/office/quick-context-service.ts';
 import { createAccountService } from './services/account/account-service.ts';
 import type { AccountService } from './services/account/account-service.ts';
@@ -145,6 +150,11 @@ const officeCliLocation = (): OfficeCliLocation => {
   return { execPath: process.execPath, cliPath: join(dirname(resolveFrom.resolve('ask-marcel-office-cli/package.json')), 'dist', 'cli.js') };
 };
 
+// The Claude Code the SDK launches for every turn, found the way the SDK finds it, so a
+// Claude plan sign-in runs the very binary that will use it. A resolver, not a path: the
+// package is optional and per platform, and its absence must not stop the app opening.
+const resolveClaudeCode = (): string => createRequire(__filename).resolve(claudeCodeBinarySpecifier(process.platform, process.arch));
+
 // The CLI's own description of every command it has, shipped beside its cli.js. Read
 // once so settings can list the categories and the shell guard can place a command in
 // one.
@@ -217,8 +227,8 @@ const startPython = (userData: string): void => {
   void python.provision();
 };
 
-// Whether a file exists and has something in it. Used to decide whether a prefill has
-// anything to do; an unreadable file counts as absent, which means it is tried again.
+// Whether a file exists and has something in it: how the signature prefill tells a fetch that
+// wrote something from one that did not. An unreadable file counts as absent.
 const hasContent = async (path: string): Promise<boolean> => {
   try {
     return (await stat(path)).size > 0;
@@ -276,6 +286,12 @@ const buildRuntime = (
   const location = officeCliLocation();
   const officeRun = createOfficeRun(location, process.env);
   const office = createOfficeService(officeRun);
+  // Signed in under this account's claude-config, the folder every turn is given, so the
+  // sign-in lands where the turns look for it.
+  const signInEnv = buildSignInEnv({ configRoot: userData, inheritedEnv: process.env });
+  const claudePlan = createClaudePlanService(createClaudeRun(resolveClaudeCode, signInEnv));
+  // Asked in the background workspace, an app-owned folder no conversation uses.
+  const claudePlanModels = createClaudePlanModels(createClaudeModelList({ env: signInEnv, cwd: backgroundWorkspaceDir(userData) }));
   // Built before the agent, which reads its block on every send.
   const quickContext = createQuickContextService({
     run: officeRun,
@@ -360,7 +376,8 @@ const buildRuntime = (
     signature: createSignatureService({
       run: officeRun,
       signaturePath: signatureFilePath(userData),
-      hasSignature: () => hasContent(signatureFilePath(userData)),
+      // A signature the user emptied, by hand or with Clear all memories, stays empty.
+      hasSignature: () => fileExists(signatureFilePath(userData)),
       wroteSomething: () => hasContent(signatureFilePath(userData)),
     }),
     memoryExtractor: createMemoryExtractor({
@@ -379,7 +396,8 @@ const buildRuntime = (
     voice: createVoiceProfileJob({
       runAgentText: createRunAgentText(),
       prompt: readBundledText(backgroundPromptSource('voice-profile-prompt.md')),
-      hasProfile: () => hasContent(voiceProfileFilePath(userData)),
+      // As for the signature: an emptied writing voice is left empty until the user rebuilds it.
+      hasProfile: () => fileExists(voiceProfileFilePath(userData)),
       write: async (markdown) => {
         const saved = await agentFiles.save('voice-profile', markdown);
         return saved.ok ? ok(null) : err(saved.error.message);
@@ -408,6 +426,8 @@ const buildRuntime = (
     office,
     quickContext,
     officeCatalog,
+    claudePlan,
+    claudePlanModels,
     agentsStore,
     agentFiles,
     memory,

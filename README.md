@@ -14,7 +14,8 @@ Electron + React, MIT licensed. Built to the atelier engineering standard.
 > pick a different model per conversation when you have more than one, and a new conversation
 > opens on the last model you picked.
 >
-> Settings is where the rest lives: models, skills (editable, including the built-in ones, with the
+> Settings is where the rest lives: models (an API key, an OpenAI-compatible endpoint, or your Claude
+> plan), skills (editable, including the built-in ones, with the
 > original a click away), the helpers the agent delegates to, your email signature and writing voice,
 > what the app remembers about your own vocabulary, and Microsoft 365, where you can switch off whole
 > areas the agent may not touch. A dot beside Settings says whether your sign-in is actually working.
@@ -169,6 +170,48 @@ It also cannot sign you in to Microsoft 365: that browser window belongs to you,
 
 There is no approval dialog anywhere. A refusal has to be rare enough never to block ordinary
 work, and the agent explains it to you in its own words and carries on.
+
+## Running on your Claude plan
+
+A provider of kind **Claude plan** runs the agent on your Claude subscription (Pro, Max, Team or
+Enterprise) instead of an API key. It has no key and no address: pick the kind and press **Sign
+in with Claude**.
+
+The models fill themselves. Opened with no models while you are signed in, the provider asks
+Claude Code for the list its own model picker offers (`opus[1m]`, `sonnet`, `sonnet[1m]`,
+`haiku`), through the SDK's `supportedModels()`, without sending a message; **Load models from
+Claude Code** asks again. These are Claude Code's aliases, resolved by the bundled version to
+the models it knows, so a newer model appears with an SDK upgrade; a full id typed by hand,
+like `claude-sonnet-5`, stays in the list. Claude Code's `default` entry is left out: it only
+means "no model set", and sent as a model it is refused.
+
+The sign-in belongs to Claude Code, start to finish. The app launches the Claude Code binary the
+agent SDK installs for this platform, the same one every turn runs, as `claude auth login
+--claudeai`: Anthropic's own page opens in your browser, and Claude Code keeps what it gets in its
+own keychain item. The app never reads, stores or relays the token. All it asks is `claude auth
+status --json`, which names the account and the plan and carries no secret. That split is what
+Anthropic's Claude Code terms ask of an app built on it: sign-in through Anthropic's own flow, and
+no Claude credentials collected or intermediated by the app.
+
+Three consequences worth knowing:
+
+- Claude Code names its keychain item after `CLAUDE_CONFIG_DIR`, so the sign-in belongs to the
+  account folder the app is open on, like the notes. It never touches the login your own terminal
+  `claude` uses.
+- A plan turn is built without `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
+  `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_BASE_URL` or any `CLAUDE_CODE_USE_*` switch, whatever the
+  app inherited, so a key exported in the shell that launched it cannot quietly take over the bill
+  (`src/shared/session-env.ts`). On an alias it also leaves the `ANTHROPIC_DEFAULT_*_MODEL`
+  variables to Claude Code: pinned to the alias, it would send the literal `"sonnet"`.
+- A plan model has no Test button: there is no key to try, and a real request would spend plan
+  usage. A wrong model name shows up as an error on the first message instead.
+
+Usage counts against your plan's limits, as `claude -p` does. Anthropic announced a separate
+monthly Agent SDK credit for June 15, 2026 and paused it the same day; the
+[Claude Help Center](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan)
+says where that stands. If you ship this app to other people, running Claude Code inside a product
+falls under Anthropic's Commercial Terms, see the
+[Claude Code legal page](https://code.claude.com/docs/en/legal-and-compliance).
 
 ## OpenAI-compatible providers
 
