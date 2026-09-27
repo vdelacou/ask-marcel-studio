@@ -65,6 +65,36 @@ const withoutUndefined = (env: Readonly<Record<string, string | undefined>>): Re
   return copy;
 };
 
+// Everything Claude Code would use ahead of a Claude plan sign-in, or that would carry the
+// plan's token to another address. A key exported in the shell that launched the app would
+// otherwise quietly bill every turn to it, with the plan sitting unused.
+const PLAN_OVERRIDES: ReadonlySet<string> = new Set([
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_AUTH_TOKEN',
+  'CLAUDE_CODE_OAUTH_TOKEN',
+  'ANTHROPIC_BASE_URL',
+  'CLAUDE_CODE_USE_BEDROCK',
+  'CLAUDE_CODE_USE_VERTEX',
+  'CLAUDE_CODE_USE_FOUNDRY',
+]);
+
+const withoutPlanOverrides = (env: Readonly<Record<string, string>>): Record<string, string> =>
+  Object.fromEntries(Object.entries(env).filter(([name]) => !PLAN_OVERRIDES.has(name)));
+
+export type SignInEnvInput = {
+  // The account whose claude-config the agent's turns use.
+  readonly configRoot: string;
+  readonly inheritedEnv: Readonly<Record<string, string | undefined>>;
+};
+
+// Where `claude auth status` and `claude auth login` run. Claude Code names its keychain item
+// after CLAUDE_CONFIG_DIR, so this has to be the folder a turn is given, or a sign-in would
+// land where no turn ever looks.
+export const buildSignInEnv = (input: SignInEnvInput): Record<string, string> => ({
+  ...withoutPlanOverrides(withoutUndefined(input.inheritedEnv)),
+  CLAUDE_CONFIG_DIR: claudeConfigDir(input.configRoot),
+});
+
 export const buildSessionEnv = (input: SessionEnvInput): Record<string, string> => {
   // Copy first: process.env is shared mutable state and must never be written to.
   const env = withoutUndefined(input.inheritedEnv);

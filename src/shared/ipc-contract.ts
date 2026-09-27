@@ -18,6 +18,7 @@ import type { AgentView, SubAgent } from './agents-doc.ts';
 import type { ModelTestTarget, ModelTestVerdict } from './model-test.ts';
 import type { OfficeCategory } from './office-catalog.ts';
 import type { OfficeStatus } from './office-status.ts';
+import type { ClaudePlanStatus } from './claude-plan.ts';
 import type { UpdateStatus } from './update-check.ts';
 import type { QuickContext } from './quick-context.ts';
 import type { Result } from './result.ts';
@@ -56,6 +57,8 @@ export const CHANNEL = {
   officeLogout: 'office:logout',
   officeCommands: 'office:commands',
   officeQuickContext: 'office:quickContext',
+  claudePlanStatus: 'claude-plan:status',
+  claudePlanLogin: 'claude-plan:login',
   memoryPending: 'memory:pending',
   memoryResolve: 'memory:resolve',
   memoryRead: 'memory:read',
@@ -253,6 +256,20 @@ export type OfficeError =
   | { readonly kind: 'timed-out'; readonly message: string }
   | { readonly kind: 'login-failed'; readonly message: string };
 
+// Why each kind exists (see claude-plan-service):
+//   spawn-failed  Claude Code could not be launched at all
+//   unreadable    it ran, but what it printed was not its sign-in status
+//   busy          a sign-in is already in progress (single-flight)
+//   timed-out     the sign-in exceeded its ten-minute deadline
+//   login-failed  the sign-in ran and exited non-zero (cancelled, refused, network)
+// Nobody signed in is NOT an error: status resolves ok with { signedIn: false }.
+export type ClaudePlanError =
+  | { readonly kind: 'spawn-failed'; readonly message: string }
+  | { readonly kind: 'unreadable'; readonly message: string }
+  | { readonly kind: 'busy'; readonly message: string }
+  | { readonly kind: 'timed-out'; readonly message: string }
+  | { readonly kind: 'login-failed'; readonly message: string };
+
 // The renderer-facing api surfaced by the preload bridge. The preload wires each
 // member to its CHANNEL; this type is what keeps the two sides honest.
 export type StudioApi = {
@@ -345,6 +362,14 @@ export type StudioApi = {
     // Who the user is, as the app last fetched it. Undefined until a first successful
     // fetch: no Result, because "not known yet" is an answer, not a failure.
     readonly quickContext: () => Promise<QuickContext | undefined>;
+  };
+  readonly claudePlan: {
+    // Asks Claude Code who is signed in to it. No secret ever crosses: the status names the
+    // account and the plan, and the token stays in Claude Code's own store.
+    readonly status: () => Promise<Result<ClaudePlanStatus, ClaudePlanError>>;
+    // Opens Claude Code's own browser sign-in and resolves with the status once it ends.
+    // Single-flight in main.
+    readonly login: () => Promise<Result<ClaudePlanStatus, ClaudePlanError>>;
   };
   readonly update: {
     // The running version and, if a newer release was found, where to get it. No Result:

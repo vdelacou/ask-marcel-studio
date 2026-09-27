@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { buildSessionEnv } from './session-env.ts';
+import { buildSessionEnv, buildSignInEnv } from './session-env.ts';
 import type { Provider } from './types.ts';
 
 const USER_DATA = '/Users/someone/Library/Application Support/ask-marcel-studio';
@@ -210,5 +210,32 @@ describe('keeping one account out of another account’s session', () => {
     const env = buildSessionEnv({ provider: anthropic, modelId: 'm', configRoot: `${USER_DATA}/accounts/vincent-x1`, toolsRoot: USER_DATA, inheritedEnv: INHERITED });
 
     expect(env['PATH']?.startsWith(`${USER_DATA}/bin`)).toBe(true);
+  });
+});
+
+// Everything Claude Code would use ahead of a plan sign-in, or would send it somewhere else.
+const OUTRANKING = {
+  ANTHROPIC_API_KEY: 'sk-ant-dev',
+  ANTHROPIC_AUTH_TOKEN: 'bearer-dev',
+  CLAUDE_CODE_OAUTH_TOKEN: 'oauth-dev',
+  ANTHROPIC_BASE_URL: 'http://127.0.0.1:9999',
+  CLAUDE_CODE_USE_BEDROCK: '1',
+  CLAUDE_CODE_USE_VERTEX: '1',
+  CLAUDE_CODE_USE_FOUNDRY: '1',
+};
+
+describe('signing in to a Claude plan through Claude Code', () => {
+  test('signing in uses the agent’s own config folder, so the sign-in lands where turns look for it', () => {
+    const env = buildSignInEnv({ configRoot: `${USER_DATA}/accounts/someone-x1`, inheritedEnv: INHERITED });
+
+    expect(env['CLAUDE_CONFIG_DIR']).toBe(`${USER_DATA}/accounts/someone-x1/claude-config`);
+  });
+
+  test('signing in strips everything that would outrank the plan, and keeps the rest', () => {
+    const env = buildSignInEnv({ configRoot: USER_DATA, inheritedEnv: { ...INHERITED, ...OUTRANKING } });
+
+    for (const name of Object.keys(OUTRANKING)) expect(name in env).toBe(false);
+    expect(env['PATH']).toBe('/usr/bin:/bin');
+    expect(env['HOME']).toBe('/Users/someone');
   });
 });

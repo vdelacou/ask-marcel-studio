@@ -107,6 +107,10 @@ const api: StudioApi = {
     commands: () => ipcRenderer.invoke(CHANNEL.officeCommands),
     quickContext: () => ipcRenderer.invoke(CHANNEL.officeQuickContext),
   },
+  claudePlan: {
+    status: () => ipcRenderer.invoke(CHANNEL.claudePlanStatus),
+    login: () => ipcRenderer.invoke(CHANNEL.claudePlanLogin),
+  },
   update: {
     status: () => ipcRenderer.invoke(CHANNEL.updateStatus),
   },
