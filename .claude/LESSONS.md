@@ -283,3 +283,18 @@ Rule for next time: an automated check of a browser sign-in points `BROWSER` at 
 
 Gate 6 typechecks the staged tree, not the working tree (`scripts/check-staged-typecheck.sh`), so every commit is verified on its own: a deletion is sliced strictly consumer-before-module, a file's last importer pulls that file into its commit, and a `bun remove` is the LAST commit of a removal series, since node_modules is shared by every staged tree the hook builds and an early removal fails commits that never touched the dependency (recover with `git checkout HEAD -- package.json bun.lock && bun install`). Gate 1 (`scripts/check-commit-size.sh`) keeps `*.test.ts` lines out of the 300 and deleted files out of the 10 (`--diff-filter=ACMR`), but counts every other staged path toward the 10, test files included. To split a file across commits without `git add -p`, write its intermediate version to a scratch file and stage it with `git update-index --cacheinfo 100644,$(git hash-object -w <file>),<path>`, which leaves the working tree whole, and prove each slice first in a throwaway index (`GIT_INDEX_FILE=<scratch> git read-tree HEAD`, the same update-index calls, then archive and typecheck the tree the way gate 6 does). In zsh never name a loop variable `path`: it is the array tied to `PATH`, and a `while read -r c path src` loop empties it.
 Merges: 2026-07-27 (pre-commit gate 6 typechecks the STAGED tree, so a removal must be sliced consumer-first), 2026-07-27 (`bun remove` a dependency first and every intermediate commit stops typechecking), 2026-09-27 (the commit-size gate counts test files toward its ten).
+
+## [mistake] 2026-09-27 | a scratch script resolved its folder from the working directory and wrote into the repo
+
+A probe for the launch jobs set its scratch folder with `path.resolve('prefill-probe')`, meant to
+land in the session scratchpad next to the script. The shell had just `cd`ed into the repo, so it
+resolved against the repo instead: `prefill-probe/userdata/` appeared in the working tree, holding
+a copy of the user's `current-account.json` and `quick-context.json`. It was caught by
+`git status` and deleted before anything was staged. The same run then hung for five minutes:
+`grep ... $(find "$P" -name "*.log")` found no files at the path it was given, and `grep` with no
+file arguments reads standard input and waits forever.
+
+Rule for next time: a scratch script builds every path from an absolute root (the scratchpad
+path, or `import.meta.dirname`), never from `path.resolve` of a relative name, and never touches
+the repo tree. When a command feeds `find` output to `grep`, give `grep` a file or `< /dev/null`
+so an empty match cannot leave it waiting.
