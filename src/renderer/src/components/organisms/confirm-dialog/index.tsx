@@ -3,9 +3,9 @@ import { Button } from '../../atoms/button/index.tsx';
 
 export type ConfirmTone = 'default' | 'danger';
 
-// A centered question with two answers, for the moments something cannot be undone. Nothing
-// is focused when it opens, so a stray Return press cannot confirm a deletion; the page
-// shell owns Escape.
+// A centered question with two answers, for the moments something cannot be undone. Cancel
+// holds the focus when it opens, so the keyboard is on the question and a stray Return press
+// cancels rather than confirms a deletion; the page shell owns Escape.
 export type ConfirmDialogProps = {
   title: string;
   body: string;
@@ -29,7 +29,7 @@ export const ConfirmDialog: FC<ConfirmDialogProps> = ({ title, body, confirmLabe
       <h2 className="text-base font-semibold text-ink">{title}</h2>
       <p className="text-sm text-ink-muted">{body}</p>
       <footer className="flex items-center justify-end gap-x-2">
-        <Button variant="secondary" onClick={onCancel} disabled={isBusy}>
+        <Button variant="secondary" onClick={onCancel} disabled={isBusy} autoFocus>
           {cancelLabel}
         </Button>
         <Button variant={tone === 'danger' ? 'danger' : 'primary'} onClick={onConfirm} disabled={isBusy}>

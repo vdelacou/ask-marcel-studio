@@ -30,6 +30,7 @@ import type { AutosavedFile } from '../hooks/use-autosaved-file.ts';
 import { AutosavedDocument } from '../components/organisms/autosaved-document/index.tsx';
 import type { AutosavedDocumentProps } from '../components/organisms/autosaved-document/index.tsx';
 import type { MemoryController } from '../hooks/use-memory.ts';
+import { useFocusSoon } from '../hooks/use-focus-soon.ts';
 import type { MemoryCandidate } from '../../../shared/memory-queue-doc.ts';
 import { memoryFileName } from '../../../shared/memory-file-name.ts';
 
@@ -138,6 +139,7 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory, conversations, onOpenC
   };
 
   const focus = useReviewFocus(items.length);
+  const focusSoon = useFocusSoon();
   const indexOf = (id: string): number => items.findIndex((item) => item.id === id);
 
   const remember = (id: string): void => {
@@ -160,11 +162,17 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory, conversations, onOpenC
     message: `Remember all ${String(answers.length)} as they are written? Each goes into the list it is filed under.${staying}`,
     confirmLabel: `Remember ${String(answers.length)}`,
     cancelLabel: 'Cancel',
+    // The question's buttons go with it: the focus goes back to Remember all, or to the list's
+    // heading while the answers land.
     onConfirm: (): void => {
       setIsConfirmingAll(false);
       memory.rememberAll(answers);
+      focusSoon('[data-review-heading]');
     },
-    onCancel: (): void => setIsConfirmingAll(false),
+    onCancel: (): void => {
+      setIsConfirmingAll(false);
+      focusSoon('[data-review-bulk]');
+    },
   };
 
   const openSource = (id: string): void => {
@@ -183,7 +191,7 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory, conversations, onOpenC
     <SheetLayout
       nav={<SheetNav groups={navGroups} activeId={section} onSelect={setSection} />}
       footer={
-        <Button variant="danger" onClick={onClearAll}>
+        <Button variant="danger" onClick={onClearAll} data-clear-all>
           Clear all memories
         </Button>
       }
@@ -194,7 +202,18 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory, conversations, onOpenC
           {...(memory.error === undefined ? {} : { error: memory.error })}
           {...(skipped === undefined
             ? {}
-            : { notice: { message: `Skipped ${skipped.term}. Marcel will not ask about it again.`, action: { label: 'Undo', onAction: () => memory.restore(skipped) } } })}
+            : {
+                notice: {
+                  message: `Skipped ${skipped.term}. Marcel will not ask about it again.`,
+                  action: {
+                    label: 'Undo',
+                    onAction: () => {
+                      focus.keepAfterRestore();
+                      memory.restore(skipped);
+                    },
+                  },
+                },
+              })}
           onChoose={choose}
           onChangeMeaning={changeMeaning}
           onChangeTerm={changeTerm}

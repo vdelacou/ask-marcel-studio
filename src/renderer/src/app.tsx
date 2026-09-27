@@ -33,6 +33,7 @@ import { useUserIdentity } from './hooks/use-user-identity.ts';
 import { IconButton } from './components/atoms/icon-button/index.tsx';
 import { PanelIcon } from './components/atoms/panel-icon/index.tsx';
 import { useMemory } from './hooks/use-memory.ts';
+import { useFocusSoon } from './hooks/use-focus-soon.ts';
 import { useUpdate } from './hooks/use-update.ts';
 import { UpdateBanner } from './components/molecules/update-banner/index.tsx';
 import { dotLabel } from './lib/office-health.ts';
@@ -57,6 +58,12 @@ export const App: FC = () => {
   const [isMemoryBusy, setIsMemoryBusy] = useState(false);
   const [memoryError, setMemoryError] = useState<string | undefined>(undefined);
   const [memoryKey, setMemoryKey] = useState(0);
+  const focusSoon = useFocusSoon();
+  // However the question closes, the focus goes back to the button that asked it.
+  const cancelClearAll = useCallback((): void => {
+    setIsClearingMemory(false);
+    focusSoon('[data-clear-all]');
+  }, [focusSoon]);
   const [boot, setBoot] = useState<Boot>({ step: 'loading' });
   // Same read guard the hook documents: StrictMode double-invokes the effect and
   // closing settings re-runs bootstrap.
@@ -170,13 +177,13 @@ export const App: FC = () => {
       if (headerMenuOpen) return setHeaderMenuOpen(false);
       if (officeOpen) return setOfficeOpen(false);
       if (settingsOpen) return closeSettings();
-      if (isClearingMemory) return setIsClearingMemory(false);
+      if (isClearingMemory) return cancelClearAll();
       if (memoryOpen) return setMemoryOpen(false);
       return undefined;
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [confirmingDeleteId, cancelDelete, menuOpenId, toggleRowMenu, headerMenuOpen, officeOpen, settingsOpen, closeSettings, isClearingMemory, memoryOpen]);
+  }, [confirmingDeleteId, cancelDelete, menuOpenId, toggleRowMenu, headerMenuOpen, officeOpen, settingsOpen, closeSettings, isClearingMemory, cancelClearAll, memoryOpen]);
 
   // Memory reopens on whatever is left either way: a failure may still have cleared the rest.
   const clearAllMemories = useCallback((): void => {
@@ -186,10 +193,11 @@ export const App: FC = () => {
       setIsMemoryBusy(false);
       setIsClearingMemory(false);
       setMemoryKey((key) => key + 1);
+      focusSoon('[data-clear-all]');
       if (!cleared.ok) return setMemoryError(cleared.error.message);
       return forgetSkip();
     })();
-  }, [forgetSkip]);
+  }, [forgetSkip, focusSoon]);
 
   const isReady = boot.step === 'ready';
   // Only worth a picker when there is a choice to make.
@@ -400,7 +408,7 @@ export const App: FC = () => {
           confirmLabel="Clear everything"
           isBusy={isMemoryBusy}
           onConfirm={clearAllMemories}
-          onCancel={() => setIsClearingMemory(false)}
+          onCancel={cancelClearAll}
         />
       )}
       {conversations.error !== undefined && <Toast message={conversations.error} onDismiss={conversations.dismissError} />}

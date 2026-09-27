@@ -61,7 +61,10 @@ export const MemoryReviewPanel: FC<MemoryReviewPanelProps> = ({
   <section className="flex flex-col gap-y-6">
     <header className="flex items-start justify-between gap-x-4">
       <div className="flex flex-col gap-y-1">
-        <h2 className="text-lg font-semibold tracking-tight text-ink">To review</h2>
+        {/* Focusable from the page only: the focus rests here once the last card is answered. */}
+        <h2 tabIndex={-1} data-review-heading className="text-lg font-semibold tracking-tight text-ink outline-none">
+          To review
+        </h2>
         <p className="text-sm text-ink-muted">
           Words and names Marcel noticed in your conversations and did not know, waiting here until you say what they mean. Nothing is remembered until you say so, and nothing here
           interrupts you while you work.
@@ -69,19 +72,33 @@ export const MemoryReviewPanel: FC<MemoryReviewPanelProps> = ({
         {hint !== undefined && items.length > 0 && <p className="text-xs text-ink-faint">{hint}</p>}
       </div>
       {bulk !== undefined && (
-        <Button variant="secondary" onClick={bulk.onStart}>
+        <Button variant="secondary" onClick={bulk.onStart} data-review-bulk>
           {bulk.label}
         </Button>
       )}
     </header>
 
     {confirm !== undefined && (
-      <div role="alert" className="flex items-center gap-x-3 rounded-md border border-border-subtle bg-surface-raised px-3 py-2 text-sm text-ink">
+      <div
+        role="alert"
+        // The question is the innermost thing open, so Escape is its alone: it cancels, as the
+        // Cancel button does, instead of closing Memory.
+        onKeyDown={(event) => {
+          if (event.key !== 'Escape') return;
+          event.preventDefault();
+          event.stopPropagation();
+          confirm.onCancel();
+        }}
+        className="flex items-center gap-x-3 rounded-md border border-border-subtle bg-surface-raised px-3 py-2 text-sm text-ink"
+      >
         <span className="min-w-0 flex-1">{confirm.message}</span>
         <Button variant="secondary" onClick={confirm.onCancel}>
           {confirm.cancelLabel}
         </Button>
-        <Button onClick={confirm.onConfirm}>{confirm.confirmLabel}</Button>
+        {/* The question takes the focus from the button that asked it, which is gone. */}
+        <Button onClick={confirm.onConfirm} autoFocus>
+          {confirm.confirmLabel}
+        </Button>
       </div>
     )}
 
