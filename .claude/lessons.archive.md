@@ -12,6 +12,65 @@ This sharpens the 2026-07-27 gotcha on slicing a removal consumer-first: `script
 Rule for next time: count test files when sizing a commit, and prove each partial slice compiles in a scratch index before staging the real one.
 Archived 2026-09-27: merge, into the entry dated 2026-09-27 "the commit gates judge each slice alone: consumer first, dependency removal last, test files counted".
 
+## [gotcha] 2026-09-26 | Driving the built app on a scratch user-data folder: seed the account, or it relaunches away
+
+Verifying the memory lists meant adding, editing and deleting entries, so the run-studio
+driver's real userData was out. Electron honours `--user-data-dir=<dir>`, and the app boots on
+it: `current-account.json`, `accounts/` and `bin/` all land there. Two traps, one after the
+other. A fresh folder starts signed out, and on a machine whose office CLI is signed in the app
+adopts the `signed-out` folder into the user's account a few seconds in and RELAUNCHES itself as
+a new process: Playwright's handle goes dead ("Target page, context or browser has been
+closed", then "UI never came up") and the relaunched instance keeps running, window and all,
+until killed (`pkill -f "<scratch dir>"`). Seeding the account pointer stops the relaunch, but
+then no identity loads, and without one the user button opens Settings instead of the menu that
+holds Memory.
+
+What worked: before launch, copy the real `current-account.json` into the scratch folder and
+the account's `claude-config/quick-context.json` into `accounts/<key>/claude-config/`, seed
+synthetic notes beside it, drive, and delete the scratch folder at the end, since it now holds
+a copy of the user's identity.
+
+Rule for next time: for any in-app check that writes, run on a scratch `--user-data-dir` seeded
+with the account pointer and quick context, never on the real folder; afterwards check that no
+process still names the scratch folder, and remove the folder.
+Archived 2026-09-27: tighten, the rewrite stays in LESSONS.md under the same date and title.
+
+## [gotcha] 2026-09-26 | Escape in an inline editor also closes the sheet around it
+
+`app.tsx` closes whatever is on top on Escape, from a `keydown` listener on `window`: the memory
+sheet among them. The memory lists' inline editor (`molecules/memory-entry-editor`) cancels on
+Escape too, and the first version only called `preventDefault()`. The event kept bubbling to
+`window`, so one Escape cancelled the edit AND closed the whole memory sheet. The driver's
+"Escape closes the entry without saving" check passed anyway, because an editor inside a
+closed sheet is also gone; it only failed on the next step, which could not find "Add a word".
+
+Fix: `event.stopPropagation()` next to `preventDefault()` in the editor's Escape branch. React's
+synthetic `stopPropagation` stops the native event at the root, before `window` hears it.
+
+Rule for next time: any component that gives Escape a meaning of its own owns that Escape and
+stops it, since the app's handler cannot tell an inner cancel from a request to close. And an
+end-to-end check that something closed must also check that its container did not.
+Archived 2026-09-27: tighten, the rewrite stays in LESSONS.md under the same date and title.
+
+## [gotcha] 2026-09-26 | run-studio dumps a delegating turn before it ends, and the turn survives the close
+
+The run-studio driver (`.claude/skills/run-studio/driver.mjs`) treats four consecutive polls
+without a Stop button, about six seconds, as the end of a turn, then dumps the thread, takes the
+final screenshot and closes the app. On a turn that delegates its reads to the `Agent` readers
+(deepseek-v4-pro), it dumped while the turn was still streaming: the thread in the dump ended
+with the thread-level "Working…" line, which `ChatThread` renders only while `isStreaming` is
+true, and held tool rows but no answer. That looked like a killed turn, and was reported as one.
+It was not. Opened later, the same conversation held the finished turn, a sourced answer under
+three working cards, its stats line reading "10m · 108 steps · 31 failed". The app outlived the
+driver's close, contrary to the skill's own warning that quitting early kills the running turn;
+how it survived was not established.
+
+Rule for next time: before trusting a run-studio dump, read the end of the thread. A trailing
+"Working…" means the dump is early, whatever the driver logged, and the answer is not in it. For
+a turn that delegates, wait for that line to go as well as the Stop button. And never report a
+turn as lost from its dump alone: open the conversation afterwards and look.
+Archived 2026-09-27: tighten, the rewrite stays in LESSONS.md under the same date and title.
+
 ## [gotcha] 2026-09-10 | An sr-only label inside a scroller stretches the whole document
 
 The working card gave every tool row a hidden status word, `sr-only` so a screen reader still

@@ -195,21 +195,8 @@ Rule for next time: an `sr-only` or other absolutely positioned box inside a scr
 
 ## [gotcha] 2026-09-26 | run-studio dumps a delegating turn before it ends, and the turn survives the close
 
-The run-studio driver (`.claude/skills/run-studio/driver.mjs`) treats four consecutive polls
-without a Stop button, about six seconds, as the end of a turn, then dumps the thread, takes the
-final screenshot and closes the app. On a turn that delegates its reads to the `Agent` readers
-(deepseek-v4-pro), it dumped while the turn was still streaming: the thread in the dump ended
-with the thread-level "Working…" line, which `ChatThread` renders only while `isStreaming` is
-true, and held tool rows but no answer. That looked like a killed turn, and was reported as one.
-It was not. Opened later, the same conversation held the finished turn, a sourced answer under
-three working cards, its stats line reading "10m · 108 steps · 31 failed". The app outlived the
-driver's close, contrary to the skill's own warning that quitting early kills the running turn;
-how it survived was not established.
-
-Rule for next time: before trusting a run-studio dump, read the end of the thread. A trailing
-"Working…" means the dump is early, whatever the driver logged, and the answer is not in it. For
-a turn that delegates, wait for that line to go as well as the Stop button. And never report a
-turn as lost from its dump alone: open the conversation afterwards and look.
+The run-studio driver (`.claude/skills/run-studio/driver.mjs`) treats four consecutive polls without a Stop button, about six seconds, as the end of a turn, then dumps the thread and closes the app; on a turn that delegates its reads to the `Agent` readers (deepseek-v4-pro) it dumped mid-turn, the thread ending in the thread-level "Working…" line `ChatThread` renders only while `isStreaming` is true, with tool rows and no answer. That was reported as a killed turn and was not: opened later, the conversation held the finished, sourced answer under three working cards ("10m · 108 steps · 31 failed"), so the app outlived the driver's close, contrary to the skill's own warning, for reasons not established.
+Rule for next time: before trusting a run-studio dump, read the end of the thread; a trailing "Working…" means the dump is early, a delegating turn is done only when that line goes as well as the Stop button, and a turn is never reported lost from its dump alone.
 
 ## [gotcha] 2026-09-26 | bun 1.4.2's toMatchObject with an asymmetric matcher fails on an object it has already compared
 
@@ -228,41 +215,13 @@ kin out of `toMatchObject` on values a module hands out as constants.
 
 ## [gotcha] 2026-09-26 | Escape in an inline editor also closes the sheet around it
 
-`app.tsx` closes whatever is on top on Escape, from a `keydown` listener on `window`: the memory
-sheet among them. The memory lists' inline editor (`molecules/memory-entry-editor`) cancels on
-Escape too, and the first version only called `preventDefault()`. The event kept bubbling to
-`window`, so one Escape cancelled the edit AND closed the whole memory sheet. The driver's
-"Escape closes the entry without saving" check passed anyway, because an editor inside a
-closed sheet is also gone; it only failed on the next step, which could not find "Add a word".
-
-Fix: `event.stopPropagation()` next to `preventDefault()` in the editor's Escape branch. React's
-synthetic `stopPropagation` stops the native event at the root, before `window` hears it.
-
-Rule for next time: any component that gives Escape a meaning of its own owns that Escape and
-stops it, since the app's handler cannot tell an inner cancel from a request to close. And an
-end-to-end check that something closed must also check that its container did not.
+`app.tsx` closes whatever is on top on Escape from a `keydown` listener on `window`, so the memory lists' inline editor (`molecules/memory-entry-editor`), which cancelled on Escape with only `preventDefault()`, let the event bubble, and one Escape both cancelled the edit and closed the whole memory sheet. The driver's "Escape closes the entry without saving" check passed anyway, since an editor inside a closed sheet is also gone, and only failed a step later on a missing "Add a word". Fixed with `event.stopPropagation()` beside `preventDefault()`: React's synthetic stop halts the native event at the root, before `window` hears it.
+Rule for next time: a component that gives Escape a meaning of its own owns that Escape and stops it, and an end-to-end check that something closed also checks that its container did not.
 
 ## [gotcha] 2026-09-26 | Driving the built app on a scratch user-data folder: seed the account, or it relaunches away
 
-Verifying the memory lists meant adding, editing and deleting entries, so the run-studio
-driver's real userData was out. Electron honours `--user-data-dir=<dir>`, and the app boots on
-it: `current-account.json`, `accounts/` and `bin/` all land there. Two traps, one after the
-other. A fresh folder starts signed out, and on a machine whose office CLI is signed in the app
-adopts the `signed-out` folder into the user's account a few seconds in and RELAUNCHES itself as
-a new process: Playwright's handle goes dead ("Target page, context or browser has been
-closed", then "UI never came up") and the relaunched instance keeps running, window and all,
-until killed (`pkill -f "<scratch dir>"`). Seeding the account pointer stops the relaunch, but
-then no identity loads, and without one the user button opens Settings instead of the menu that
-holds Memory.
-
-What worked: before launch, copy the real `current-account.json` into the scratch folder and
-the account's `claude-config/quick-context.json` into `accounts/<key>/claude-config/`, seed
-synthetic notes beside it, drive, and delete the scratch folder at the end, since it now holds
-a copy of the user's identity.
-
-Rule for next time: for any in-app check that writes, run on a scratch `--user-data-dir` seeded
-with the account pointer and quick context, never on the real folder; afterwards check that no
-process still names the scratch folder, and remove the folder.
+Electron honours `--user-data-dir=<dir>` and the app boots on it (`current-account.json`, `accounts/`, `bin/` all land there), but a fresh folder starts signed out, and on a machine whose office CLI is signed in the app adopts it into the user's account a few seconds in and relaunches as a new process: Playwright's handle dies ("Target page, context or browser has been closed", then "UI never came up") while the relaunched window keeps running until `pkill -f "<scratch dir>"`. Seeding only the account pointer stops the relaunch but loads no identity, and without one the user button opens Settings instead of the menu that holds Memory. What works: before launch, copy the real `current-account.json` and the account's `claude-config/quick-context.json` into `accounts/<key>/claude-config/` of the scratch folder, seed synthetic data beside it, drive, and delete the folder at the end, since it now holds a copy of the user's identity.
+Rule for next time: any in-app check that writes runs on a seeded scratch `--user-data-dir`, never the real folder, and ends by checking that no process still names it.
 
 ## [decision] 2026-09-27 | a claude plan runs on claude code's own sign-in, never on a token the app holds
 
