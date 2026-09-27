@@ -14,7 +14,7 @@
  * can ask safeStorage to unseal too; that is not what it is for.
  */
 import { safeStorage } from 'electron';
-import { EMPTY_STORED_SETTINGS, parseStoredSettings, serialiseStoredSettings, validateSettings } from '../../../shared/settings-doc.ts';
+import { EMPTY_STORED_SETTINGS, parseStoredSettings, serialiseStoredSettings, settingsEnvelope, validateSettings } from '../../../shared/settings-doc.ts';
 import { settingsFilePath } from '../../../shared/paths.ts';
 import { readJsonFile, writeJsonFileAtomic } from './json-file.ts';
 import { formatError } from '../../../shared/utilities/format-error.ts';
@@ -79,11 +79,7 @@ const unsealAll = (stored: StoredSettings): Result<Settings, StoreError> => {
     if (!opened.ok) return opened;
     providers.push(opened.value);
   }
-  return ok({
-    providers,
-    ...(stored.defaultModel === undefined ? {} : { defaultModel: stored.defaultModel }),
-    ...(stored.officePolicy === undefined ? {} : { officePolicy: stored.officePolicy }),
-  });
+  return ok({ providers, ...settingsEnvelope(stored) });
 };
 
 const sealAll = (settings: Settings): Result<StoredSettings, StoreError> => {
@@ -93,11 +89,7 @@ const sealAll = (settings: Settings): Result<StoredSettings, StoreError> => {
     if (!closed.ok) return closed;
     providers.push(closed.value);
   }
-  return ok({
-    providers,
-    ...(settings.defaultModel === undefined ? {} : { defaultModel: settings.defaultModel }),
-    ...(settings.officePolicy === undefined ? {} : { officePolicy: settings.officePolicy }),
-  });
+  return ok({ providers, ...settingsEnvelope(settings) });
 };
 
 export const createSettingsStore = (deps: SettingsStoreDeps): SettingsStore => {

@@ -65,6 +65,22 @@ const skillsPolicyField = (raw: unknown): Result<SkillsPolicy | undefined, strin
   return ok({ disabledFolders: [...new Set(folders)].sort((a, b) => a.localeCompare(b)) });
 };
 
+// Everything a Settings carries EXCEPT the providers. Settings and StoredSettings differ
+// only in how a provider holds its key, so parse, validate, seal and unseal all rebuild
+// this same envelope around a swapped providers list.
+export type SettingsEnvelope = Omit<Settings, 'providers'>;
+
+// The single place that copies the non-provider fields across, dropping the ones that were
+// never set so the file does not churn. Keeping it here once is what stops a new field being
+// carried by some of the four callers and silently dropped by the others, which is exactly
+// how skillsPolicy went missing from the store's seal and unseal. `providers` is accepted so
+// a whole Settings can be passed, and ignored.
+export const settingsEnvelope = (settings: SettingsEnvelope & { readonly providers?: readonly unknown[] }): SettingsEnvelope => ({
+  ...(settings.defaultModel === undefined ? {} : { defaultModel: settings.defaultModel }),
+  ...(settings.officePolicy === undefined ? {} : { officePolicy: settings.officePolicy }),
+  ...(settings.skillsPolicy === undefined ? {} : { skillsPolicy: settings.skillsPolicy }),
+});
+
 // Fields shared by both shapes. Returns the common part or a reason.
 const commonProviderFields = (raw: unknown): Result<{ id: string; kind: 'anthropic' | 'openai'; label: string; modelIds: string[]; baseUrl?: string }, SettingsDocError> => {
   if (!isRecord(raw)) return unreadable('provider must be an object');
@@ -104,12 +120,7 @@ export const parseStoredSettings = (raw: unknown): Result<StoredSettings, Settin
     if (!provider.ok) return provider;
     providers.push(provider.value);
   }
-  return ok({
-    providers,
-    ...(defaultModel === undefined ? {} : { defaultModel }),
-    ...(officePolicy.value === undefined ? {} : { officePolicy: officePolicy.value }),
-    ...(skillsPolicy.value === undefined ? {} : { skillsPolicy: skillsPolicy.value }),
-  });
+  return ok({ providers, ...settingsEnvelope({ defaultModel, officePolicy: officePolicy.value, skillsPolicy: skillsPolicy.value }) });
 };
 
 const validateProvider = (raw: unknown): Result<Provider, SettingsDocError> => {
@@ -147,12 +158,7 @@ export const validateSettings = (raw: unknown): Result<Settings, SettingsDocErro
     if (providers.some((p) => p.id === provider.value.id)) return invalid(`two providers share the id ${provider.value.id}`);
     providers.push(provider.value);
   }
-  return ok({
-    providers,
-    ...(defaultModel === undefined ? {} : { defaultModel }),
-    ...(officePolicy.value === undefined ? {} : { officePolicy: officePolicy.value }),
-    ...(skillsPolicy.value === undefined ? {} : { skillsPolicy: skillsPolicy.value }),
-  });
+  return ok({ providers, ...settingsEnvelope({ defaultModel, officePolicy: officePolicy.value, skillsPolicy: skillsPolicy.value }) });
 };
 
 export const serialiseStoredSettings = (settings: StoredSettings): string => JSON.stringify(settings, null, 2);
