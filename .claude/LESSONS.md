@@ -128,123 +128,30 @@ Rule for next time: when a spawn error names something that is obviously fine, s
 A conversation on a deepseek model behind an Anthropic-compatible endpoint searched the web eight times and got eight empty results with no error, then answered from memory and cited a page it had fetched, which read as a successful search. WebSearch is not run locally: the CLI offers it in the turn as an ordinary tool, and when the model calls it the CLI makes a second request to the same `ANTHROPIC_BASE_URL` carrying `{ type: 'web_search_20250305', name: 'web_search', max_uses: 8 }` and "Perform a web search for the query: ...", which only the real API executes, streaming back `web_search_tool_result` blocks. Any other endpoint returns none and the CLI renders its zero-result template (the header, nothing, the cite-your-sources reminder, not even its "No links found." line); a capture server pointed at the vendored `claude` proved it, request 2 carrying 28 typeless tools including WebSearch and request 3 the single server-tool spec, not the main turn's `tools` array as first guessed. WebFetch is the opposite, since the CLI does that HTTP itself and only uses the model to summarise, and two fixes landed: `disallowedTools` on every turn plus a withdrawn-tools list in `agents-doc`, and a gateway that refuses a tool spec with a `type` and no `input_schema` instead of forwarding it as an ordinary one.
 Rule for next time: when a capability silently returns nothing on a third-party endpoint, ask whether the real API was running it for you.
 
-## [gotcha] a Gemini 3 tool loop dies on the second step without a thought signature (2026-07-22)
+## [gotcha] 2026-07-22 | a Gemini 3 tool loop dies on the second step without a thought signature
 
-`gemini-3.5-flash-lite` answered the first turn, then 400d the moment the agent replayed its
-own tool call: "Function call is missing a thought_signature in functionCall parts ... function
-call `default_api:Bash`, position 5". Every Gemini 3 tier enforces it, including at minimal
-thinking; Gemini 2.5 does not, which is why this never showed up before.
+`gemini-3.5-flash-lite` answered the first turn, then 400d the moment the agent replayed its own tool call ("Function call is missing a thought_signature in functionCall parts ... function call `default_api:Bash`, position 5"); every Gemini 3 tier enforces it, even at minimal thinking, and Gemini 2.5 does not. `@ai-sdk/openai-compatible` round-trips the signature only between its own two ends, while this repo's Anthropic round trip sits in between (the value arrives on the `tool-call` stream part and a `tool_use` block has nowhere to carry it), and the package writes it under the provider's name (`createOpenAICompatible({ name })`) but reads it back from a hardcoded `providerOptions.google`, verified by probing the installed dist, so only the gateway can hold it, keyed by tool call id (`src/shared/gateway/thought-signatures.ts`). Google validates only the first function call of each step of the current turn (which opens at the last user message), later calls in a parallel batch legitimately carry none, the documented dummy `skip_thought_signature_validator` covers a call never seen signed while an invented placeholder is refused as corrupted, and signatures are endpoint-bound, so one minted on Vertex fails on AI Studio. The first fix signed unconditionally, so every `openai`-kind endpoint behind the one gateway (a local llama server, DeepSeek, OpenRouter) got `extra_content.google...` from the second step on; review caught it, not a gate, because every test in the block built its gateway with the Gemini provider, and the fix gates on the upstream host being under `.googleapis.com`, pinned by a test proved meaningful by removing the gate.
+Rule for next time: an SDK round-trips opaque state only between its own two ends, so a translation layer in the middle must carry it, and a vendor workaround on a shared path needs its vendor test at the point of use.
 
-The signature is opaque state minted with each function call and it has to come back with the
-call. `@ai-sdk/openai-compatible` handles both ends of that on its own, and PLAN.md had
-recorded the swap as closing the risk. It does not, for two reasons that only reading the
-installed package showed:
+## [gotcha] 2026-07-23 | the thin-orchestrator port dropped role→person routing, and four runs gave three CIOs
 
-- Between its two ends sits this repo's Anthropic round trip. The value arrives on the
-  `tool-call` stream part, an Anthropic `tool_use` block has nowhere to put it, and the agent
-  replays id, name and input alone. Only the gateway can hold it, keyed by tool call id.
-- The package's own round trip is broken in the middle anyway: it WRITES the signature under
-  the provider's name (`createOpenAICompatible({ name })`, here the user's provider id) and
-  READS it back from a hardcoded `providerOptions.google`. Named anything but `google` it
-  drops the value silently. Verified by probing the installed dist, not by reading the docs.
+Asked who held one brand's CIO role, four runs gave three answers: the user themselves (a regional title on a deck they presented, promoted to the brand), "no such role" (absent from one divisional org chart), and twice the right person, once from the public web through plain Bash and once from the people path. The core routing table covered name→person (`get-user`) but not title→person, so every run improvised its entry point, and keyword file search rewards co-occurrence over authority in a mailbox that over-represents the user's own region. The upstream ask-marcel skill already carried the fix (a `microsoft-search-query` routing row and a "role titles are org-local" pitfall) that the 07-20 thin-orchestrator split had dropped; it was ported back with three rules upstream lacks: newest-wins only among versions of one source kind (the directory outranks a fresher deck for titles), titles keep their scope and identity claims need two sources, and the tenant outranks the public web (one run scraped DuckDuckGo via Bash with the WebSearch tool removed).
+Rule for next time: a prompt refactor that condenses a source sheds its rarest rows first, so diff the port against upstream, and give every question shape a prescribed first call or it gets a sampled one.
 
-What Google validates is narrower than the error reads: the first function call of each step
-of the current turn only, where the turn opens at the last user message. Later calls in a
-parallel batch legitimately carry none, so signing everything would be wrong as well as
-wasteful. Where nothing is remembered there is a documented dummy,
-`skip_thought_signature_validator`; an invented placeholder is refused as corrupted rather
-than ignored, and signatures are endpoint-bound, so one minted on Vertex will not validate on
-AI Studio.
+## [gotcha] 2026-07-23 | a rule phrased as confirmation guidance is optional to a flash-tier model
 
-The first version of the fix then made a second mistake worth remembering on its own: it
-signed unconditionally. Every provider of kind `openai` comes through this one gateway, a
-local llama server, DeepSeek, OpenRouter, and the package writes `extra_content.google...`
-out whenever the value is present with no idea where the request is going. So the dummy
-landed on every tool loop of every non-Google endpoint from the second step on. Caught in
-review, not by a gate: every test in the block built its gateway with the Gemini provider,
-so nothing exercised the shared path. The fix gates on the upstream host being under
-`.googleapis.com`, and the test that pins it was proved meaningful by removing the gate and
-watching it fail.
+The role→person routing was verified by driving the built app with a Playwright script, seven fresh conversations on two models: the first wording ("then confirm structurally: reports to the org's head, owns the CISO/CTO reports") ran in zero of four runs, and deepseek-v4-pro read an attendee list's empty CIO row as "the position is vacant" while holding the "CIO Office Manager" hit whose manager was the answer. Rewritten as a numbered procedure ("do not answer before step 3", step 3 being the `get-user-manager` walk), both models ran the walk, and gemini-3.5-flash-lite then printed the correct chain and still crowned the subordinate CTO, which took one more explicit line: crown the parent, never the child. Prose near an instruction reads as colour to a small model; numbered steps with an explicit stop condition and an explicitly forbidden wrong conclusion are what binds.
+Rule for next time: write a load-bearing prompt rule as numbered steps with a stop, and keep the eval re-runnable, since an eval you cannot re-run is a hope, not a gate.
 
-Two general forms. A provider SDK that claims to round-trip opaque state round-trips it only
-between its own two ends: put a translation layer in the middle and the state is yours to
-carry. And a vendor workaround added to a shared path needs the vendor test at the point of
-use, or every other vendor wears it.
+## [gotcha] 2026-07-23 | Bun's node:http never fires `close` on the ServerResponse
 
-## [gotcha] the thin-orchestrator port dropped role→person routing, and four runs gave three CIOs (2026-07-23)
+The gateway aborts its upstream call when the agent hangs up, riding on `res.on('close')`, and a probe on both runtimes showed a client abort mid-response firing `req.aborted, res.close, req.close` under Node but only `req.aborted, req.close` under Bun, so `bun test` cannot observe it while Electron (Node) behaves correctly. The obvious workaround is the trap: on a healthy request `req.close` fires as soon as the body ends, before the response is written, on both runtimes, so listening on the request would make every good turn abort itself (verified, not assumed). The line stays uncovered with a comment saying why.
+Rule for next time: when a test only passes if you move a seam, check what the seam does on the happy path before moving it.
 
-"Who is the CIO of Celine?" got three different answers in four runs: the user themselves (a
-regional title on a deck they presented, promoted to the maison), "no such role" (absent from
-one divisional org chart), and twice the right person, once from the public web through plain
-Bash and once from the people path. The core routing table covered name→person (`get-user`)
-but not title→person, so every run improvised its entry point; keyword file search rewards
-co-occurrence over authority, and this mailbox over-represents the user's own region, so the
-improvisations anchored on the wrong decks. The upstream ask-marcel skill already carried the
-fix, a `microsoft-search-query` routing row and a "role titles are org-local" pitfall; the
-07-20 thin-orchestrator split simply dropped them. Ported back, plus three rules upstream
-also lacks: newest-wins is scoped to versions of the same source kind (the directory outranks
-a fresher deck for titles), titles keep their scope and identity claims need two sources, and
-the tenant outranks the public web (one run scraped DuckDuckGo via Bash even with the
-WebSearch tool removed; a tool you delete is still reachable through the shell).
+## [mistake] 2026-07-23 | two directories named `memory` under one userData, and a false data-loss report
 
-Two general forms. A prompt refactor that condenses a source document sheds its rarest rows
-first, exactly the ones a routing table exists for; diff the port against upstream before
-trusting it. And retrieval strategy is behavior, not commentary: a question shape with no
-prescribed first call gets a sampled one.
-
-## [gotcha] a rule phrased as confirmation guidance is optional to a flash-tier model (2026-07-23)
-
-Verified the role→person routing live by driving the built app with a Playwright script,
-seven fresh conversations, two models. First wording ("then confirm structurally: reports to
-the org's head, owns the CISO/CTO reports") executed in zero of four runs; both models
-answered from decks and rosters, and deepseek-v4-pro read the attendee list's empty CIO row
-as "the position is vacant" while holding the "CIO Office Manager" hit whose manager IS the
-answer. Rewriting the same content as a numbered procedure ("do not answer before step 3",
-step 3 being the `get-user-manager` walk) made both models run the walk on the next try, and
-gemini-3.5-flash-lite then printed the correct chain and still crowned the subordinate CTO,
-which took one more explicit line: crown the parent, never the child. Final state: both
-models converge on the right person, small model included.
-
-The general form: prose near an instruction reads as color to a small model; only numbered
-steps with an explicit stop condition and an explicitly forbidden wrong conclusion are
-load-bearing. And an eval you cannot re-run is a hope, not a gate: the Playwright driver
-(launch, fresh conversation, ask, wait, dump) is what made three wording iterations cheap.
-
-## [gotcha] Bun's node:http never fires `close` on the ServerResponse (2026-07-23)
-
-The gateway aborts its upstream call when the agent hangs up, which rides on
-`res.on('close')`. That is untestable under `bun test`. Measured with a probe on both
-runtimes: a client abort mid-response fires `req.aborted, res.close, req.close` under Node
-and only `req.aborted, req.close` under Bun. Electron is Node, so production is correct and
-the test runner simply cannot observe it.
-
-The trap is the obvious workaround. Listening on the REQUEST instead makes the test pass and
-the code wrong: on a healthy request `req.close` fires as soon as the body ends, before the
-response is written, on BOTH runtimes, so every good turn would abort itself. Verified, not
-assumed.
-
-Rule for next time: when a test only passes if you move a seam, check what the seam does on
-the happy path before moving it. An uncovered line with a comment saying why beats a covered
-line that broke production.
-
-## [mistake] two directories named `memory` under one userData, and a false data-loss report (2026-07-23)
-
-Told the user their `jargon.md` had been lost. It had not. Notes live at
-`claude-config/memory/` (`memoryFilePath` -> `memoryDir` -> `claudeConfigDir`, paths.ts:62)
-while the elicitation queue and the extraction state live at `userData/memory/`
-(`memoryQueuePath`, paths.ts:68). Only the second was looked at; it holds queue.json and
-state.json and no notes, and that absence was reported as data loss. The user's notes were
-intact the whole time, 2226 bytes of them, and the canary that "proved" the fix had been
-quoting the real file rather than the reconstruction written next to it.
-
-Two things went wrong and only one is about paths. The first is that a file's absence from
-one directory was treated as evidence about the system rather than about the directory. The
-second is that a reconstruction was then written into the user's app data, which would have
-been a genuine corruption had the real note lived there.
-
-Rule for next time: before reporting anything as missing, read the path helper that resolves
-it, and never write a reconstruction of a user's own content into their data on the strength
-of an absence.
+A `jargon.md` was reported lost when it was not: notes live at `claude-config/memory/` (`memoryFilePath` -> `memoryDir` -> `claudeConfigDir`, paths.ts:62) while the elicitation queue and extraction state live at `userData/memory/` (`memoryQueuePath`, paths.ts:68), only the second was looked at, and the notes were intact the whole time, 2226 bytes of them. Worse, a reconstruction was then written into the user's app data, which would have corrupted the real note had it lived there, and the canary that "proved" the fix had been quoting the real file all along. A file's absence from one directory is evidence about that directory, not about the system.
+Rule for next time: before reporting anything missing, read the path helper that resolves it, and never write a reconstruction of a user's own content into their data on the strength of an absence.
 
 ## [gotcha] 2026-07-24 | ESLint flat config ignores .gitignore, so every fetched or built folder needs its own ignores entry
 
