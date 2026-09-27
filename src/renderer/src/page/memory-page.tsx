@@ -16,41 +16,73 @@ import type { MemoryReviewItem } from '../components/organisms/memory-review-pan
 import { AboutYouPanel } from '../components/organisms/about-you-panel/index.tsx';
 import { SignaturePanel } from '../components/organisms/signature-panel/index.tsx';
 import { VoicePanel } from '../components/organisms/voice-panel/index.tsx';
-import { DocumentEditor } from '../components/organisms/document-editor/index.tsx';
 import { SheetLayout } from '../components/organisms/sheet-layout/index.tsx';
+import { Button } from '../components/atoms/button/index.tsx';
 import { SheetNav } from '../components/organisms/sheet-nav/index.tsx';
 import type { SheetNavGroup } from '../components/organisms/sheet-nav/index.tsx';
 import { MarkdownEditor } from '../render/markdown-editor.tsx';
 import { MemoryListSection } from './memory-list-section.tsx';
-import { answerFor, choicesFor, draftFor, emptyDrafts, forgetDraft, termFor, termTextFor, withChoice, withOwnWords, withTerm } from '../lib/memory-review.ts';
+import { answerOf, answersFor, choicesFor, draftFor, emptyDrafts, forgetDraft, kindFor, termTextFor, withChoice, withKind, withOwnWords, withTerm } from '../lib/memory-review.ts';
 import type { MemoryDrafts } from '../lib/memory-review.ts';
 import { useAgentFile } from '../hooks/use-agent-file.ts';
+import { useAutosavedFile } from '../hooks/use-autosaved-file.ts';
+import { useReviewFocus } from '../hooks/use-review-focus.ts';
+import type { AutosavedFile } from '../hooks/use-autosaved-file.ts';
+import { AutosavedDocument } from '../components/organisms/autosaved-document/index.tsx';
+import type { AutosavedDocumentProps } from '../components/organisms/autosaved-document/index.tsx';
 import type { MemoryController } from '../hooks/use-memory.ts';
 import type { MemoryCandidate } from '../../../shared/memory-queue-doc.ts';
+import { memoryFileName } from '../../../shared/memory-file-name.ts';
+
+// What Remember all leaves behind, said after its question: the cards without a meaning.
+const stayingNote = (count: number): string => {
+  if (count === 0) return '';
+  return count === 1 ? ' One without a meaning stays here.' : ` ${String(count)} without a meaning stay here.`;
+};
+
+// Where the saving of a document typed into is, in words.
+const statusOf = (file: AutosavedFile): Pick<AutosavedDocumentProps, 'status' | 'tone'> => {
+  if (file.status.kind === 'error') return { status: file.status.message, tone: 'error' };
+  if (file.status.kind === 'saving') return { status: 'Saving…', tone: 'quiet' };
+  return { status: file.status.kind === 'saved' ? 'Saved' : 'Changes save as you type.', tone: 'quiet' };
+};
 
 export type MemoryPageProps = {
   // Owned by the shell, so the count in the sidebar and this list are the same list.
   memory: MemoryController;
+  // To name the conversation a suggestion was heard in, and to open it.
+  conversations: readonly { readonly id: string; readonly title: string }[];
+  onOpenConversation: (conversationId: string) => void;
+  // Asks the shell to clear everything on this page, after its own question.
+  onClearAll: () => void;
 };
 
-export const MemoryPage: FC<MemoryPageProps> = ({ memory }) => {
+export const MemoryPage: FC<MemoryPageProps> = ({ memory, conversations, onOpenConversation, onClearAll }) => {
   const [section, setSection] = useState('waiting');
   const [drafts, setDrafts] = useState<MemoryDrafts>(emptyDrafts);
-  const about = useAgentFile('global-context');
+  const [isConfirmingAll, setIsConfirmingAll] = useState(false);
+  const about = useAutosavedFile('global-context');
   const signature = useAgentFile('signature');
-  const voice = useAgentFile('voice-profile');
+  const voice = useAutosavedFile('voice-profile');
   const [isEditingSignature, setIsEditingSignature] = useState(false);
 
+  // Three groups: what waits for an answer, what Marcel knows about the world around the user,
+  // and what it knows about the user themselves.
   const navGroups: readonly SheetNavGroup[] = [
-    { heading: 'Waiting for you', items: [{ id: 'waiting', label: 'What Marcel noticed', icon: 'memory', badge: memory.pending.length }] },
+    { heading: 'Waiting for you', items: [{ id: 'waiting', label: 'To review', icon: 'memory', badge: memory.pending.length }] },
     {
       heading: 'What Marcel knows',
       items: [
         { id: 'words', label: 'Words we use', icon: 'memory' },
         { id: 'people', label: 'People I work with', icon: 'agents' },
-        { id: 'about', label: 'About you', icon: 'memory' },
-        { id: 'signature', label: 'Email signature', icon: 'signature' },
+      ],
+    },
+    {
+      heading: 'About you',
+      items: [
+        { id: 'about', label: 'Who you are', icon: 'memory' },
         { id: 'voice', label: 'Writing voice', icon: 'voice' },
+        { id: 'signature', label: 'Email signature', icon: 'signature' },
       ],
     },
   ];
@@ -59,17 +91,21 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory }) => {
 
   const items: readonly MemoryReviewItem[] = memory.pending.map((candidate) => {
     const draft = draftFor(drafts, candidate);
+    // The meaning box shows the wording picked, Marcel's suggestion to begin with, or what the
+    // user wrote over it; the other wordings Marcel offered wait underneath.
+    const meaning = draft.selected ?? draft.own;
+    const source = conversations.find((conversation) => conversation.id === candidate.conversationId)?.title;
     return {
       id: candidate.id,
       term: termTextFor(drafts, candidate),
-      kind: candidate.kind,
+      kind: kindFor(drafts, candidate),
       quote: candidate.quote,
       ...(candidate.enrichment === undefined ? {} : { enrichment: candidate.enrichment }),
-      choices: choicesFor(candidate),
-      ...(draft.selected === undefined ? {} : { selected: draft.selected }),
-      own: draft.own,
-      canRemember: answerFor(draft) !== undefined && termFor(drafts, candidate) !== undefined,
-      isSaving: memory.savingId === candidate.id,
+      ...(source === undefined ? {} : { source }),
+      meaning,
+      alternatives: choicesFor(candidate).filter((choice) => choice !== meaning),
+      canRemember: answerOf(drafts, candidate) !== undefined,
+      isSaving: memory.savingId === candidate.id || memory.isAnsweringAll,
     };
   });
 
@@ -85,39 +121,88 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory }) => {
     setDrafts((current) => withTerm(current, candidate, text));
   };
 
-  const changeOwn = (id: string, text: string): void => {
+  const changeMeaning = (id: string, text: string): void => {
     const candidate = candidateFor(id);
     if (candidate === undefined) return;
     setDrafts((current) => withOwnWords(current, candidate, text));
   };
 
+  const changeKind = (id: string, value: string): void => {
+    const candidate = candidateFor(id);
+    const kind = memoryFileName(value);
+    if (candidate === undefined || !kind.ok) return;
+    setDrafts((current) => withKind(current, candidate, kind.value));
+  };
+
+  const focus = useReviewFocus(items.length);
+  const indexOf = (id: string): number => items.findIndex((item) => item.id === id);
+
   const remember = (id: string): void => {
     const candidate = candidateFor(id);
     if (candidate === undefined) return;
-    const detail = answerFor(draftFor(drafts, candidate));
-    const term = termFor(drafts, candidate);
-    // The button is already disabled without both; this is the same rule stated where it is
-    // enforced, so a keyboard or a stale render cannot store a blank definition or file one
-    // under no word at all.
-    if (detail === undefined || term === undefined) return;
+    const answer = answerOf(drafts, candidate);
+    // The button is already disabled without a meaning and a word; this is the same rule
+    // stated where it is enforced, so a keyboard or a stale render cannot store a blank
+    // definition or file one under no word at all.
+    if (answer === undefined) return;
+    focus.keepAfterAnswer(indexOf(id));
     setDrafts((current) => forgetDraft(current, id));
-    memory.remember(id, detail, term);
+    memory.remember(id, answer.detail, answer.term, answer.kind);
+  };
+
+  // Every card that can be taken as it stands; a card without a meaning stays waiting.
+  const answers = answersFor(drafts, memory.pending);
+  const leftWaiting = memory.pending.length - answers.length;
+  const staying = stayingNote(leftWaiting);
+  const confirmAll = {
+    message: `Remember all ${String(answers.length)} as they are written? Each goes into the list it is filed under.${staying}`,
+    confirmLabel: `Remember ${String(answers.length)}`,
+    cancelLabel: 'Cancel',
+    onConfirm: (): void => {
+      setIsConfirmingAll(false);
+      memory.rememberAll(answers);
+    },
+    onCancel: (): void => setIsConfirmingAll(false),
+  };
+
+  const openSource = (id: string): void => {
+    const candidate = candidateFor(id);
+    if (candidate !== undefined) onOpenConversation(candidate.conversationId);
   };
 
   const skip = (id: string): void => {
+    focus.keepAfterAnswer(indexOf(id));
     setDrafts((current) => forgetDraft(current, id));
     memory.skip(id);
   };
 
+  const skipped = memory.lastSkipped;
+
   return (
-    <SheetLayout nav={<SheetNav groups={navGroups} activeId={section} onSelect={setSection} />}>
+    <SheetLayout
+      nav={<SheetNav groups={navGroups} activeId={section} onSelect={setSection} />}
+      footer={
+        <Button variant="danger" onClick={onClearAll}>
+          Clear all memories
+        </Button>
+      }
+    >
       {section === 'waiting' && (
         <MemoryReviewPanel
           items={items}
           {...(memory.error === undefined ? {} : { error: memory.error })}
+          {...(skipped === undefined
+            ? {}
+            : { notice: { message: `Skipped ${skipped.term}. Marcel will not ask about it again.`, action: { label: 'Undo', onAction: () => memory.restore(skipped) } } })}
           onChoose={choose}
-          onChangeOwn={changeOwn}
+          onChangeMeaning={changeMeaning}
           onChangeTerm={changeTerm}
+          {...(isConfirmingAll ? { confirm: confirmAll } : {})}
+          {...(answers.length < 2 || isConfirmingAll || memory.isAnsweringAll ? {} : { bulk: { label: 'Remember all', onStart: () => setIsConfirmingAll(true) } })}
+          onChangeKind={changeKind}
+          hint="On a selected card, ↑ and ↓ move, Enter remembers and Backspace skips."
+          onOpenSource={openSource}
+          onMove={(id, step) => focus.move(indexOf(id), step)}
           onRemember={remember}
           onSkip={skip}
         />
@@ -129,17 +214,19 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory }) => {
 
       {section === 'about' && (
         <AboutYouPanel>
-          <DocumentEditor
-            mode="rich"
-            richNode={<MarkdownEditor key={about.stored} defaultValue={about.draft} onChange={about.setDraft} />}
-            markdownValue={about.draft}
-            emptyHint="Nothing yet. Tell Marcel who you are, what you are responsible for, and anything it should always keep in mind."
-            isSaving={about.isSaving}
-            isDirty={about.isDirty}
-            {...(about.notice === undefined ? {} : { notice: about.notice })}
-            onChangeMarkdown={about.setDraft}
-            onSave={about.save}
-            onCancel={about.cancel}
+          <AutosavedDocument
+            editor={
+              <MarkdownEditor
+                key={`about-${String(about.revision)}`}
+                defaultValue={about.draft}
+                onChange={about.setDraft}
+                onLeave={(text) => about.saveOnLeave(text, about.revision)}
+              />
+            }
+            {...(about.draft.trim().length === 0
+              ? { emptyHint: 'Nothing yet. Tell Marcel who you are, what you are responsible for, and anything it should always keep in mind.' }
+              : {})}
+            {...statusOf(about)}
           />
         </AboutYouPanel>
       )}
@@ -168,17 +255,17 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory }) => {
 
       {section === 'voice' && (
         <VoicePanel isRegenerating={voice.isRegenerating} canRegenerate={voice.canRegenerate} onRegenerate={voice.regenerate}>
-          <DocumentEditor
-            mode="rich"
-            richNode={<MarkdownEditor key={voice.stored} defaultValue={voice.draft} onChange={voice.setDraft} />}
-            markdownValue={voice.draft}
-            emptyHint="Nothing yet. Marcel writes one from your sent mail the first time it can, or you can write your own."
-            isSaving={voice.isSaving}
-            isDirty={voice.isDirty}
-            {...(voice.notice === undefined ? {} : { notice: voice.notice })}
-            onChangeMarkdown={voice.setDraft}
-            onSave={voice.save}
-            onCancel={voice.cancel}
+          <AutosavedDocument
+            editor={
+              <MarkdownEditor
+                key={`voice-${String(voice.revision)}`}
+                defaultValue={voice.draft}
+                onChange={voice.setDraft}
+                onLeave={(text) => voice.saveOnLeave(text, voice.revision)}
+              />
+            }
+            {...(voice.draft.trim().length === 0 ? { emptyHint: 'Nothing yet. Rebuild it from your sent mail, or write your own.' } : {})}
+            {...statusOf(voice)}
           />
         </VoicePanel>
       )}

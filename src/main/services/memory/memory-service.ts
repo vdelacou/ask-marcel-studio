@@ -11,10 +11,20 @@
 import { TERM_LIMIT, listEntries, mergeMemoryEntries, parseMemoryDoc, serialiseMemoryDoc } from '../../../shared/memory-doc.ts';
 import { applyMemoryEntryEdit, parseMemoryEntryEdit } from '../../../shared/memory-entry-edit.ts';
 import type { MemoryEditError, MemoryEntryEdit, MemoryNotes } from '../../../shared/memory-entry-edit.ts';
-import { memoryFileName } from '../../../shared/memory-file-name.ts';
+import { MEMORY_FILES, memoryFileName } from '../../../shared/memory-file-name.ts';
 import type { MemoryFileName } from '../../../shared/memory-file-name.ts';
-import { EMPTY_MEMORY_QUEUE, addCandidates, findCandidate, parseMemoryQueue, removeCandidate, serialiseMemoryQueue } from '../../../shared/memory-queue-doc.ts';
-import type { MemoryCandidate } from '../../../shared/memory-queue-doc.ts';
+import {
+  EMPTY_MEMORY_QUEUE,
+  addCandidates,
+  findCandidate,
+  parseMemoryCandidate,
+  parseMemoryQueue,
+  removeCandidate,
+  serialiseMemoryQueue,
+  skipCandidate,
+  unskipCandidate,
+} from '../../../shared/memory-queue-doc.ts';
+import type { MemoryCandidate, MemoryQueueDoc } from '../../../shared/memory-queue-doc.ts';
 import { EMPTY_MEMORY_STATE, markExtracted, needsExtraction, parseMemoryState, readSoFar, serialiseMemoryState } from '../../../shared/memory-state-doc.ts';
 import { buildGlossaryBlocks } from '../../../shared/memory-glossary.ts';
 import type { RawCandidate } from '../../../shared/memory-extract.ts';
@@ -36,9 +46,13 @@ export type MemoryService = {
   readonly pending: () => Promise<Result<readonly MemoryCandidate[], StoreError>>;
   readonly resolve: (input: unknown) => Promise<Result<readonly MemoryCandidate[], StoreError>>;
   readonly read: (name: unknown) => Promise<Result<string, StoreError>>;
-  readonly write: (name: unknown, contents: unknown) => Promise<Result<null, StoreError>>;
+  // `expected` is the note as the window opened it: when given, a note that has changed since
+  // is refused rather than written over.
+  readonly write: (name: unknown, contents: unknown, expected?: unknown) => Promise<Result<null, StoreError>>;
   // One entry added, changed, removed, put back or moved; answers with all three notes.
   readonly edit: (input: unknown) => Promise<Result<MemoryNotes, MemoryEditError>>;
+  // The three notes emptied, and the queue with its skipped words; the reading progress stays.
+  readonly clearAll: () => Promise<Result<null, StoreError>>;
   // What rides along with every turn. Degrades to nothing rather than failing a turn.
   readonly glossaryBlocks: () => Promise<readonly string[]>;
   readonly addCandidates: (items: readonly RawCandidate[], conversationId: string) => Promise<Result<number, StoreError>>;
@@ -98,17 +112,55 @@ export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
     return ok(await readNote(checked.value));
   };
 
-  const write = async (name: unknown, contents: unknown): Promise<Result<null, StoreError>> => {
+  const write = async (name: unknown, contents: unknown, expected?: unknown): Promise<Result<null, StoreError>> => {
     const checked = memoryFileName(name);
     if (!checked.ok) return err({ kind: 'malformed-id', message: checked.error.message });
     if (typeof contents !== 'string') return err({ kind: 'invalid', message: 'that is not text' });
+    if (expected !== undefined && expected !== (await readNote(checked.value))) {
+      return err({ kind: 'conflict', message: 'This note changed after you opened it, so it was not saved. Copy anything you want to keep, then open it again.' });
+    }
     const written = await writeTextFileAtomic(memoryFilePath(deps.userData, checked.value), contents);
     if (!written.ok) return err({ kind: 'write-failed', message: written.error.message });
     return ok(null);
   };
 
+  const saveQueue = async (next: MemoryQueueDoc): Promise<Result<readonly MemoryCandidate[], StoreError>> => {
+    const saved = await writeQueue(next);
+    return saved.ok ? ok(next.items) : saved;
+  };
+
+  // Into the note the user filed it under (the one Marcel guessed, unless they picked another),
+  // merged with what is already written there.
+  const remember = async (candidate: MemoryCandidate, draft: Extract<MemoryResolveInput, { action: 'accept' }>): Promise<Result<null, StoreError>> => {
+    const detail = typeof draft.detail === 'string' ? draft.detail.trim() : '';
+    if (detail.length === 0) return err({ kind: 'invalid', message: 'a note needs something written in it' });
+    const note = draft.kind === undefined ? ok(candidate.kind) : memoryFileName(draft.kind);
+    if (!note.ok) return err({ kind: 'invalid', message: note.error.message });
+
+    // The term as the user left it. Marcel hears a word inside a sentence and sometimes
+    // hears it slightly wrong, so the review list lets them correct it; rubbing it out
+    // entirely means they had nothing to add, not that the note wants a blank heading.
+    const corrected = typeof draft.term === 'string' ? draft.term.trim().slice(0, TERM_LIMIT) : '';
+    const term = corrected.length === 0 ? candidate.term : corrected;
+
+    const current = parseMemoryDoc(await readNote(note.value));
+    const written = await writeTextFileAtomic(memoryFilePath(deps.userData, note.value), serialiseMemoryDoc(mergeMemoryEntries(current, [{ term, detail }])));
+    return written.ok ? ok(null) : err({ kind: 'write-failed', message: written.error.message });
+  };
+
+  // The undo of a skip. The candidate comes back from the window, so it is read again as
+  // untrusted before it rejoins the queue.
+  const restoreSkipped = async (raw: unknown): Promise<Result<readonly MemoryCandidate[], StoreError>> => {
+    const candidate = parseMemoryCandidate(raw);
+    if (candidate === undefined) return err({ kind: 'invalid', message: 'that is not a question this app asked' });
+    const queue = await readQueue();
+    if (!queue.ok) return err({ kind: 'unreadable', message: queue.error.message });
+    return saveQueue(unskipCandidate(queue.value, candidate));
+  };
+
   const resolve = async (input: unknown): Promise<Result<readonly MemoryCandidate[], StoreError>> => {
     const draft = input as MemoryResolveInput | undefined;
+    if (draft?.action === 'restore') return restoreSkipped(draft.candidate);
     if (typeof draft?.id !== 'string') return err({ kind: 'invalid', message: 'that is not a question this app asked' });
 
     const queue = await readQueue();
@@ -117,28 +169,13 @@ export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
     const candidate = findCandidate(queue.value, draft.id);
     // Already answered, or answered in another window: not an error, just nothing to do.
     if (candidate === undefined) return ok(queue.value.items);
-
     if (draft.action === 'accept') {
-      const detail = typeof draft.detail === 'string' ? draft.detail.trim() : '';
-      if (detail.length === 0) return err({ kind: 'invalid', message: 'a note needs something written in it' });
-
-      // The term as the user left it. Marcel hears a word inside a sentence and sometimes
-      // hears it slightly wrong, so the review list lets them correct it; rubbing it out
-      // entirely means they had nothing to add, not that the note wants a blank heading.
-      const corrected = typeof draft.term === 'string' ? draft.term.trim().slice(0, TERM_LIMIT) : '';
-      const term = corrected.length === 0 ? candidate.term : corrected;
-
-      // Into the note the candidate belongs to, merged with what is already written there.
-      const current = parseMemoryDoc(await readNote(candidate.kind));
-      const merged = serialiseMemoryDoc(mergeMemoryEntries(current, [{ term, detail }]));
-      const written = await writeTextFileAtomic(memoryFilePath(deps.userData, candidate.kind), merged);
-      if (!written.ok) return err({ kind: 'write-failed', message: written.error.message });
+      const remembered = await remember(candidate, draft);
+      return remembered.ok ? saveQueue(removeCandidate(queue.value, draft.id)) : remembered;
     }
-
-    const next = removeCandidate(queue.value, draft.id);
-    const saved = await writeQueue(next);
-    if (!saved.ok) return saved;
-    return ok(next.items);
+    // A skip silences the word for good, so only a skip is taken as one: an answer this app
+    // does not know is refused, whatever the window's types claimed it was.
+    return draft.action === 'reject' ? saveQueue(skipCandidate(queue.value, draft.id)) : err({ kind: 'invalid', message: 'that is not an answer this app knows' });
   };
 
   const readNotes = async (): Promise<MemoryNotes> => ({ jargon: await readNote('jargon'), team: await readNote('team'), people: await readNote('people') });
@@ -161,6 +198,14 @@ export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
       after = { ...after, [name]: text };
     }
     return ok(after);
+  };
+
+  const clearAll = async (): Promise<Result<null, StoreError>> => {
+    for (const name of MEMORY_FILES) {
+      const written = await writeTextFileAtomic(memoryFilePath(deps.userData, name), '');
+      if (!written.ok) return err({ kind: 'write-failed', message: written.error.message });
+    }
+    return writeQueue(EMPTY_MEMORY_QUEUE);
   };
 
   const glossaryBlocks = async (): Promise<readonly string[]> =>
@@ -222,8 +267,9 @@ export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
     pending,
     resolve: (input) => oneAtATime(() => resolve(input)),
     read,
-    write: (name, contents) => oneAtATime(() => write(name, contents)),
+    write: (name, contents, expected) => oneAtATime(() => write(name, contents, expected)),
     edit: (input) => oneAtATime(() => edit(input)),
+    clearAll: () => oneAtATime(clearAll),
     glossaryBlocks,
     addCandidates: addFound,
     extractionDue,

@@ -223,6 +223,47 @@ Rule for next time: a component that gives Escape a meaning of its own owns that
 Electron honours `--user-data-dir=<dir>` and the app boots on it (`current-account.json`, `accounts/`, `bin/` all land there), but a fresh folder starts signed out, and on a machine whose office CLI is signed in the app adopts it into the user's account a few seconds in and relaunches as a new process: Playwright's handle dies ("Target page, context or browser has been closed", then "UI never came up") while the relaunched window keeps running until `pkill -f "<scratch dir>"`. Seeding only the account pointer stops the relaunch but loads no identity, and without one the user button opens Settings instead of the menu that holds Memory. What works: before launch, copy the real `current-account.json` and the account's `claude-config/quick-context.json` into `accounts/<key>/claude-config/` of the scratch folder, seed synthetic data beside it, drive, and delete the folder at the end, since it now holds a copy of the user's identity.
 Rule for next time: any in-app check that writes runs on a seeded scratch `--user-data-dir`, never the real folder, and ends by checking that no process still names it.
 
+## [gotcha] 2026-09-26 | a scratch --user-data-dir cannot be deleted the moment the app closes
+
+The in-app checks drive the built app on a scratch `--user-data-dir` and delete it at the end,
+since it holds a copy of the account pointer and quick context. `fs.rmSync(dir, { recursive:
+true })` straight after `await app.close()` failed with ENOTEMPTY, and `pgrep` on the folder
+still counted four processes at that instant: `close()` resolves before Electron's helper
+processes finish writing (Local Storage, logs), so the tree was still growing under the delete.
+A few seconds later the processes were gone and the delete succeeded.
+
+Rule for next time: after `app.close()`, wait about two seconds, then delete with
+`{ recursive: true, force: true, maxRetries: 10, retryDelay: 300 }`, from a
+`process.on('exit')` hook so a failed step still cleans up; then check that no process names
+the folder.
+
+## [gotcha] 2026-09-26 | Crepe drops the last keystrokes when an editor closes
+
+Milkdown's listener plugin reports `markdownUpdated` through a 200 ms lodash debounce, and its
+view's `destroy` calls `debouncedHandler.cancel()`
+(`node_modules/@milkdown/plugin-listener/lib/index.js`). So anything typed in the 200 ms before a
+`MarkdownEditor` unmounts never reaches `onChange`: with autosave, typing into Writing voice and
+pressing Escape at once left the file unchanged, and the old Save button had the same blind
+spot. The fix is in `render/markdown-editor.tsx`: an optional `onLeave` prop handed
+`crepe.getMarkdown()` in the effect's cleanup, once `crepe.create()` has resolved.
+
+Rule for next time: an editor built on Milkdown that must not lose text has to read the
+document itself as it closes. Its change events are late by design and cancelled on destroy.
+
+## [gotcha] 2026-09-26 | a replaced editor's close-time save writes the older text over the newer
+
+The same hand-over bit back. The rich editor is remounted by key when its document is replaced
+(the first read landing, "Rebuild from my sent mail"), and the leaving instance's cleanup hands
+over ITS text, which is the old version. Saved, that would undo a rebuild the moment it
+landed, or write an empty document over the real one when the first read beat the user's click.
+No in-app check could see it: a rebuild needs a model, and the race needs a click within
+milliseconds. `shouldSaveOnLeave` in `lib/autosave.ts` saves a closing editor's text only when
+the revision it was showing is still the current one, the file has been read, and the text
+differs; three tests pin it.
+
+Rule for next time: any "save on unmount" beside a key-based remount must know which version
+the unmounting instance was showing, and drop its text when a newer one replaced it.
+
 ## [decision] 2026-09-27 | a claude plan runs on claude code's own sign-in, never on a token the app holds
 
 Anthropic's Claude Code legal page (read 2026-09-26) lets an end user sign in to the unmodified Claude Code with their own subscription, and forbids an app from offering its own Claude.ai login or from collecting, storing or relaying Claude.ai credentials. So a `claude-plan` provider carries no key and no address: Settings runs the SDK's bundled binary as `claude auth login --claudeai`, reads only `claude auth status --json`, and its turns strip every variable that would outrank that sign-in (`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_BASE_URL`, `CLAUDE_CODE_USE_*`). Claude Code 2.1.185 names its macOS keychain item after the first 8 hex characters of a sha256 of `CLAUDE_CONFIG_DIR`, so the sign-in belongs to the account folder, never touches the user's terminal login, and a Microsoft 365 account switch means signing in again. Rejected: pasting a `claude setup-token` token into settings, which would make the app store a Claude token, and keying the item on a shared folder through the undocumented `CLAUDE_SECURESTORAGE_CONFIG_DIR`.

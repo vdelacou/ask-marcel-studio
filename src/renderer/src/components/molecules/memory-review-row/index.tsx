@@ -1,106 +1,160 @@
-import type { FC } from 'react';
+import type { FC, KeyboardEvent } from 'react';
 import { Button } from '../../atoms/button/index.tsx';
-import { TextInput } from '../../atoms/text-input/index.tsx';
+import { Select } from '../../atoms/select/index.tsx';
+import { TextArea } from '../../atoms/text-area/index.tsx';
 
 export type MemoryReviewKind = 'jargon' | 'team' | 'people';
 
 // One thing Marcel noticed, waiting for an answer. Props-only (rule 21): the review page
 // owns every draft answer and hands this row the one that belongs to it.
+//
+// The meaning is the text itself, Marcel's suggestion until the user rewords it: across real
+// suggestions Marcel almost never offers a second wording, so a choice between wordings was a
+// radio group with one option in it. The wordings it does offer sit under the text and fill it
+// when picked.
 export type MemoryReviewRowProps = {
-  // The radio group is per row: several rows are on screen at once, and one shared group
-  // name would make picking a wording here clear the wording picked three rows down.
-  id: string;
   term: string;
   kind: MemoryReviewKind;
   quote: string;
   enrichment?: string;
-  choices: readonly string[];
-  // The wording picked, or undefined while the user is writing their own.
-  selected?: string;
-  own: string;
+  // The title of the conversation it was heard in, while that conversation still exists.
+  source?: string;
+  meaning: string;
+  alternatives: readonly string[];
   canRemember: boolean;
   isSaving: boolean;
-  onChoose: (choice: string) => void;
-  onChangeOwn: (text: string) => void;
+  onChangeMeaning: (text: string) => void;
+  onChoose: (wording: string) => void;
   onChangeTerm: (text: string) => void;
+  // One of the three lists, as the select names it; the page reads it back into a note name.
+  onChangeKind: (kind: string) => void;
+  onOpenSource: () => void;
+  // Up and Down on the card itself: -1 or 1, to the neighbouring card.
+  onMove: (step: number) => void;
   onRemember: () => void;
   onSkip: () => void;
 };
 
-// Where an answer would be filed. The same three words the notes use in settings, so the
-// row and the note it lands in are recognisably the same thing.
-const KINDS: Record<MemoryReviewKind, string> = {
-  jargon: 'words we use',
-  team: 'my team',
-  people: 'people I work with',
-};
+// Where an answer would be filed, named the way the lists name themselves.
+const KIND_OPTIONS: readonly { value: MemoryReviewKind; label: string }[] = [
+  { value: 'jargon', label: 'Words we use' },
+  { value: 'team', label: 'My team' },
+  { value: 'people', label: 'Other people' },
+];
 
 export const MemoryReviewRow: FC<MemoryReviewRowProps> = ({
-  id,
   term,
   kind,
   quote,
   enrichment,
-  choices,
-  selected,
-  own,
+  source,
+  meaning,
+  alternatives,
   canRemember,
   isSaving,
+  onChangeMeaning,
   onChoose,
-  onChangeOwn,
   onChangeTerm,
+  onChangeKind,
+  onOpenSource,
+  onMove,
   onRemember,
   onSkip,
-}) => (
-  <article className="flex flex-col gap-y-3 rounded-panel border border-border-subtle bg-surface-raised p-4">
-    {/* The word itself is a field, not a heading: Marcel hears it inside a sentence and
+}) => {
+  // The card itself takes keys for triage: Up and Down move, Enter remembers, Backspace skips.
+  // Inside its fields those keys are for typing, so only a key pressed on the card counts.
+  const actions: Readonly<Record<string, (() => void) | undefined>> = {
+    ArrowDown: () => onMove(1),
+    ArrowUp: () => onMove(-1),
+    Enter: canRemember && !isSaving ? onRemember : undefined,
+    Backspace: isSaving ? undefined : onSkip,
+    Delete: isSaving ? undefined : onSkip,
+  };
+  const onKeyDown = (event: KeyboardEvent<HTMLElement>): void => {
+    if (event.target !== event.currentTarget) return;
+    const action = Object.hasOwn(actions, event.key) ? actions[event.key] : undefined;
+    if (action === undefined) return;
+    event.preventDefault();
+    action();
+  };
+
+  return (
+    <article
+      tabIndex={0}
+      data-review-card=""
+      aria-label={`Suggestion: ${term}`}
+      onKeyDown={onKeyDown}
+      className="flex flex-col gap-y-3 rounded-panel border border-border-subtle bg-surface-raised p-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+    >
+      {/* The word itself is a field, not a heading: Marcel hears it inside a sentence and
         sometimes hears it slightly wrong (a capital, a plural, half a name), and correcting
         it here is quicker than skipping the row and editing the note by hand. It is styled
         as the heading it replaces, so the row still reads as a card rather than a form. */}
-    <header className="flex items-center gap-x-2">
-      <input
-        value={term}
-        aria-label="The word to remember"
-        onChange={(event) => onChangeTerm(event.target.value)}
-        className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1.5 py-0.5 font-mono text-sm font-semibold text-ink hover:border-border-subtle focus-visible:border-border-subtle focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+      <header className="flex items-center gap-x-2">
+        <input
+          value={term}
+          aria-label="The word to remember"
+          onChange={(event) => onChangeTerm(event.target.value)}
+          className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1.5 py-0.5 font-mono text-sm font-semibold text-ink hover:border-border-subtle focus-visible:border-border-subtle focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+        />
+        <label className="flex shrink-0 items-center gap-x-1.5 text-xs text-ink-muted">
+          File under
+          <Select options={KIND_OPTIONS} value={kind} onChange={(event) => onChangeKind(event.target.value)} />
+        </label>
+      </header>
+
+      {quote.length > 0 && <blockquote className="border-l-2 border-border-subtle pl-3 text-xs italic text-ink-muted">{quote}</blockquote>}
+      {enrichment !== undefined && <p className="text-xs text-ink-muted">From your directory: {enrichment}</p>}
+      {source !== undefined && (
+        <p className="text-xs text-ink-muted">
+          Heard in{' '}
+          <button
+            type="button"
+            onClick={onOpenSource}
+            aria-label={`Open ${source}`}
+            className="rounded font-medium text-ink underline underline-offset-2 transition hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            {source}
+          </button>
+        </p>
+      )}
+
+      <TextArea
+        size="compact"
+        value={meaning}
+        placeholder="What it means here…"
+        aria-label="What it means where you work"
+        onChange={(event) => onChangeMeaning(event.target.value)}
       />
-      <span className="shrink-0 rounded-full border border-border-subtle px-2 py-0.5 text-[10px] uppercase tracking-wide text-ink-muted">{KINDS[kind]}</span>
-    </header>
 
-    {quote.length > 0 && <blockquote className="border-l-2 border-border-subtle pl-3 text-xs italic text-ink-muted">{quote}</blockquote>}
-    {enrichment !== undefined && <p className="text-xs text-ink-muted">From your directory: {enrichment}</p>}
+      {alternatives.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 text-xs text-ink-muted">
+          <span>Or:</span>
+          {alternatives.map((wording) => (
+            <button
+              key={wording}
+              type="button"
+              onClick={() => onChoose(wording)}
+              className="rounded-full border border-border-subtle px-2.5 py-0.5 transition hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              {wording}
+            </button>
+          ))}
+        </div>
+      )}
 
-    <fieldset className="flex flex-col gap-y-2">
-      <legend className="sr-only">What this word means where you work</legend>
-      {choices.map((choice) => (
-        <label
-          key={choice}
-          className={`flex cursor-pointer items-start gap-x-2 rounded-md border p-2.5 text-sm ${choice === selected ? 'border-accent bg-surface text-ink' : 'border-border-subtle text-ink-muted'}`}
-        >
-          <input type="radio" name={`memory-${id}`} checked={choice === selected} onChange={() => onChoose(choice)} className="mt-0.5 accent-accent" />
-          {choice}
-        </label>
-      ))}
-      <div className={`flex flex-col gap-y-1.5 rounded-md border p-2.5 ${selected === undefined ? 'border-accent bg-surface' : 'border-border-subtle'}`}>
-        <label className="flex cursor-pointer items-center gap-x-2 text-sm text-ink">
-          <input type="radio" name={`memory-${id}`} checked={selected === undefined} onChange={() => onChangeOwn(own)} className="accent-accent" />
-          In my own words
-        </label>
-        <TextInput value={own} placeholder="What it means here…" aria-label="What it means, in your own words" onChange={(event) => onChangeOwn(event.target.value)} />
-      </div>
-    </fieldset>
-
-    <footer className="flex items-center justify-end gap-x-2">
-      <Button variant="secondary" onClick={onSkip} disabled={isSaving}>
-        Skip
-      </Button>
-      {/* Refused rather than absent: a row with nothing written still shows the button it
+      <footer className="flex items-center justify-end gap-x-2">
+        <Button variant="secondary" onClick={onSkip} disabled={isSaving}>
+          Skip
+        </Button>
+        {/* Refused rather than absent: a row with nothing written still shows the button it
           would use, so the fix is obvious. */}
-      <Button onClick={onRemember} disabled={isSaving || !canRemember}>
-        {isSaving ? 'Saving…' : 'Remember it'}
-      </Button>
-    </footer>
-  </article>
-);
+        <Button onClick={onRemember} disabled={isSaving || !canRemember}>
+          {isSaving ? 'Saving…' : 'Remember it'}
+        </Button>
+      </footer>
+    </article>
+  );
+};
 
 MemoryReviewRow.displayName = 'MemoryReviewRow';

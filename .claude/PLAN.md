@@ -61,6 +61,98 @@ account); the sign-in lives with the account folder, like the notes.
 
 ---
 
+# Current run: a clear that sticks, then keyboard triage (approved 2026-09-27, "continue")
+
+E: after Clear all memories the writing voice and signature came back on the next launch, because
+the launch jobs refill any document that is empty. They now leave alone a document that exists,
+even empty: emptying it, by hand or with Clear all, is a choice. Only a document never written is
+filled in. Copy follows (the confirm, the two empty hints). F: the review list works from the
+keyboard: on a selected card, Up and Down move, Enter remembers, Backspace skips, and the next
+card takes the focus once one is answered.
+
+E1. [x] `fileExists` in json-file.ts; the voice and signature jobs skip a document that exists;
+        copy. Done: new test file, gates. DONE: the app log confirms both launch jobs skip an
+        emptied file ("there is already a signature", "... a writing voice").
+F1. [x] Lib `cardToFocus` (where the focus goes after a move or an answer). Done: new test file,
+        100% tier.
+F2. [x] Review row keys and focus ring, panel hint, page focus handling. Verified in the app.
+G1. [x] Review; commits on a yes. DONE: 11/11 in-app checks; two commits, pushed.
+
+---
+
+# Current run: review list extras, then phase 3 (approved 2026-09-26, "1 then 2 and then 3")
+
+Step A finishes the review list: a Remember all that takes every card as it stands, after an
+inline confirm, and a "Heard in" link on each card that closes Memory and opens the
+conversation the suggestion came from (hidden when that conversation is gone). Step B is phase
+3: the menu regrouped (Waiting for you: To review; What Marcel knows: Words we use, People I
+work with; About you: Who you are, Writing voice, Email signature), which also ends the
+"What Marcel noticed" label wrapping beside its count; and Who you are and Writing voice
+saved automatically (about a second after typing stops, and on leaving), with nothing typed
+during a save lost. The signature keeps its explicit save. Step C appends the scratch-folder
+cleanup lesson.
+
+A1. [x] Lib: `answerOf` / `answersFor` (a row as it stands: wording, word, list; nothing for a
+        row with no meaning or no word). Done: new test file, 100% tier.
+A2. [x] Hook `rememberAll` (one answer at a time, stops at the first refusal); review panel
+        Remember all + inline confirm; row "Heard in" link; page + app wiring.
+A3. [x] Verified in the built app on a scratch folder; review; commits on a yes.
+        DONE: 6/6 in-app checks; one commit, pushed.
+B1. [x] Lib `autosave.ts`: the draft to keep after a save lands (the saved text, unless more
+        was typed meanwhile). Done: new test file, 100% tier.
+B2. [x] Hook autosave (debounce, flush on leaving, remount only on reload or rebuild);
+        DocumentEditor auto variant (status instead of Save and Cancel); nav regroup and
+        titles. Done: lint 0/0, typecheck.
+B3. [x] Verified in the built app: typed text lands on disk without a click, including when
+        the sheet closes right after typing; review; commits on a yes.
+        DONE: 10/10 checks. Crepe reports a change 200 ms late and cancels the report when
+        destroyed, so the editor now hands its final text over as it closes; the review then
+        caught that a replaced editor (a rebuild, the first read) would save its older text
+        over the newer one, fixed with a revision check in lib/autosave (3 tests).
+D1. [x] Clear all memories (asked mid-run, scope "Everything on Memory"): the three notes, the
+        queue with its skipped words, and the three documents emptied in one call; the reading
+        progress kept. A confirm that names everything and says the voice and signature come
+        back from the mailbox on the next launch. DONE: 3 tests, 8/8 in-app checks.
+C1. [x] Lesson appended; committed on a yes. DONE: three gotchas (scratch folder delete race,
+        Crepe dropping the last keystrokes, a replaced editor's close-time save).
+
+---
+
+# Current run: memory review cards, phase 2 (approved 2026-09-26)
+
+Every one of the 17 real suggestions across both accounts has zero alternative wordings, so each
+review card was a one-option radio group plus "In my own words". A suggestion cannot be filed
+under another list, and Skip is forgotten: `resolve('reject')` only drops the item, so the same
+word is asked about again the next time a conversation uses it. This pass makes the meaning the
+text itself (prefilled, click to reword; other wordings as chips only when Marcel offers some),
+adds a File under menu, and makes Skip stick with an Undo. It also closes the rule 31 gap the
+phase 1 review deferred: Edit as text no longer saves over a note that changed since it opened.
+Out of scope: Remember all, a link to the source conversation, keyboard triage, menu regroup.
+
+1. [x] Shared queue doc: `skipped` (normalised words, never the sentence) in queue.json,
+       `skipCandidate`, `unskipCandidate`, `parseMemoryCandidate` exported; `addCandidates`
+       holds skipped words back. Done: new test file green, 100% tier, mutation >= 90.
+       DONE: 8 tests, mutation 96.48 (5 survivors, all on lines older than this change).
+2. [x] Main: accept takes a `kind` (refile), reject keeps the word, `restore` undoes a skip
+       (candidate re-validated); `write` takes the text it `expected` and refuses a changed note
+       (StoreError `conflict`). Contract + register. Done: new service tests green.
+       DONE: 9 tests; the review added one: an unknown answer is refused, never taken as a skip.
+3. [x] Renderer lib: the list a row is filed under lives in its draft (`withKind`, `kindFor`);
+       rewording keeps the word and the list. Done: new test file, 100% tier, old tests untouched.
+4. [x] Design system: review row (meaning textarea, wording chips, File under select), review
+       panel (a notice with Undo). Done: lint 0/0.
+5. [x] Wiring: use-memory (remember with kind, last skip, restore), memory-page, the notes hook
+       and list section (save with the opened text; a conflict keeps the text on screen).
+6. [x] Verified in the built app on a scratch folder with a synthetic queue.
+       DONE: 16/16 checks, from a chip filling the meaning to a text save refused over a note
+       changed underneath; the scratch folder is deleted on exit.
+7. [x] Review, then commits proposed module-before-consumer, each on a yes.
+       DONE: 4 commits (3b2704a..this one), each through the 8-gate hook, pushed.
+       Left for later: Remember all, a link to the source conversation, keyboard triage, a way
+       to clear old skips, and the nav label that wraps beside its count.
+
+---
+
 # Current run: memory notes as lists, phase 1 (approved 2026-09-26)
 
 The three notes (jargon, team, people) are markdown documents edited in a rich editor, so

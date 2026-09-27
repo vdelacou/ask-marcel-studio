@@ -31,6 +31,7 @@ import type { UpdateChecker } from './services/update/update-checker.ts';
 import { createMemoryService } from './services/memory/memory-service.ts';
 import { createMemoryExtractor } from './services/memory/memory-extractor.ts';
 import { createIdleWatcher } from './services/memory/idle-watcher.ts';
+import { createClearAll } from './services/memory/clear-all.ts';
 import { createBackgroundJobs } from './services/background/background-jobs.ts';
 import { createRunAgentText } from './services/background/background-agent-io.ts';
 import { createVoiceProfileJob } from './services/background/voice-profile-job.ts';
@@ -40,7 +41,7 @@ import { parseAgentFileDoc } from '../shared/agent-files.ts';
 import { createModelTestService } from './services/models/model-test-service.ts';
 import { accountDir, backgroundWorkspaceDir, mainLogPath, quickContextFilePath, sdkProjectsDir, signatureFilePath, voiceProfileFilePath, workspaceDir } from '../shared/paths.ts';
 import { parseStoredQuickContext } from '../shared/quick-context.ts';
-import { readJsonFile, writeJsonFileAtomic } from './services/store/json-file.ts';
+import { fileExists, readJsonFile, writeJsonFileAtomic } from './services/store/json-file.ts';
 import { BUILTIN_AGENTS } from './services/agent/builtin-agents.ts';
 import { EMPTY_AGENTS_DOC, mergeAgents, toSdkAgents } from '../shared/agents-doc.ts';
 import { err, ok } from '../shared/result.ts';
@@ -225,8 +226,8 @@ const startPython = (userData: string): void => {
   void python.provision();
 };
 
-// Whether a file exists and has something in it. Used to decide whether a prefill has
-// anything to do; an unreadable file counts as absent, which means it is tried again.
+// Whether a file exists and has something in it: how the signature prefill tells a fetch that
+// wrote something from one that did not. An unreadable file counts as absent.
 const hasContent = async (path: string): Promise<boolean> => {
   try {
     return (await stat(path)).size > 0;
@@ -371,7 +372,8 @@ const buildRuntime = (
     signature: createSignatureService({
       run: officeRun,
       signaturePath: signatureFilePath(userData),
-      hasSignature: () => hasContent(signatureFilePath(userData)),
+      // A signature the user emptied, by hand or with Clear all memories, stays empty.
+      hasSignature: () => fileExists(signatureFilePath(userData)),
       wroteSomething: () => hasContent(signatureFilePath(userData)),
     }),
     memoryExtractor: createMemoryExtractor({
@@ -390,7 +392,8 @@ const buildRuntime = (
     voice: createVoiceProfileJob({
       runAgentText: createRunAgentText(),
       prompt: readBundledText(backgroundPromptSource('voice-profile-prompt.md')),
-      hasProfile: () => hasContent(voiceProfileFilePath(userData)),
+      // As for the signature: an emptied writing voice is left empty until the user rebuilds it.
+      hasProfile: () => fileExists(voiceProfileFilePath(userData)),
       write: async (markdown) => {
         const saved = await agentFiles.save('voice-profile', markdown);
         return saved.ok ? ok(null) : err(saved.error.message);
@@ -423,6 +426,7 @@ const buildRuntime = (
     agentsStore,
     agentFiles,
     memory,
+    clearAll: createClearAll({ clearMemory: memory.clearAll, clearDocument: (doc) => agentFiles.save(doc, '') }),
     // Rebuilding a document is the same job the app runs on its own, asked for
     // explicitly. It resolves with the new contents so the panel shows them at once.
     regenerateAgentFile: async (doc) => {

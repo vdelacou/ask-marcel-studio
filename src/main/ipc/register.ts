@@ -11,6 +11,7 @@
  */
 import { dialog, ipcMain } from 'electron';
 import { CHANNEL } from '../../shared/ipc-contract.ts';
+import type { StoreError } from '../../shared/ipc-contract.ts';
 import { modelForNewConversation, modelRefIsConfigured } from '../../shared/model-ref.ts';
 import type { AgentRuntime } from '../services/agent/agent-runtime.ts';
 import type { SkillsService } from '../services/skills/skills-service.ts';
@@ -43,6 +44,8 @@ export type IpcDeps = {
   readonly agentsStore: AgentsStore;
   readonly agentFiles: AgentFilesStore;
   readonly memory: MemoryService;
+  // Everything on the Memory page at once, including the documents the agent-files store keeps.
+  readonly clearAll: () => Promise<Result<null, StoreError>>;
   // The last update status the checker learned. Synchronous read: the network happens on a
   // schedule in the background, never on the click that asks.
   readonly updateChecker: UpdateChecker;
@@ -181,10 +184,11 @@ export const registerIpc = (deps: IpcDeps): void => {
   ipcMain.handle(CHANNEL.memoryResolve, (_event, input: unknown) => deps.memory.resolve(input));
   ipcMain.handle(CHANNEL.memoryRead, (_event, name: unknown) => deps.memory.read(name));
   ipcMain.handle(CHANNEL.memoryWrite, (_event, input: unknown) => {
-    const draft = input as { name?: unknown; contents?: unknown } | undefined;
-    return deps.memory.write(draft?.name, draft?.contents);
+    const draft = input as { name?: unknown; contents?: unknown; expected?: unknown } | undefined;
+    return deps.memory.write(draft?.name, draft?.contents, draft?.expected);
   });
   ipcMain.handle(CHANNEL.memoryEdit, (_event, input: unknown) => deps.memory.edit(input));
+  ipcMain.handle(CHANNEL.memoryClearAll, () => deps.clearAll());
 
   ipcMain.handle(CHANNEL.agentFileGet, (_event, doc: unknown) => deps.agentFiles.get(doc));
   ipcMain.handle(CHANNEL.agentFileSave, (_event, input: unknown) => {

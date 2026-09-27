@@ -18,8 +18,9 @@ export type MemoryNotesController = {
   readonly reload: () => void;
   // Resolves once main has answered; on success the notes are already the new ones.
   readonly edit: (change: MemoryEntryEdit) => Promise<Result<MemoryNotes, MemoryEditError>>;
-  // A whole note written back from its text, for "Edit as text".
-  readonly save: (name: MemoryFileName, contents: string) => Promise<Result<null, StoreError>>;
+  // A whole note written back from its text, for "Edit as text". `opened` is the note as the
+  // text view began with it: main refuses the save if the note has changed since.
+  readonly save: (name: MemoryFileName, contents: string, opened: string) => Promise<Result<null, StoreError>>;
 };
 
 const NO_NOTES: MemoryNotes = { jargon: '', team: '', people: '' };
@@ -48,8 +49,8 @@ export const useMemoryNotes = (): MemoryNotesController => {
     return answered;
   }, []);
 
-  const save = useCallback(async (name: MemoryFileName, contents: string): Promise<Result<null, StoreError>> => {
-    const saved = await studio.memory.write({ name, contents });
+  const save = useCallback(async (name: MemoryFileName, contents: string, opened: string): Promise<Result<null, StoreError>> => {
+    const saved = await studio.memory.write({ name, contents, expected: opened });
     if (saved.ok) setNotes((current) => ({ ...current, [name]: contents }));
     return saved;
   }, []);

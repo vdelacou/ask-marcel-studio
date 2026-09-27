@@ -22,14 +22,20 @@ import { unescapeAmpersands } from '../lib/markdown-ampersands.ts';
 export type MarkdownEditorProps = {
   defaultValue: string;
   onChange: (markdown: string) => void;
+  // The text as the editor closes. Crepe waits 200 ms before it reports a change and cancels
+  // that wait when it is destroyed, so the last words typed before a close reach the page only
+  // through here.
+  onLeave?: (markdown: string) => void;
 };
 
-export const MarkdownEditor: FC<MarkdownEditorProps> = ({ defaultValue, onChange }) => {
+export const MarkdownEditor: FC<MarkdownEditorProps> = ({ defaultValue, onChange, onLeave }) => {
   const host = useRef<HTMLDivElement>(null);
   // Read through a ref so a new callback identity never tears down the editor and
   // loses the cursor mid-sentence.
   const latest = useRef(onChange);
   latest.current = onChange;
+  const leave = useRef(onLeave);
+  leave.current = onLeave;
   // The starting text, captured once per mount. Held in a ref rather than read straight
   // from the prop because the prop is the LIVE document: the panels feed every keystroke
   // back in, so an effect depending on it destroyed and rebuilt the editor on every
@@ -45,8 +51,13 @@ export const MarkdownEditor: FC<MarkdownEditorProps> = ({ defaultValue, onChange
     crepe.on((listener) => {
       listener.markdownUpdated((_context, markdown) => latest.current(unescapeAmpersands(markdown)));
     });
-    void crepe.create();
+    // Only an editor that finished starting has a document to hand over.
+    let isReady = false;
+    void crepe.create().then(() => {
+      isReady = true;
+    });
     return () => {
+      if (isReady) leave.current?.(unescapeAmpersands(crepe.getMarkdown()));
       void crepe.destroy();
     };
     // Nothing: the editor owns its content once it starts, and the parent remounts it by

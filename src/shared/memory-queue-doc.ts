@@ -30,9 +30,14 @@ export type MemoryCandidate = {
   readonly createdAt: string;
 };
 
-export type MemoryQueueDoc = { readonly items: readonly MemoryCandidate[] };
+export type MemoryQueueDoc = {
+  readonly items: readonly MemoryCandidate[];
+  // Words the user skipped, normalised, so they are never asked about again. Only the word:
+  // the sentence it was heard in goes with the skip.
+  readonly skipped: readonly string[];
+};
 
-export const EMPTY_MEMORY_QUEUE: MemoryQueueDoc = { items: [] };
+export const EMPTY_MEMORY_QUEUE: MemoryQueueDoc = { items: [], skipped: [] };
 
 export type MemoryQueueError = { readonly kind: 'unreadable'; readonly message: string };
 
@@ -40,7 +45,9 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 
 const text = (value: unknown): string => (typeof value === 'string' ? value : '');
 
-const parseCandidate = (raw: unknown): MemoryCandidate | undefined => {
+// The one reading of a candidate, whether it comes off disk or back from the window as the
+// undo of a skip: either way it is untrusted until it has been through here.
+export const parseMemoryCandidate = (raw: unknown): MemoryCandidate | undefined => {
   if (!isRecord(raw)) return undefined;
   const kind = memoryFileName(raw['kind']);
   const id = text(raw['id']);
@@ -61,19 +68,24 @@ const parseCandidate = (raw: unknown): MemoryCandidate | undefined => {
   };
 };
 
+// A file written before skips were kept has none; anything in the list that is not a word
+// is dropped rather than failing the file.
+const skippedWords = (raw: unknown): readonly string[] =>
+  Array.isArray(raw) ? raw.flatMap((entry) => (typeof entry === 'string' && normaliseTerm(entry).length > 0 ? [normaliseTerm(entry)] : [])) : [];
+
 export const parseMemoryQueue = (raw: unknown): Result<MemoryQueueDoc, MemoryQueueError> => {
   if (!isRecord(raw) || !Array.isArray(raw['items'])) return err({ kind: 'unreadable', message: 'the pending notes file is not in the expected shape' });
   // A candidate this cannot read is dropped rather than failing the file: it is a
   // question the app wanted to ask, not something the user would miss.
-  return ok({ items: raw['items'].flatMap((entry) => parseCandidate(entry) ?? []) });
+  return ok({ items: raw['items'].flatMap((entry) => parseMemoryCandidate(entry) ?? []), skipped: skippedWords(raw['skipped']) });
 };
 
 export const serialiseMemoryQueue = (doc: MemoryQueueDoc): string => JSON.stringify(doc, null, 2);
 
-// Adding a candidate the user has already answered, or already been asked, would be
-// asking the same question twice.
+// Adding a candidate the user has already answered, already been asked, or told Marcel to
+// skip would be asking the same question twice.
 export const addCandidates = (doc: MemoryQueueDoc, additions: readonly MemoryCandidate[], knownTerms: ReadonlySet<string>): MemoryQueueDoc => {
-  const seen = new Set([...doc.items.map((item) => normaliseTerm(item.term)), ...[...knownTerms].map(normaliseTerm)]);
+  const seen = new Set([...doc.items.map((item) => normaliseTerm(item.term)), ...[...knownTerms].map(normaliseTerm), ...doc.skipped]);
   const fresh: MemoryCandidate[] = [];
   for (const addition of additions) {
     const key = normaliseTerm(addition.term);
@@ -81,9 +93,24 @@ export const addCandidates = (doc: MemoryQueueDoc, additions: readonly MemoryCan
     seen.add(key);
     fresh.push(addition);
   }
-  return { items: [...doc.items, ...fresh] };
+  return { ...doc, items: [...doc.items, ...fresh] };
 };
 
-export const removeCandidate = (doc: MemoryQueueDoc, id: string): MemoryQueueDoc => ({ items: doc.items.filter((item) => item.id !== id) });
+export const removeCandidate = (doc: MemoryQueueDoc, id: string): MemoryQueueDoc => ({ ...doc, items: doc.items.filter((item) => item.id !== id) });
+
+// "Not this one", for good: the candidate leaves the queue and its word stays behind.
+export const skipCandidate = (doc: MemoryQueueDoc, id: string): MemoryQueueDoc => {
+  const skipped = findCandidate(doc, id);
+  if (skipped === undefined) return doc;
+  const word = normaliseTerm(skipped.term);
+  return { items: doc.items.filter((item) => item.id !== id), skipped: doc.skipped.includes(word) ? doc.skipped : [...doc.skipped, word] };
+};
+
+// The undo of a skip: the candidate is waiting again and its word may be asked about.
+export const unskipCandidate = (doc: MemoryQueueDoc, candidate: MemoryCandidate): MemoryQueueDoc => {
+  const word = normaliseTerm(candidate.term);
+  const isWaiting = doc.items.some((item) => item.id === candidate.id);
+  return { items: isWaiting ? doc.items : [...doc.items, candidate], skipped: doc.skipped.filter((held) => held !== word) };
+};
 
 export const findCandidate = (doc: MemoryQueueDoc, id: string): MemoryCandidate | undefined => doc.items.find((item) => item.id === id);

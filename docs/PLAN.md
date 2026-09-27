@@ -235,10 +235,11 @@ How a candidate arrives:
 
 The surface. Nothing appears on its own: the app used to open a confirm dialog over the conversation as soon as a politeness gate allowed, and that dialog and its gate are gone. What Marcel noticed waits in a list, a count on the sidebar's user row says how much is there, and the user opens Memory from the user menu when they feel like it. It is a full-window sheet rather than a swap of the main column, because the chat page holds the composer draft in its own state and swapping would throw away a half-typed message.
 
-Two groups in its left menu:
+Three groups in its left menu:
 
-- **Waiting for you** — one row per candidate: the word (editable), where it was heard, the wordings Marcel offers as radios, a box for the user's own, then Remember it / Skip. Remember is refused until there is both a word and a meaning. Answering returns the items still waiting, so the row leaves the list without a second read.
-- **What Marcel knows** — two lists over the three notes, then About you, Email signature and Writing voice. Words we use is the `jargon` note; People I work with shows `team` and `people` as one list, with a chip on each person saying which note they are in. Both are edited an entry at a time: in place, deleted with an Undo, added, filtered, with a hint when the same entry appears twice, and an Edit as text link per note for pasting many at once. These moved out of Settings, which keeps what configures the app (models, skills, agents, the Microsoft 365 connection).
+- **Waiting for you** — To review: one card per candidate, the word (editable), where it was heard (a link that opens that conversation), the meaning as text (Marcel's suggestion until reworded; other wordings as chips), a File under menu, then Remember it / Skip. Remember is refused until there is both a word and a meaning; Skip keeps the word so it is never asked about again, with an Undo. Remember all takes every card as it stands after an inline question. Answering returns the items still waiting, so the card leaves the list without a second read.
+- **What Marcel knows** — two lists over the three notes. Words we use is the `jargon` note; People I work with shows `team` and `people` as one list, with a chip on each person saying which note they are in. Both are edited an entry at a time: in place, deleted with an Undo, added, filtered, with a hint when the same entry appears twice, and an Edit as text link per note for pasting many at once.
+- **About you** — Who you are and Writing voice, saved as they are typed (no Save button), and the email signature, saved on purpose. These moved out of Settings, which keeps what configures the app (models, skills, agents, the Microsoft 365 connection).
 
 ## Office CLI integration
 

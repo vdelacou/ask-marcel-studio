@@ -14,6 +14,7 @@
  * Pure: no react, no electron, so `bun test` runs it.
  */
 import type { MemoryCandidate } from '../../../shared/memory-queue-doc.ts';
+import type { MemoryFileName } from '../../../shared/memory-file-name.ts';
 
 export type MemoryDraft = {
   // The wording picked from the offered ones, or undefined while the user writes their own.
@@ -23,6 +24,8 @@ export type MemoryDraft = {
   // it and it stands as proposed; '' means they cleared the box and are mid-retype, which
   // is why this is not simply defaulted to the proposed word.
   readonly term?: string;
+  // The list the user filed it under instead of the one Marcel guessed, if they picked one.
+  readonly kind?: MemoryFileName;
 };
 
 export type MemoryDrafts = Readonly<Record<string, MemoryDraft>>;
@@ -53,12 +56,20 @@ export const withChoice = (drafts: MemoryDrafts, candidate: MemoryCandidate, cho
   [candidate.id]: { ...draftFor(drafts, candidate), selected: choice },
 });
 
-// Moving to your own words drops the wording that was picked, which is what makes the
-// radio move; a word corrected on the way past is not part of that and stays.
+// Moving to your own words drops the wording that was picked; a word corrected on the way
+// past, and a list picked for it, are not part of that and stay.
 export const withOwnWords = (drafts: MemoryDrafts, candidate: MemoryCandidate, text: string): MemoryDrafts => {
-  const held = draftFor(drafts, candidate);
-  return { ...drafts, [candidate.id]: { own: text, ...(held.term === undefined ? {} : { term: held.term }) } };
+  const { selected, ...kept } = draftFor(drafts, candidate);
+  return { ...drafts, [candidate.id]: { ...kept, own: text } };
 };
+
+export const withKind = (drafts: MemoryDrafts, candidate: MemoryCandidate, kind: MemoryFileName): MemoryDrafts => ({
+  ...drafts,
+  [candidate.id]: { ...draftFor(drafts, candidate), kind },
+});
+
+// Where the answer would be filed: the list the user picked, or the one Marcel guessed.
+export const kindFor = (drafts: MemoryDrafts, candidate: MemoryCandidate): MemoryFileName => drafts[candidate.id]?.kind ?? candidate.kind;
 
 export const withTerm = (drafts: MemoryDrafts, candidate: MemoryCandidate, text: string): MemoryDrafts => ({
   ...drafts,
@@ -81,6 +92,21 @@ export const answerFor = (draft: MemoryDraft): string | undefined => {
   const answer = (draft.selected ?? draft.own).trim();
   return answer.length === 0 ? undefined : answer;
 };
+
+// A row ready to be remembered, as it stands: its wording, its word and its list.
+export type MemoryAnswer = { readonly id: string; readonly detail: string; readonly term: string; readonly kind: MemoryFileName };
+
+// Nothing for a row with no meaning or with its word rubbed out: the same two rules that keep
+// its own Remember button refused.
+export const answerOf = (drafts: MemoryDrafts, candidate: MemoryCandidate): MemoryAnswer | undefined => {
+  const detail = answerFor(draftFor(drafts, candidate));
+  const term = termFor(drafts, candidate);
+  return detail === undefined || term === undefined ? undefined : { id: candidate.id, detail, term, kind: kindFor(drafts, candidate) };
+};
+
+// Remember all: every row that can be remembered, in the order they are listed.
+export const answersFor = (drafts: MemoryDrafts, candidates: readonly MemoryCandidate[]): readonly MemoryAnswer[] =>
+  candidates.flatMap((candidate) => answerOf(drafts, candidate) ?? []);
 
 export const forgetDraft = (drafts: MemoryDrafts, id: string): MemoryDrafts => {
   const { [id]: gone, ...rest } = drafts;
