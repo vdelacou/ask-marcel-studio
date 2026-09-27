@@ -161,8 +161,8 @@ describe('where the notes the app keeps live', () => {
 
 describe('keeping one account’s world out of another’s', () => {
   test('each account has its own folder under the data folder', () => {
-    const one = accountKeyFor({ id: 'id-1', email: 'vincent@lvmh.com' });
-    const other = accountKeyFor({ id: 'id-2', email: 'someone@lvmh.com' });
+    const one = accountKeyFor({ id: 'id-1', email: 'user@example.com' });
+    const other = accountKeyFor({ id: 'id-2', email: 'someone@example.com' });
 
     expect(accountDir(USER_DATA, one)).not.toBe(accountDir(USER_DATA, other));
     expect(accountDir(USER_DATA, one).startsWith(`${accountsDir(USER_DATA)}/`)).toBe(true);
@@ -182,7 +182,7 @@ describe('keeping one account’s world out of another’s', () => {
   test('handing a store an account folder puts its conversations inside that account', () => {
     // This is the whole mechanism: the stores keep taking a data folder, and the
     // composition root hands them the account's one.
-    const key = accountKeyFor({ id: 'id-1', email: 'vincent@lvmh.com' });
+    const key = accountKeyFor({ id: 'id-1', email: 'user@example.com' });
 
     expect(conversationsDir(accountDir(USER_DATA, key)).startsWith(accountDir(USER_DATA, key))).toBe(true);
   });

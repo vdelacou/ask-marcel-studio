@@ -3,10 +3,10 @@ import { parseCurrentAccount, serialiseCurrentAccount } from './current-account.
 import { accountKeyFor } from './account-key.ts';
 
 const account = {
-  key: accountKeyFor({ id: 'id-1', email: 'vincent@lvmh.com' }),
+  key: accountKeyFor({ id: 'id-1', email: 'user@example.com' }),
   userId: 'id-1',
-  email: 'vincent@lvmh.com',
-  displayName: 'Vincent DELACOURT',
+  email: 'user@example.com',
+  displayName: 'Example USER',
 };
 
 describe('remembering which account was open', () => {
@@ -15,7 +15,7 @@ describe('remembering which account was open', () => {
   });
 
   test('a record with no key names no account, because the key is what opens the folder', () => {
-    expect(parseCurrentAccount({ userId: 'id-1', email: 'vincent@lvmh.com' })).toBeUndefined();
+    expect(parseCurrentAccount({ userId: 'id-1', email: 'user@example.com' })).toBeUndefined();
   });
 
   test('a key that could climb out of the data folder is refused', () => {
@@ -24,7 +24,7 @@ describe('remembering which account was open', () => {
 
   test('a record that is not a record at all names no account', () => {
     expect(parseCurrentAccount(null)).toBeUndefined();
-    expect(parseCurrentAccount('vincent')).toBeUndefined();
+    expect(parseCurrentAccount('user')).toBeUndefined();
   });
 
   test('a record missing its display fields still opens the right folder', () => {

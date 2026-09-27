@@ -27,13 +27,13 @@ so never run the driver next to a live dev instance.
 ## Run
 
 ```bash
-node .claude/skills/run-studio/driver.mjs 'Who is the CIO of Celine?' cio-run1
+node .claude/skills/run-studio/driver.mjs 'Who is the CIO of Contoso?' cio-run1
 MODEL_LABEL='Google · gemini-3.5-flash-lite' node .claude/skills/run-studio/driver.mjs '<question>' <tag>
 ```
 
 - arg 1: the question typed into the composer.
 - arg 2: tag naming the dump files.
-- `MODEL_LABEL`: exact label from the composer's model picker (e.g. `LVMH · deepseek-v4-pro`);
+- `MODEL_LABEL`: exact label from the composer's model picker (e.g. `ACME · deepseek-v4-pro`);
   omit to keep the new conversation's default. The separator is a middle dot.
 - `RUN_DIR`: output directory, default `<tmpdir>/ask-marcel-studio-runs`.
 

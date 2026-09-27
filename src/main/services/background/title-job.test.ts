@@ -13,13 +13,13 @@ const ID = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
 
 const conversationWith = (over: Partial<Conversation> = {}): Conversation => ({
   id: ID as Conversation['id'],
-  title: 'find the b27 email',
-  model: 'lvmh::deepseek-v4-pro',
+  title: 'find the Q3 email',
+  model: 'acme::deepseek-v4-pro',
   createdAt: '2026-07-24T00:00:00.000Z',
   updatedAt: '2026-07-24T00:00:00.000Z',
   messages: [
-    { id: 'm1', role: 'user', parts: [{ type: 'text', text: 'find the b27 email' }], createdAt: '2026-07-24T00:00:00.000Z' },
-    { id: 'm2', role: 'assistant', parts: [{ type: 'text', text: 'Hervé sent it on 15 July.' }], createdAt: '2026-07-24T00:00:01.000Z' },
+    { id: 'm1', role: 'user', parts: [{ type: 'text', text: 'find the Q3 email' }], createdAt: '2026-07-24T00:00:00.000Z' },
+    { id: 'm2', role: 'assistant', parts: [{ type: 'text', text: 'Finance sent it on 15 July.' }], createdAt: '2026-07-24T00:00:01.000Z' },
   ],
   ...over,
 });
@@ -52,7 +52,7 @@ const harness = (
     conversations,
     runAgentText: (input) => {
       prompts.push(input.prompt);
-      return Promise.resolve(options.answer ?? ok('Hervé’s B27 budget figures'));
+      return Promise.resolve(options.answer ?? ok('Finance’s Q3 budget figures'));
     },
     session: (preferred) => {
       models.push(preferred);
@@ -72,8 +72,8 @@ describe('naming a conversation once it has said something', () => {
     const outcome = await job.run(ID, signal());
 
     expect(outcome.ok).toBe(true);
-    expect(named).toEqual(['Hervé’s B27 budget figures']);
-    expect(announced).toEqual(['Hervé’s B27 budget figures']);
+    expect(named).toEqual(['Finance’s Q3 budget figures']);
+    expect(announced).toEqual(['Finance’s Q3 budget figures']);
   });
 
   test('it runs on the conversation’s own model, not on whatever was last used elsewhere', async () => {
@@ -81,7 +81,7 @@ describe('naming a conversation once it has said something', () => {
 
     await job.run(ID, signal());
 
-    expect(models).toEqual(['lvmh::deepseek-v4-pro']);
+    expect(models).toEqual(['acme::deepseek-v4-pro']);
   });
 
   test('both sides of the exchange are shown to the model', async () => {
@@ -89,8 +89,8 @@ describe('naming a conversation once it has said something', () => {
 
     await job.run(ID, signal());
 
-    expect(prompts[0]).toContain('find the b27 email');
-    expect(prompts[0]).toContain('Hervé sent it on 15 July.');
+    expect(prompts[0]).toContain('find the Q3 email');
+    expect(prompts[0]).toContain('Finance sent it on 15 July.');
   });
 
   test('a conversation the user named themselves is left alone', async () => {

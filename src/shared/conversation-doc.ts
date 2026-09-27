@@ -28,7 +28,7 @@ export const DEFAULT_TITLE = 'New conversation';
 // with any leading skill invocation taken off. `/draft-outlook-email FG E-Commerce` is a
 // command plus a subject, and only the subject says what the conversation is about.
 const TITLE_LIMIT = 60;
-// The lookahead is what stops a pasted path (`/Users/vincent/report.xlsx`) being read as
+// The lookahead is what stops a pasted path (`/Users/example/report.xlsx`) being read as
 // a command: an invocation is a single word, ended by a space or by the message.
 const SLASH_PREFIX = /^\/([A-Za-z0-9-]+)(?=\s|$)\s*/;
 

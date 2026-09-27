@@ -255,7 +255,7 @@ Applies to: any "which variant is this?" question in this repo.
 
 ## [decision] 2026-07-17 | commit identity is the repo-local neutral atelier handle
 
-The machine's global git identity is a company email (`vincent.delacourt@adama-development.com`) and this repo is MIT-licensed and may go public, so an inherited identity would be exactly the accidental leak rule 26 exists to prevent. Set `atelier <atelier@users.noreply.github.com>` via `git config --local` at repo birth, which is the only moment the choice is free. Gate 3 (`gitleaks protect --staged`) scans the diff and is blind to the author field, so nothing else would have caught it.
+The machine's global git identity is a personal company email and this repo is MIT-licensed and may go public, so an inherited identity would be exactly the accidental leak rule 26 exists to prevent. Set `atelier <atelier@users.noreply.github.com>` via `git config --local` at repo birth, which is the only moment the choice is free. Gate 3 (`gitleaks protect --staged`) scans the diff and is blind to the author field, so nothing else would have caught it.
 Applies to: every commit in this repo.
 
 ## [gotcha] 2026-07-20 | settingSources: ['user'] does NOT load a CLAUDE.md; use systemPrompt append for always-on content
@@ -339,7 +339,7 @@ before the executable.
 
 ## [gotcha] WebSearch is Anthropic's own tool, so off Anthropic it answers nothing (2026-07-21)
 
-A conversation on `LVMH · deepseek-v4-pro` searched the web eight times and got eight empty
+A conversation on `ACME · deepseek-v4-pro` searched the web eight times and got eight empty
 results, no error. The agent then wrote a confident answer from memory and cited a Wikipedia
 page it had fetched, which made the whole thing read as a successful search.
 
@@ -410,8 +410,8 @@ use, or every other vendor wears it.
 
 ## [gotcha] the thin-orchestrator port dropped role→person routing, and four runs gave three CIOs (2026-07-23)
 
-"Who is the CIO of Celine?" got three different answers in four runs: the user themselves (a
-regional title on a deck they presented, promoted to the maison), "no such role" (absent from
+"Who is the CIO of Contoso?" got three different answers in four runs: the user themselves (a
+regional title on a deck they presented, promoted to the brand), "no such role" (absent from
 one divisional org chart), and twice the right person, once from the public web through plain
 Bash and once from the people path. The core routing table covered name→person (`get-user`)
 but not title→person, so every run improvised its entry point; keyword file search rewards

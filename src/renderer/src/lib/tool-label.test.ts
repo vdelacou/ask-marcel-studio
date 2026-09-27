@@ -76,7 +76,7 @@ describe('saying what a tool call is doing', () => {
   });
 
   test('a skill invoked with the skill key, the shape the SDK actually sends, is named by it', () => {
-    expect(toolLabel('Skill', { skill: 'answer-from-m365', args: 'CELINE CIO meeting deck' })).toBe('Using the answer-from-m365 skill');
+    expect(toolLabel('Skill', { skill: 'answer-from-m365', args: 'CONTOSO CIO meeting deck' })).toBe('Using the answer-from-m365 skill');
   });
 
   test('a skill with neither still reads as a sentence', () => {
@@ -88,7 +88,7 @@ describe('saying what a tool call is doing', () => {
   });
 
   test('a delegation arriving under the Agent tool name reads the same way', () => {
-    expect(toolLabel('Agent', { description: 'Read the latest CELINE CIO Meeting deck', subagent_type: 'doc-reader' })).toBe('Read the latest CELINE CIO Meeting deck');
+    expect(toolLabel('Agent', { description: 'Read the latest CONTOSO CIO Meeting deck', subagent_type: 'doc-reader' })).toBe('Read the latest CONTOSO CIO Meeting deck');
   });
 
   test('a delegated task with no description names the agent', () => {
@@ -144,7 +144,7 @@ describe('what kind of thing a card says it is', () => {
   });
 
   test('any other command is still a shell command', () => {
-    expect(toolBadge('Bash', { command: 'grep -n Herve inbox.txt' })).toBe('Bash');
+    expect(toolBadge('Bash', { command: 'grep -n Finance inbox.txt' })).toBe('Bash');
   });
 
   test('a command that merely mentions the name in a string is not one', () => {

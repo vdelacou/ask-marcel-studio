@@ -5,9 +5,9 @@ const envelope = (data: unknown): string => JSON.stringify({ ok: true, data });
 
 describe('reading who the user is from the cli', () => {
   test('a full answer gives the name they are called by', () => {
-    const context = parseQuickContext(envelope({ user: { id: 'u1', displayName: 'Vincent DELACOURT', mail: 'v@x.com', jobTitle: 'CIO' }, tenantTimeZone: 'China Standard Time' }));
+    const context = parseQuickContext(envelope({ user: { id: 'u1', displayName: 'Example USER', mail: 'v@x.com', jobTitle: 'CIO' }, tenantTimeZone: 'China Standard Time' }));
 
-    expect(context?.firstName).toBe('Vincent');
+    expect(context?.firstName).toBe('Example');
     expect(context?.jobTitle).toBe('CIO');
     expect(context?.tenantTimeZone).toBe('China Standard Time');
   });
@@ -44,11 +44,11 @@ describe('reading who the user is from the cli', () => {
 
 describe('telling the agent who it is working for', () => {
   test('the block names the user, their job and the timezone their tenant thinks in', () => {
-    const context = parseQuickContext(envelope({ user: { id: 'u1', displayName: 'Vincent DELACOURT', mail: 'v@x.com', jobTitle: 'CIO' }, tenantTimeZone: 'China Standard Time' }));
+    const context = parseQuickContext(envelope({ user: { id: 'u1', displayName: 'Example USER', mail: 'v@x.com', jobTitle: 'CIO' }, tenantTimeZone: 'China Standard Time' }));
 
     const block = quickContextBlock(context);
 
-    expect(block).toContain('Vincent DELACOURT');
+    expect(block).toContain('Example USER');
     expect(block).toContain('CIO');
     expect(block).toContain('China Standard Time');
   });
@@ -84,7 +84,7 @@ describe('deciding when to ask the cli again', () => {
 
 describe('reading back what the app stored', () => {
   test('what was written last time comes back the same', () => {
-    const context = parseQuickContext(envelope({ user: { id: 'u1', displayName: 'Vincent DELACOURT', mail: 'v@x.com' }, inboxId: 'i1' }));
+    const context = parseQuickContext(envelope({ user: { id: 'u1', displayName: 'Example USER', mail: 'v@x.com' }, inboxId: 'i1' }));
     const stored = { fetchedAt: '2026-07-20T00:00:00.000Z', context };
 
     expect(parseStoredQuickContext(JSON.parse(JSON.stringify(stored)))).toEqual(stored as never);
@@ -107,7 +107,7 @@ describe('the exact block the agent is handed', () => {
   test('every line of the block is there, in the order the agent reads them', () => {
     const context = parseQuickContext(
       envelope({
-        user: { id: 'u1', displayName: 'Vincent DELACOURT', mail: 'v@x.com', jobTitle: 'CIO' },
+        user: { id: 'u1', displayName: 'Example USER', mail: 'v@x.com', jobTitle: 'CIO' },
         tenantTimeZone: 'China Standard Time',
         inboxId: 'i1',
       })
@@ -117,7 +117,7 @@ describe('the exact block the agent is handed', () => {
       [
         '## Who you are working for',
         '',
-        '- Name: Vincent DELACOURT',
+        '- Name: Example USER',
         '- Email: v@x.com',
         '- Job title: CIO',
         '- Their timezone (convert every UTC timestamp to this): China Standard Time',
@@ -211,8 +211,8 @@ describe('the edges of reading back what was stored', () => {
       fetchedAt: '2026-07-20T00:00:00.000Z',
       context: {
         userId: 'u1',
-        displayName: 'Vincent DELACOURT',
-        firstName: 'Vincent',
+        displayName: 'Example USER',
+        firstName: 'Example',
         email: 'v@x.com',
         jobTitle: 'CIO',
         tenantTimeZone: 'China Standard Time',
@@ -222,8 +222,8 @@ describe('the edges of reading back what was stored', () => {
 
     expect(parsed?.context).toEqual({
       userId: 'u1',
-      displayName: 'Vincent DELACOURT',
-      firstName: 'Vincent',
+      displayName: 'Example USER',
+      firstName: 'Example',
       email: 'v@x.com',
       jobTitle: 'CIO',
       tenantTimeZone: 'China Standard Time',
@@ -251,7 +251,7 @@ describe('the edges of reading back what was stored', () => {
   });
 
   test('a stored context whose context field is not an object reads as nothing stored', () => {
-    expect(parseStoredQuickContext({ fetchedAt: '2026-07-20T00:00:00.000Z', context: 'Vincent' })).toBeUndefined();
+    expect(parseStoredQuickContext({ fetchedAt: '2026-07-20T00:00:00.000Z', context: 'Example' })).toBeUndefined();
   });
 });
 
