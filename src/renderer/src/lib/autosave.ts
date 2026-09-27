@@ -57,3 +57,7 @@ export const isDueForSave = (state: {
   readonly isLoaded: boolean;
   readonly isPaused: boolean;
 }): boolean => state.isLoaded && !state.isPaused && state.draft !== state.stored && state.status !== 'saving' && state.status !== 'error';
+
+// Whether typing clears the error the page shows. A failed save, yes: the next pause tries again.
+// Not the one saying the document could not be read, since nothing typed over it is ever saved.
+export const isClearedByTyping = (status: 'idle' | 'saving' | 'saved' | 'error', isLoaded: boolean): boolean => status === 'error' && isLoaded;

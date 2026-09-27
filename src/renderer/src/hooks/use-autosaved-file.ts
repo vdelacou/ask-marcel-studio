@@ -9,7 +9,7 @@
  * leave the older text on disk.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { draftAfterSave, draftOnLeave, isDueForSave, shouldSaveEditorOnClose } from '../lib/autosave.ts';
+import { draftAfterSave, draftOnLeave, isClearedByTyping, isDueForSave, shouldSaveEditorOnClose } from '../lib/autosave.ts';
 import type { AgentFileDoc } from '../../../shared/agent-files.ts';
 
 export type AutosaveStatus = { readonly kind: 'idle' | 'saving' | 'saved' } | { readonly kind: 'error'; readonly message: string };
@@ -101,7 +101,7 @@ export const useAutosavedFile = (doc: AgentFileDoc, isPaused: boolean): Autosave
 
   const edit = useCallback((text: string): void => {
     setDraft(text);
-    setStatus((current) => (current.kind === 'error' ? IDLE : current));
+    setStatus((current) => (isClearedByTyping(current.kind, onDisk.current.isLoaded) ? IDLE : current));
   }, []);
 
   const saveOnLeave = useCallback(
