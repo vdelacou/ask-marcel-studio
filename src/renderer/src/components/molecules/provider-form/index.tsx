@@ -28,12 +28,21 @@ export type PlanSignInView = {
   readonly isBusy: boolean;
 };
 
+// The button that asks Claude Code for the plan's models, and what the last try said.
+export type PlanModelsView = {
+  readonly label: string;
+  readonly isBusy: boolean;
+  readonly note?: string;
+};
+
 export type ProviderFormProps = {
   draft: ProviderDraft;
   // What the last Test said about each model, keyed by name.
   modelTests?: Readonly<Record<string, ModelTestRow>>;
   // Shown for a Claude plan provider, in place of the key and the address.
   planSignIn: PlanSignInView;
+  // Shown under a Claude plan provider's models.
+  planModels: PlanModelsView;
   // State lives upstream in the page shell (rule 21): this reports intent, it does
   // not hold anything.
   onChange: (patch: Partial<ProviderDraft>) => void;
@@ -41,6 +50,7 @@ export type ProviderFormProps = {
   onSave: () => void;
   onTestModel: (model: string) => void;
   onSignIn: () => void;
+  onLoadModels: () => void;
 };
 
 const KIND_OPTIONS: readonly { readonly value: ProviderDraft['kind']; readonly label: string }[] = [
@@ -97,7 +107,24 @@ const PlanSignIn: FC<PlanSignInProps> = ({ view, onSignIn }) => (
   </div>
 );
 
-export const ProviderForm: FC<ProviderFormProps> = ({ draft, modelTests, planSignIn, onChange, onRemove, onSave, onTestModel, onSignIn }) => (
+type PlanModelsProps = { view: PlanModelsView; onLoad: () => void };
+
+const PlanModels: FC<PlanModelsProps> = ({ view, onLoad }) => (
+  <div className="flex flex-col gap-y-1">
+    <div>
+      <Button variant="secondary" disabled={view.isBusy} onClick={onLoad}>
+        {view.label}
+      </Button>
+    </div>
+    {view.note !== undefined && (
+      <p role="status" className="text-xs text-danger">
+        {view.note}
+      </p>
+    )}
+  </div>
+);
+
+export const ProviderForm: FC<ProviderFormProps> = ({ draft, modelTests, planSignIn, planModels, onChange, onRemove, onSave, onTestModel, onSignIn, onLoadModels }) => (
   <section className="flex flex-col gap-y-3 rounded-panel border border-border-subtle bg-surface-raised p-4">
     <div className="grid grid-cols-2 gap-3">
       <Field label="Name" htmlFor={`${draft.rowId}-label`}>
@@ -119,6 +146,7 @@ export const ProviderForm: FC<ProviderFormProps> = ({ draft, modelTests, planSig
         // A plan model has no Test: there is no key to try it with.
         {...(draft.kind === 'claude-plan' ? {} : { onTest: onTestModel })}
       />
+      {draft.kind === 'claude-plan' && <PlanModels view={planModels} onLoad={onLoadModels} />}
     </div>
 
     <div className="flex justify-end gap-x-2">

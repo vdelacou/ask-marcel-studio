@@ -6,7 +6,7 @@
  * shows one section's panel at a time, and wires callbacks. The only logic it contains
  * is orchestration; the transforms live in lib/ where they are tested.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FC } from 'react';
 import { ProvidersPanel } from '../components/organisms/providers-panel/index.tsx';
 import type { PanelNotice } from '../components/organisms/providers-panel/index.tsx';
@@ -34,7 +34,7 @@ import type { OfficePolicy } from '../../../shared/types.ts';
 import { useModelTest } from '../hooks/use-model-test.ts';
 import { rowForTest } from '../lib/model-test-view.ts';
 import { useClaudePlan } from '../hooks/use-claude-plan.ts';
-import { planSignInView, providerRowFlags } from '../lib/claude-plan-view.ts';
+import { mergeModelsInto, planModelsView, planSignInView, providerRowFlags, shouldLoadPlanModels } from '../lib/claude-plan-view.ts';
 import { useSkills } from '../hooks/use-skills.ts';
 import { useAgents } from '../hooks/use-agents.ts';
 import { slugify } from '../lib/slugify.ts';
@@ -206,6 +206,34 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
   // Claude Code is only asked about the sign-in once a Claude plan provider exists, saved
   // or not: choosing the kind is the moment the sign-in becomes worth showing.
   const claudePlan = useClaudePlan(drafts.some((draft) => draft.kind === 'claude-plan'));
+  const { loadModels } = claudePlan;
+
+  // Merged into the drafts as they are when Claude Code answers, not as they were when asked,
+  // so a model typed while the list loaded is kept.
+  const loadPlanModels = useCallback(
+    (rowId: string): void => {
+      void (async (): Promise<void> => {
+        const ids = await loadModels();
+        if (ids !== undefined) setDrafts((current) => mergeModelsInto(current, rowId, ids));
+      })();
+    },
+    [loadModels]
+  );
+
+  const onLoadModels = useCallback((): void => {
+    if (expandedRowId !== undefined) loadPlanModels(expandedRowId);
+  }, [expandedRowId, loadPlanModels]);
+
+  // Without a click, once per provider: a plan provider opened with no models while someone
+  // is signed in (right after signing in, say) is filled from Claude Code's list.
+  const autoLoadedRows = useRef(new Set<string>());
+  const expandedDraft = drafts.find((draft) => draft.rowId === expandedRowId);
+  const planStatus = claudePlan.state.status;
+  useEffect(() => {
+    if (expandedDraft === undefined || autoLoadedRows.current.has(expandedDraft.rowId) || !shouldLoadPlanModels(expandedDraft, planStatus)) return;
+    autoLoadedRows.current.add(expandedDraft.rowId);
+    loadPlanModels(expandedDraft.rowId);
+  }, [expandedDraft, planStatus, loadPlanModels]);
 
   const modelTestRows = Object.fromEntries(
     Object.entries(modelTests).flatMap(([model, state]) => {
@@ -370,7 +398,9 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
           notice={notice}
           rowFlags={providerRowFlags(drafts, claudePlan.state.status)}
           planSignIn={planSignInView(claudePlan.state)}
+          planModels={planModelsView(claudePlan.models)}
           onSignIn={claudePlan.signIn}
+          onLoadModels={onLoadModels}
           onToggleRow={onToggleRow}
           onChangeDraft={onChangeDraft}
           onRemoveDraft={onRemoveDraft}

@@ -2,7 +2,7 @@ import type { FC } from 'react';
 import { Button } from '../../atoms/button/index.tsx';
 import { ProviderForm } from '../../molecules/provider-form/index.tsx';
 import { ProviderRow } from '../../molecules/provider-row/index.tsx';
-import type { PlanSignInView, ProviderDraft } from '../../molecules/provider-form/index.tsx';
+import type { PlanModelsView, PlanSignInView, ProviderDraft } from '../../molecules/provider-form/index.tsx';
 import type { ModelTestRow } from '../../molecules/model-list/index.tsx';
 import type { ProviderRowFlag } from '../../molecules/provider-row/index.tsx';
 
@@ -22,6 +22,7 @@ export type ProvidersPanelProps = {
   rowFlags?: Readonly<Record<string, ProviderRowFlag>>;
   // The one Claude plan sign-in, shown in any Claude plan provider's form.
   planSignIn: PlanSignInView;
+  planModels: PlanModelsView;
   onToggleRow: (rowId: string) => void;
   onChangeDraft: (rowId: string, patch: Partial<ProviderDraft>) => void;
   onRemoveDraft: (rowId: string) => void;
@@ -29,6 +30,7 @@ export type ProvidersPanelProps = {
   onSave: () => void;
   onTestModel: (model: string) => void;
   onSignIn: () => void;
+  onLoadModels: () => void;
 };
 
 const noticeStyles: Record<PanelNotice['tone'], string> = {
@@ -48,6 +50,7 @@ export const ProvidersPanel: FC<ProvidersPanelProps> = ({
   notice,
   rowFlags,
   planSignIn,
+  planModels,
   onToggleRow,
   onChangeDraft,
   onRemoveDraft,
@@ -55,6 +58,7 @@ export const ProvidersPanel: FC<ProvidersPanelProps> = ({
   onSave,
   onTestModel,
   onSignIn,
+  onLoadModels,
 }) => (
   <section className="flex flex-col gap-y-4">
     <header className="flex items-baseline justify-between">
@@ -89,7 +93,9 @@ export const ProvidersPanel: FC<ProvidersPanelProps> = ({
               draft={draft}
               {...(modelTests === undefined ? {} : { modelTests })}
               planSignIn={planSignIn}
+              planModels={planModels}
               onSignIn={onSignIn}
+              onLoadModels={onLoadModels}
               onChange={(patch) => onChangeDraft(draft.rowId, patch)}
               onRemove={() => onRemoveDraft(draft.rowId)}
               onSave={onSave}

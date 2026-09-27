@@ -174,8 +174,16 @@ work, and the agent explains it to you in its own words and carries on.
 ## Running on your Claude plan
 
 A provider of kind **Claude plan** runs the agent on your Claude subscription (Pro, Max, Team or
-Enterprise) instead of an API key. It has no key and no address: pick the kind, add model names,
-and press **Sign in with Claude**.
+Enterprise) instead of an API key. It has no key and no address: pick the kind and press **Sign
+in with Claude**.
+
+The models fill themselves. Opened with no models while you are signed in, the provider asks
+Claude Code for the list its own model picker offers (`opus[1m]`, `sonnet`, `sonnet[1m]`,
+`haiku`), through the SDK's `supportedModels()`, without sending a message; **Load models from
+Claude Code** asks again. These are Claude Code's aliases, resolved by the bundled version to
+the models it knows, so a newer model appears with an SDK upgrade; a full id typed by hand,
+like `claude-sonnet-5`, stays in the list. Claude Code's `default` entry is left out: it only
+means "no model set", and sent as a model it is refused.
 
 The sign-in belongs to Claude Code, start to finish. The app launches the Claude Code binary the
 agent SDK installs for this platform, the same one every turn runs, as `claude auth login
@@ -193,7 +201,8 @@ Three consequences worth knowing:
 - A plan turn is built without `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
   `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_BASE_URL` or any `CLAUDE_CODE_USE_*` switch, whatever the
   app inherited, so a key exported in the shell that launched it cannot quietly take over the bill
-  (`src/shared/session-env.ts`).
+  (`src/shared/session-env.ts`). On an alias it also leaves the `ANTHROPIC_DEFAULT_*_MODEL`
+  variables to Claude Code: pinned to the alias, it would send the literal `"sonnet"`.
 - A plan model has no Test button: there is no key to try, and a real request would spend plan
   usage. A wrong model name shows up as an error on the first message instead.
 

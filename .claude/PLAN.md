@@ -1,3 +1,39 @@
+# Current run: a Claude plan provider lists its own models (approved 2026-09-27)
+
+Typing model names for a Claude plan is guesswork. The Agent SDK's `supportedModels()` asks
+the bundled Claude Code for its list through Claude Code's own sign-in, in under a second and
+without sending a turn (probed 2026-09-27: `default`, `opus[1m]`, `sonnet`, `sonnet[1m]`,
+`haiku`). Probed against a capture server, the list's values are aliases Claude Code resolves
+itself (`sonnet` -> `claude-sonnet-4-6`, `opus[1m]` -> `claude-opus-4-8`, via `ANTHROPIC_MODEL`
+and `--model` alike) only while no `ANTHROPIC_DEFAULT_*_MODEL` pins them: pinned to the alias
+it sends the literal `"sonnet"`, and an inherited `ANTHROPIC_DEFAULT_HAIKU_MODEL` turns `haiku`
+into Sonnet. `default` is sent literally in every case, so it is left out of the list.
+
+Built on this branch while PR #1 is open; where it is pushed is decided at the end.
+
+1. [x] Shared: `parsePlanModels` (SDK list to `PlanModel`s, `default` left out, an unusable
+       list refused) and `isClaudeCodeAlias`; session-env leaves an alias plan turn's
+       `ANTHROPIC_DEFAULT_*_MODEL` to Claude Code, inherited ones removed. Done: tests green,
+       100% tier, mutation >= 90 on the staged files. DONE: claude-plan 98.18, session-env
+       97.78 (the alias test's fixture now inherits all three pins, which killed two mutants).
+2. [x] Main: `claude-plan-models.ts` (+test) behind a `ClaudeModelList` seam; the IO shell runs
+       a query whose prompt never yields, reads `supportedModels()`, 15 s deadline,
+       `settingSources: []`, `persistSession: false`, then aborts. Channel `claude-plan:models`
+       in the contract (test updated, confirmed), register, preload, index. Done: tests green,
+       typecheck clean. DONE: the real IO shell answered in 2.7 s cold with `opus[1m]`, `sonnet`,
+       `sonnet[1m]`, `haiku`, no stray rejection after the abort, no process left.
+3. [x] Renderer: `mergeModelsInto` and `shouldLoadPlanModels` (lib, tested), the models button
+       state in `planSignInView`, `loadModels` in the hook, a "Load models from Claude Code"
+       button in the plan block, and a one-time automatic load when a signed-in plan
+       provider with no models is open. Done: lint 0/0, typecheck, lib tier 100%. DONE: the
+       button state is its own `planModelsView`, so the committed sign-in view tests stand.
+4. [x] README line for the list; built app on a scratch folder: the button fills the models
+       (signed out, the list still comes back), save keeps them. Done: checks listed. DONE: 7/7
+       on a scratch folder; the automatic fill after a real sign-in is unit-tested, not seen.
+5. [ ] Commits on a yes, then push or PR per the user's call on #1.
+
+---
+
 # Current run: run the agent on a Claude plan (approved 2026-09-26)
 
 The user wants their Claude subscription (Pro, Max, Team, Enterprise) to pay for the agent

@@ -11,7 +11,7 @@
  */
 import type { ClaudePlanStatus } from '../../../shared/claude-plan.ts';
 import type { ClaudePlanError } from '../../../shared/ipc-contract.ts';
-import type { PlanSignInView, ProviderDraft } from '../components/molecules/provider-form/index.tsx';
+import type { PlanModelsView, PlanSignInView, ProviderDraft } from '../components/molecules/provider-form/index.tsx';
 import type { ProviderRowFlag } from '../components/molecules/provider-row/index.tsx';
 
 export type PlanSignInState = {
@@ -61,3 +61,35 @@ export const providerRowFlags = (drafts: readonly ProviderDraft[], status: Claud
       return flag === undefined ? [] : [[draft.rowId, flag] as const];
     })
   );
+
+// Loading the plan's models from Claude Code: in flight, or the reason the last try failed.
+export type PlanModelsState = {
+  readonly isLoading: boolean;
+  readonly error?: ClaudePlanError;
+};
+
+const LOAD_MODELS = 'Load models from Claude Code';
+const TOO_SLOW = 'Claude Code took too long to list its models. Try again.';
+const NOT_LISTED = 'Claude Code could not list its models. Try again, or type them by hand.';
+
+export const planModelsView = (state: PlanModelsState): PlanModelsView => {
+  if (state.isLoading) return { label: 'Loading models…', isBusy: true };
+  if (state.error === undefined) return { label: LOAD_MODELS, isBusy: false };
+  return { label: LOAD_MODELS, isBusy: false, note: state.error.kind === 'timed-out' ? TOO_SLOW : NOT_LISTED };
+};
+
+const hasModels = (draft: ProviderDraft): boolean => draft.modelIds.some((model) => model.trim().length > 0);
+
+// On its own, the list only fills a plan provider that has nothing yet, and only once Claude
+// Code has said somebody is signed in: a provider with models keeps what the user chose.
+export const shouldLoadPlanModels = (draft: ProviderDraft | undefined, status: ClaudePlanStatus | undefined): boolean =>
+  draft?.kind === 'claude-plan' && status?.signedIn === true && !hasModels(draft);
+
+// Claude Code's list first, in its order, then any model typed by hand that it does not name,
+// so a full id like `claude-sonnet-5` survives a refresh. Blank rows an edit left go.
+export const mergeModelsInto = (drafts: readonly ProviderDraft[], rowId: string, loaded: readonly string[]): readonly ProviderDraft[] =>
+  drafts.map((draft) => {
+    if (draft.rowId !== rowId) return draft;
+    const typed = draft.modelIds.map((model) => model.trim()).filter((model) => model.length > 0 && !loaded.includes(model));
+    return { ...draft, modelIds: [...loaded, ...typed] };
+  });
