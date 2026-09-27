@@ -114,3 +114,12 @@ export const unskipCandidate = (doc: MemoryQueueDoc, candidate: MemoryCandidate)
 };
 
 export const findCandidate = (doc: MemoryQueueDoc, id: string): MemoryCandidate | undefined => doc.items.find((item) => item.id === id);
+
+// The questions still worth asking. A word the notes have come to hold since Marcel asked (typed
+// in by hand while the suggestion waited) is no longer a question, and remembering it would write
+// Marcel's meaning over the user's. It stays in the queue: if the word leaves the notes again, the
+// question is back.
+export const stillUnknown = (items: readonly MemoryCandidate[], knownTerms: ReadonlySet<string>): readonly MemoryCandidate[] => {
+  const known = new Set([...knownTerms].map(normaliseTerm));
+  return items.filter((item) => !known.has(normaliseTerm(item.term)));
+};

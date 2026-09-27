@@ -23,6 +23,7 @@ import {
   removeCandidate,
   serialiseMemoryQueue,
   skipCandidate,
+  stillUnknown,
   unskipCandidate,
 } from '../../../shared/memory-queue-doc.ts';
 import type { MemoryCandidate, MemoryQueueDoc } from '../../../shared/memory-queue-doc.ts';
@@ -111,11 +112,35 @@ export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
     return parseMemoryQueue(raw.value);
   };
 
+  // Every word in the three notes, as written there.
+  const knownTerms = async (): Promise<ReadonlySet<string>> =>
+    new Set(
+      [
+        ...listEntries(parseMemoryDoc(await readNote('jargon'))),
+        ...listEntries(parseMemoryDoc(await readNote('team'))),
+        ...listEntries(parseMemoryDoc(await readNote('people'))),
+      ].map((entry) => entry.term)
+    );
+
+  // What the review list shows: the questions whose word the notes do not hold yet.
+  const open = async (items: readonly MemoryCandidate[]): Promise<readonly MemoryCandidate[]> => stillUnknown(items, await knownTerms());
+
+  const announce = async (items: readonly MemoryCandidate[]): Promise<void> => {
+    deps.emit({ type: 'pending-changed', count: (await open(items)).length });
+  };
+
   const writeQueue = async (doc: Parameters<typeof serialiseMemoryQueue>[0]): Promise<Result<null, StoreError>> => {
     const written = await writeTextFileAtomic(memoryQueuePath(deps.userData), serialiseMemoryQueue(doc));
     if (!written.ok) return err({ kind: 'write-failed', message: written.error.message });
-    deps.emit({ type: 'pending-changed', count: doc.items.length });
+    await announce(doc.items);
     return ok(null);
+  };
+
+  // A note changed by hand may have answered a question still waiting: the review list is told,
+  // so it can drop that question.
+  const noteChanged = async (): Promise<void> => {
+    const queue = await readQueue();
+    if (queue.ok) await announce(queue.value.items);
   };
 
   const readState = async (): Promise<ReturnType<typeof parseMemoryState>> => {
@@ -127,7 +152,7 @@ export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
   const pending = async (): Promise<Result<readonly MemoryCandidate[], StoreError>> => {
     const queue = await readQueue();
     if (!queue.ok) return err({ kind: 'unreadable', message: queue.error.message });
-    return ok(queue.value.items);
+    return ok(await open(queue.value.items));
   };
 
   const read = async (name: unknown): Promise<Result<string, StoreError>> => {
@@ -153,12 +178,13 @@ export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
     if (!unchanged.ok) return unchanged;
     const written = await writeTextFileAtomic(memoryFilePath(deps.userData, checked.value), contents);
     if (!written.ok) return err({ kind: 'write-failed', message: written.error.message });
+    await noteChanged();
     return ok(null);
   };
 
   const saveQueue = async (next: MemoryQueueDoc): Promise<Result<readonly MemoryCandidate[], StoreError>> => {
     const saved = await writeQueue(next);
-    return saved.ok ? ok(next.items) : saved;
+    return saved.ok ? ok(await open(next.items)) : saved;
   };
 
   // Into the note the user filed it under (the one Marcel guessed, unless they picked another),
@@ -196,7 +222,7 @@ export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
 
     const candidate = findCandidate(queue.value, draft.id);
     // Already answered, or answered in another window: not an error, just nothing to do.
-    if (candidate === undefined) return ok(queue.value.items);
+    if (candidate === undefined) return ok(await open(queue.value.items));
     if (draft.action === 'accept') {
       const remembered = await remember(candidate, draft);
       return remembered.ok ? saveQueue(removeCandidate(queue.value, draft.id)) : remembered;
@@ -234,6 +260,7 @@ export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
       if (!written.ok) return err({ kind: 'write-failed', message: written.error.message });
       after = { ...after, [name]: text };
     }
+    await noteChanged();
     return ok(after);
   };
 
@@ -252,13 +279,7 @@ export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
     const queue = await readQueue();
     if (!queue.ok) return err({ kind: 'unreadable', message: queue.error.message });
 
-    const known = new Set(
-      [
-        ...listEntries(parseMemoryDoc(await readNote('jargon'))),
-        ...listEntries(parseMemoryDoc(await readNote('team'))),
-        ...listEntries(parseMemoryDoc(await readNote('people'))),
-      ].map((entry) => entry.term)
-    );
+    const known = await knownTerms();
     const at = deps.now();
     const candidates: MemoryCandidate[] = items.map((item) => ({
       id: deps.newId(),
