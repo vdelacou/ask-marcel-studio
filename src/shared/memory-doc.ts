@@ -25,8 +25,11 @@ export type MemoryDoc = {
 // hand will not reach for asterisks.
 // Any CommonMark list marker: a hand-edited file bullets with `*` or `+` as readily as
 // `-`, and an entry the parser cannot see is a term the elicitation re-suggests forever.
+// No asterisk in a plain word: a bold word the bold form could not read (one with an asterisk
+// of its own) would otherwise be taken with its asterisks as the word, and written back
+// wrapped in two more on every save.
 const BOLD_ENTRY = /^[-*+] \*\*([^*]+)\*\*: ?(.*)$/;
-const PLAIN_ENTRY = /^[-*+] ([^:]+): ?(.*)$/;
+const PLAIN_ENTRY = /^[-*+] ([^:*]+): ?(.*)$/;
 
 // How long a term may be, wherever it comes from: what the model proposed, or what the
 // user typed over it while answering. Lives here because it is a fact about the notes, and
@@ -49,13 +52,13 @@ const readEntry = (line: string): MemoryEntry | undefined => {
 // A note no longer carries a title of its own: the screen already names it, and repeating
 // it inside cost a heading in the editor and a line in every prompt. Notes written before
 // that lose theirs on the way in, so an old file is cleaned by being opened rather than by
-// a migration, and nothing has to remember which shape it is looking at.
+// a migration, and nothing has to remember which shape it is looking at. Only a title at
+// the top is one: a heading typed further down is the user's, and taking it for a title
+// would drop every entry above it.
 export const withoutHeading = (markdown: string): string => {
   const lines = markdown.replace(/\r/g, '').split('\n');
-  // No branch for the no-title case: findIndex answers -1 there, and slice(-1 + 1) is
-  // slice(0), which is every line. Writing the two cases out separately reads as more
-  // careful and is in fact the same function, with a condition no test could tell apart.
-  return lines.slice(lines.findIndex((line) => line.startsWith('# ')) + 1).join('\n');
+  const top = lines.findIndex((line) => line.trim().length > 0);
+  return lines[top]?.startsWith('# ') === true ? lines.slice(top + 1).join('\n') : lines.join('\n');
 };
 
 export const parseMemoryDoc = (markdown: string): MemoryDoc => {
