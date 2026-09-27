@@ -22,8 +22,7 @@ import { SheetNav } from '../components/organisms/sheet-nav/index.tsx';
 import type { SheetNavGroup } from '../components/organisms/sheet-nav/index.tsx';
 import { MarkdownEditor } from '../render/markdown-editor.tsx';
 import { MemoryListSection } from './memory-list-section.tsx';
-import { answerOf, answersFor, choicesFor, draftFor, emptyDrafts, forgetDraft, kindFor, termTextFor, withChoice, withKind, withOwnWords, withTerm } from '../lib/memory-review.ts';
-import type { MemoryDrafts } from '../lib/memory-review.ts';
+import { answerOf, answersFor, choicesFor, draftFor, kindFor, termTextFor, withChoice, withKind, withOwnWords, withTerm } from '../lib/memory-review.ts';
 import { useAgentFile } from '../hooks/use-agent-file.ts';
 import { useAutosavedFile } from '../hooks/use-autosaved-file.ts';
 import { useReviewFocus } from '../hooks/use-review-focus.ts';
@@ -62,7 +61,8 @@ export type MemoryPageProps = {
 
 export const MemoryPage: FC<MemoryPageProps> = ({ memory, conversations, onOpenConversation, onClearAll, isClearing }) => {
   const [section, setSection] = useState('waiting');
-  const [drafts, setDrafts] = useState<MemoryDrafts>(emptyDrafts);
+  // Kept by the shell beside the list, so closing Memory does not throw them away.
+  const { drafts, changeDrafts: setDrafts } = memory;
   const [isConfirmingAll, setIsConfirmingAll] = useState(false);
   const about = useAutosavedFile('global-context', isClearing);
   const signature = useAgentFile('signature');
@@ -149,7 +149,6 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory, conversations, onOpenC
     // definition or file one under no word at all.
     if (answer === undefined) return;
     focus.keepAfterAnswer(indexOf(id));
-    setDrafts((current) => forgetDraft(current, id));
     memory.remember(id, answer.detail, answer.term, answer.kind);
   };
 
@@ -175,7 +174,6 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory, conversations, onOpenC
 
   const skip = (id: string): void => {
     focus.keepAfterAnswer(indexOf(id));
-    setDrafts((current) => forgetDraft(current, id));
     memory.skip(id);
   };
 

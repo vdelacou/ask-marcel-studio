@@ -5,11 +5,17 @@
  * again whenever the main process says the queue changed, and the user opens the review
  * surface when they feel like it. Answering returns the items still waiting, so a row
  * leaves the list without a second read.
+ *
+ * The answers being written on the cards live here too, beside the list rather than on the
+ * Memory page: closing Memory, or leaving it for the conversation a word was heard in, keeps
+ * whatever was typed on a card. A card's answer is forgotten once it has landed, not before, so
+ * a refusal leaves the words on the card.
  */
 import { useCallback, useEffect, useState } from 'react';
 import type { MemoryCandidate } from '../../../shared/memory-queue-doc.ts';
 import type { MemoryFileName } from '../../../shared/memory-file-name.ts';
-import type { MemoryAnswer } from '../lib/memory-review.ts';
+import { emptyDrafts, forgetDraft } from '../lib/memory-review.ts';
+import type { MemoryAnswer, MemoryDrafts } from '../lib/memory-review.ts';
 
 export type MemoryController = {
   readonly pending: readonly MemoryCandidate[];
@@ -32,6 +38,9 @@ export type MemoryController = {
   // After everything was cleared, an earlier skip is no longer something to take back.
   readonly forgetSkip: () => void;
   readonly dismissError: () => void;
+  // What is written on each card, by candidate.
+  readonly drafts: MemoryDrafts;
+  readonly changeDrafts: (change: (current: MemoryDrafts) => MemoryDrafts) => void;
 };
 
 export const useMemory = (): MemoryController => {
@@ -40,6 +49,7 @@ export const useMemory = (): MemoryController => {
   const [error, setError] = useState<string | undefined>(undefined);
   const [lastSkipped, setLastSkipped] = useState<MemoryCandidate | undefined>(undefined);
   const [isAnsweringAll, setIsAnsweringAll] = useState(false);
+  const [drafts, setDrafts] = useState<MemoryDrafts>(emptyDrafts);
 
   const load = useCallback((): void => {
     void (async (): Promise<void> => {
@@ -69,6 +79,7 @@ export const useMemory = (): MemoryController => {
         return;
       }
       setPending(left.value);
+      setDrafts((current) => forgetDraft(current, id));
       setLastSkipped(skipped);
     })();
   }, []);
@@ -109,6 +120,7 @@ export const useMemory = (): MemoryController => {
           break;
         }
         setPending(left.value);
+        setDrafts((current) => forgetDraft(current, answer.id));
       }
       setIsAnsweringAll(false);
       setLastSkipped(undefined);
@@ -131,5 +143,7 @@ export const useMemory = (): MemoryController => {
     isAnsweringAll,
     forgetSkip,
     dismissError,
+    drafts,
+    changeDrafts: setDrafts,
   };
 };
