@@ -1,23 +1,29 @@
 import type { FC } from 'react';
 
+// What a provider still lacks before it can answer. Only ever announced when something is
+// missing: "Key set" on every row is a row of green ticks saying nothing, while a provider
+// that cannot work yet is the one thing worth flagging.
+export type ProviderRowFlag = 'no-key' | 'not-signed-in';
+
 // One collapsed line in the models list. The form only opens when this is clicked, so
 // the screen reads as "here is what you have set up" rather than as four stacked forms.
 export type ProviderRowProps = {
   label: string;
   kind: 'anthropic' | 'openai' | 'claude-plan';
   modelCount: number;
-  // Only ever announced when it is missing: "Key set" on every row is a row of green
-  // ticks saying nothing, while a provider with no key is the one thing worth flagging.
-  hasKey: boolean;
+  // Undefined when nothing is missing.
+  flag: ProviderRowFlag | undefined;
   isExpanded: boolean;
   onToggle: () => void;
 };
 
 const KIND_LABEL: Record<ProviderRowProps['kind'], string> = { anthropic: 'Anthropic', openai: 'OpenAI compatible', 'claude-plan': 'Claude plan' };
 
+const FLAG_LABEL: Record<ProviderRowFlag, string> = { 'no-key': 'No key', 'not-signed-in': 'Not signed in' };
+
 const modelsLabel = (count: number): string => (count === 1 ? '1 model' : `${String(count)} models`);
 
-export const ProviderRow: FC<ProviderRowProps> = ({ label, kind, modelCount, hasKey, isExpanded, onToggle }) => (
+export const ProviderRow: FC<ProviderRowProps> = ({ label, kind, modelCount, flag, isExpanded, onToggle }) => (
   <button
     type="button"
     aria-expanded={isExpanded}
@@ -39,7 +45,7 @@ export const ProviderRow: FC<ProviderRowProps> = ({ label, kind, modelCount, has
     <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{label}</span>
     <span className="shrink-0 rounded-full border border-border-subtle px-2 py-0.5 text-[10px] uppercase tracking-wide text-ink-muted">{KIND_LABEL[kind]}</span>
     <span className="shrink-0 text-xs text-ink-muted">{modelsLabel(modelCount)}</span>
-    {!hasKey && <span className="shrink-0 text-xs text-danger">No key</span>}
+    {flag !== undefined && <span className="shrink-0 text-xs text-danger">{FLAG_LABEL[flag]}</span>}
   </button>
 );
 

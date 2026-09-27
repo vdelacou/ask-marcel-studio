@@ -15,7 +15,8 @@ export type ModelListProps = {
   // Keyed by the model name, so a rename drops its own stale answer.
   tests?: Readonly<Record<string, ModelTestRow>>;
   onChange: (models: readonly string[]) => void;
-  onTest: (model: string) => void;
+  // Absent where there is nothing to test with: a Claude plan model has no key to try.
+  onTest?: (model: string) => void;
 };
 
 const toneStyles: Record<ModelTestTone, string> = {
@@ -38,15 +39,17 @@ export const ModelList: FC<ModelListProps> = ({ models, tests, onChange, onTest 
             onChange={(e) => onChange(models.map((m, i) => (i === index ? e.target.value : m)))}
             className="min-w-0 flex-1 rounded-md border border-border-subtle bg-surface px-3 py-1.5 text-sm text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
           />
-          <button
-            type="button"
-            onClick={() => onTest(model)}
-            disabled={model.trim().length === 0 || tests?.[model]?.isRunning === true}
-            aria-label={`Test ${model === '' ? 'model' : model}`}
-            className="shrink-0 rounded-md border border-border-subtle px-2.5 py-1.5 text-sm leading-none text-ink transition hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
-            Test
-          </button>
+          {onTest !== undefined && (
+            <button
+              type="button"
+              onClick={() => onTest(model)}
+              disabled={model.trim().length === 0 || tests?.[model]?.isRunning === true}
+              aria-label={`Test ${model === '' ? 'model' : model}`}
+              className="shrink-0 rounded-md border border-border-subtle px-2.5 py-1.5 text-sm leading-none text-ink transition hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              Test
+            </button>
+          )}
           <button
             type="button"
             onClick={() => onChange(models.filter((_, i) => i !== index))}

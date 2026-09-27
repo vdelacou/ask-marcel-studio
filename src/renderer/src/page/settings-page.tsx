@@ -33,6 +33,8 @@ import type { OfficeCategory } from '../../../shared/office-catalog.ts';
 import type { OfficePolicy } from '../../../shared/types.ts';
 import { useModelTest } from '../hooks/use-model-test.ts';
 import { rowForTest } from '../lib/model-test-view.ts';
+import { useClaudePlan } from '../hooks/use-claude-plan.ts';
+import { planSignInView, providerRowFlags } from '../lib/claude-plan-view.ts';
 import { useSkills } from '../hooks/use-skills.ts';
 import { useAgents } from '../hooks/use-agents.ts';
 import { slugify } from '../lib/slugify.ts';
@@ -201,6 +203,10 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
     [drafts, expandedRowId, runModelTest]
   );
 
+  // Claude Code is only asked about the sign-in once a Claude plan provider exists, saved
+  // or not: choosing the kind is the moment the sign-in becomes worth showing.
+  const claudePlan = useClaudePlan(drafts.some((draft) => draft.kind === 'claude-plan'));
+
   const modelTestRows = Object.fromEntries(
     Object.entries(modelTests).flatMap(([model, state]) => {
       const row = rowForTest(state);
@@ -362,6 +368,9 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
           drafts={drafts}
           expandedRowId={expandedRowId}
           notice={notice}
+          rowFlags={providerRowFlags(drafts, claudePlan.state.status)}
+          planSignIn={planSignInView(claudePlan.state)}
+          onSignIn={claudePlan.signIn}
           onToggleRow={onToggleRow}
           onChangeDraft={onChangeDraft}
           onRemoveDraft={onRemoveDraft}
