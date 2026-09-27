@@ -9,7 +9,8 @@
  * the whole point of the queue.
  */
 import { TERM_LIMIT, listEntries, mergeMemoryEntries, parseMemoryDoc, serialiseMemoryDoc } from '../../../shared/memory-doc.ts';
-import { applyMemoryEntryEdit, parseMemoryEntryEdit } from '../../../shared/memory-entry-edit.ts';
+import type { MemoryEntry } from '../../../shared/memory-doc.ts';
+import { applyMemoryEntryEdit, parseMemoryEntryEdit, wantedEntry } from '../../../shared/memory-entry-edit.ts';
 import type { MemoryEditError, MemoryEntryEdit, MemoryNotes } from '../../../shared/memory-entry-edit.ts';
 import { MEMORY_FILES, memoryFileName } from '../../../shared/memory-file-name.ts';
 import type { MemoryFileName } from '../../../shared/memory-file-name.ts';
@@ -61,9 +62,32 @@ export type MemoryService = {
   readonly markExtracted: (conversationId: string, messageCount: number) => Promise<void>;
 };
 
+// Said when a note is there but cannot be read: writing it as if it were empty would throw away
+// whatever it holds, so nothing that would write it goes ahead.
+const UNREADABLE = 'That list could not be read from disk, so nothing was changed.';
+
+// The entry a suggestion becomes, as the user left it on the card. Marcel hears a word inside a
+// sentence and sometimes hears it slightly wrong, so the review list lets them correct it; rubbing
+// it out entirely means they had nothing to add, not that the note wants a blank heading. A word
+// long enough to be a paragraph is cut to a word. Otherwise held to the rules of any entry: one
+// line each, which a meaning typed into a box can break, and no asterisk in the word.
+const entryFrom = (candidate: MemoryCandidate, draft: Extract<MemoryResolveInput, { action: 'accept' }>): Result<MemoryEntry, MemoryEditError> => {
+  const corrected = typeof draft.term === 'string' ? draft.term.trim().slice(0, TERM_LIMIT) : '';
+  return wantedEntry(corrected.length === 0 ? candidate.term : corrected, typeof draft.detail === 'string' ? draft.detail : '');
+};
+
 export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
-  const readNote = async (name: MemoryFileName): Promise<string> => {
+  // A note not written yet is empty. One that is there and cannot be read is refused, never taken
+  // for empty, by anything that would write it.
+  const noteText = async (name: MemoryFileName): Promise<Result<string, StoreError>> => {
     const text = await readTextFile(memoryFilePath(deps.userData, name));
+    if (text.ok) return ok(text.value);
+    return text.error.kind === 'not-found' ? ok('') : err({ kind: 'unreadable', message: UNREADABLE });
+  };
+
+  // For what only reads: Marcel's view of the notes degrades to nothing rather than failing.
+  const readNote = async (name: MemoryFileName): Promise<string> => {
+    const text = await noteText(name);
     return text.ok ? text.value : '';
   };
 
@@ -109,16 +133,24 @@ export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
   const read = async (name: unknown): Promise<Result<string, StoreError>> => {
     const checked = memoryFileName(name);
     if (!checked.ok) return err({ kind: 'malformed-id', message: checked.error.message });
-    return ok(await readNote(checked.value));
+    return noteText(checked.value);
+  };
+
+  // Against the note as the window opened it: refused when it cannot be read, or has changed since.
+  const unchangedSince = async (name: MemoryFileName, expected: unknown): Promise<Result<null, StoreError>> => {
+    const now = await noteText(name);
+    if (!now.ok) return now;
+    return expected === now.value
+      ? ok(null)
+      : err({ kind: 'conflict', message: 'This note changed after you opened it, so it was not saved. Copy anything you want to keep, then open it again.' });
   };
 
   const write = async (name: unknown, contents: unknown, expected?: unknown): Promise<Result<null, StoreError>> => {
     const checked = memoryFileName(name);
     if (!checked.ok) return err({ kind: 'malformed-id', message: checked.error.message });
     if (typeof contents !== 'string') return err({ kind: 'invalid', message: 'that is not text' });
-    if (expected !== undefined && expected !== (await readNote(checked.value))) {
-      return err({ kind: 'conflict', message: 'This note changed after you opened it, so it was not saved. Copy anything you want to keep, then open it again.' });
-    }
+    const unchanged = expected === undefined ? ok(null) : await unchangedSince(checked.value, expected);
+    if (!unchanged.ok) return unchanged;
     const written = await writeTextFileAtomic(memoryFilePath(deps.userData, checked.value), contents);
     if (!written.ok) return err({ kind: 'write-failed', message: written.error.message });
     return ok(null);
@@ -132,19 +164,15 @@ export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
   // Into the note the user filed it under (the one Marcel guessed, unless they picked another),
   // merged with what is already written there.
   const remember = async (candidate: MemoryCandidate, draft: Extract<MemoryResolveInput, { action: 'accept' }>): Promise<Result<null, StoreError>> => {
-    const detail = typeof draft.detail === 'string' ? draft.detail.trim() : '';
-    if (detail.length === 0) return err({ kind: 'invalid', message: 'a note needs something written in it' });
+    const entry = entryFrom(candidate, draft);
+    if (!entry.ok) return err({ kind: 'invalid', message: entry.error.message });
     const note = draft.kind === undefined ? ok(candidate.kind) : memoryFileName(draft.kind);
     if (!note.ok) return err({ kind: 'invalid', message: note.error.message });
 
-    // The term as the user left it. Marcel hears a word inside a sentence and sometimes
-    // hears it slightly wrong, so the review list lets them correct it; rubbing it out
-    // entirely means they had nothing to add, not that the note wants a blank heading.
-    const corrected = typeof draft.term === 'string' ? draft.term.trim().slice(0, TERM_LIMIT) : '';
-    const term = corrected.length === 0 ? candidate.term : corrected;
-
-    const current = parseMemoryDoc(await readNote(note.value));
-    const written = await writeTextFileAtomic(memoryFilePath(deps.userData, note.value), serialiseMemoryDoc(mergeMemoryEntries(current, [{ term, detail }])));
+    const current = await noteText(note.value);
+    if (!current.ok) return current;
+    const merged = mergeMemoryEntries(parseMemoryDoc(current.value), [entry.value]);
+    const written = await writeTextFileAtomic(memoryFilePath(deps.userData, note.value), serialiseMemoryDoc(merged));
     return written.ok ? ok(null) : err({ kind: 'write-failed', message: written.error.message });
   };
 
@@ -178,16 +206,25 @@ export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
     return draft.action === 'reject' ? saveQueue(skipCandidate(queue.value, draft.id)) : err({ kind: 'invalid', message: 'that is not an answer this app knows' });
   };
 
-  const readNotes = async (): Promise<MemoryNotes> => ({ jargon: await readNote('jargon'), team: await readNote('team'), people: await readNote('people') });
-
   // The note a person moves into is written first: a failure between the two writes then
   // leaves them in both lists rather than in neither.
   const touchedBy = (edit: MemoryEntryEdit): readonly MemoryFileName[] => (edit.action === 'move' ? [edit.to, edit.note] : [edit.note]);
 
+  // The three notes a change starts from. Every note it writes has to have been read; one it
+  // leaves alone may show as empty.
+  const notesFor = async (edit: MemoryEntryEdit): Promise<Result<MemoryNotes, MemoryEditError>> => {
+    const read = { jargon: await noteText('jargon'), team: await noteText('team'), people: await noteText('people') };
+    if (touchedBy(edit).some((name) => !read[name].ok)) return err({ kind: 'unreadable', message: UNREADABLE });
+    const textOf = (text: Result<string, StoreError>): string => (text.ok ? text.value : '');
+    return ok({ jargon: textOf(read.jargon), team: textOf(read.team), people: textOf(read.people) });
+  };
+
   const edit = async (input: unknown): Promise<Result<MemoryNotes, MemoryEditError>> => {
     const change = parseMemoryEntryEdit(input);
     if (!change.ok) return change;
-    const before = await readNotes();
+    const notes = await notesFor(change.value);
+    if (!notes.ok) return notes;
+    const before = notes.value;
     const applied = applyMemoryEntryEdit({ jargon: parseMemoryDoc(before.jargon), team: parseMemoryDoc(before.team), people: parseMemoryDoc(before.people) }, change.value);
     if (!applied.ok) return applied;
     let after = before;
@@ -271,7 +308,9 @@ export const createMemoryService = (deps: MemoryServiceDeps): MemoryService => {
     edit: (input) => oneAtATime(() => edit(input)),
     clearAll: () => oneAtATime(clearAll),
     glossaryBlocks,
-    addCandidates: addFound,
+    // Queued with the answers: found in the background at any moment, and a read-modify-write of
+    // the same queue, it would otherwise bring back a word skipped while it was on its way.
+    addCandidates: (items, conversationId) => oneAtATime(() => addFound(items, conversationId)),
     extractionDue,
     readSoFar: howFar,
     markExtracted: rememberRead,

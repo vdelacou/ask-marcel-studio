@@ -26,7 +26,7 @@ export type MemoryEntryEdit =
   // A person crossing between the two people notes, which the window shows as one list.
   | { readonly action: 'move'; readonly note: MemoryFileName; readonly to: MemoryFileName; readonly entry: MemoryEntry };
 
-export type MemoryEditError = { readonly kind: 'invalid' | 'duplicate' | 'not-found' | 'write-failed'; readonly message: string };
+export type MemoryEditError = { readonly kind: 'invalid' | 'duplicate' | 'not-found' | 'unreadable' | 'write-failed'; readonly message: string };
 
 export type MemoryDocs = Readonly<Record<MemoryFileName, MemoryDoc>>;
 
