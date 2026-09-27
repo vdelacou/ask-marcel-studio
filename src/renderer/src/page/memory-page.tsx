@@ -26,6 +26,7 @@ import { answerOf, answersFor, choicesFor, draftFor, emptyDrafts, forgetDraft, k
 import type { MemoryDrafts } from '../lib/memory-review.ts';
 import { useAgentFile } from '../hooks/use-agent-file.ts';
 import { useAutosavedFile } from '../hooks/use-autosaved-file.ts';
+import { useReviewFocus } from '../hooks/use-review-focus.ts';
 import type { AutosavedFile } from '../hooks/use-autosaved-file.ts';
 import { AutosavedDocument } from '../components/organisms/autosaved-document/index.tsx';
 import type { AutosavedDocumentProps } from '../components/organisms/autosaved-document/index.tsx';
@@ -133,6 +134,9 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory, conversations, onOpenC
     setDrafts((current) => withKind(current, candidate, kind.value));
   };
 
+  const focus = useReviewFocus(items.length);
+  const indexOf = (id: string): number => items.findIndex((item) => item.id === id);
+
   const remember = (id: string): void => {
     const candidate = candidateFor(id);
     if (candidate === undefined) return;
@@ -141,6 +145,7 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory, conversations, onOpenC
     // stated where it is enforced, so a keyboard or a stale render cannot store a blank
     // definition or file one under no word at all.
     if (answer === undefined) return;
+    focus.keepAfterAnswer(indexOf(id));
     setDrafts((current) => forgetDraft(current, id));
     memory.remember(id, answer.detail, answer.term, answer.kind);
   };
@@ -166,6 +171,7 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory, conversations, onOpenC
   };
 
   const skip = (id: string): void => {
+    focus.keepAfterAnswer(indexOf(id));
     setDrafts((current) => forgetDraft(current, id));
     memory.skip(id);
   };
@@ -194,7 +200,9 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory, conversations, onOpenC
           {...(isConfirmingAll ? { confirm: confirmAll } : {})}
           {...(answers.length < 2 || isConfirmingAll || memory.isAnsweringAll ? {} : { bulk: { label: 'Remember all', onStart: () => setIsConfirmingAll(true) } })}
           onChangeKind={changeKind}
+          hint="On a selected card, ↑ and ↓ move, Enter remembers and Backspace skips."
           onOpenSource={openSource}
+          onMove={(id, step) => focus.move(indexOf(id), step)}
           onRemember={remember}
           onSkip={skip}
         />

@@ -1,3 +1,22 @@
+# Current run: a clear that sticks, then keyboard triage (approved 2026-09-27, "continue")
+
+E: after Clear all memories the writing voice and signature came back on the next launch, because
+the launch jobs refill any document that is empty. They now leave alone a document that exists,
+even empty: emptying it, by hand or with Clear all, is a choice. Only a document never written is
+filled in. Copy follows (the confirm, the two empty hints). F: the review list works from the
+keyboard: on a selected card, Up and Down move, Enter remembers, Backspace skips, and the next
+card takes the focus once one is answered.
+
+E1. [x] `fileExists` in json-file.ts; the voice and signature jobs skip a document that exists;
+        copy. Done: new test file, gates. DONE: the app log confirms both launch jobs skip an
+        emptied file ("there is already a signature", "... a writing voice").
+F1. [x] Lib `cardToFocus` (where the focus goes after a move or an answer). Done: new test file,
+        100% tier.
+F2. [x] Review row keys and focus ring, panel hint, page focus handling. Verified in the app.
+G1. [x] Review; commits on a yes. DONE: 11/11 in-app checks; two commits, pushed.
+
+---
+
 # Current run: review list extras, then phase 3 (approved 2026-09-26, "1 then 2 and then 3")
 
 Step A finishes the review list: a Remember all that takes every card as it stands, after an
