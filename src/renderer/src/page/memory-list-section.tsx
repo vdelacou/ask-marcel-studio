@@ -99,15 +99,19 @@ export const MemoryListSection: FC<MemoryListSectionProps> = ({ list }) => {
     run({ action: 'move', note: row.note, to, entry: row.entry }, () => setUndo({ message: `Moved ${row.entry.term} to ${where}.`, change: back }), refuse);
   };
 
+  // Once only: a second click while the first is on its way would put the entry back twice.
   const takeBack = (): void => {
-    if (undo !== undefined) run(undo.change, () => setUndo(undefined), refuse);
+    if (undo !== undefined && !isSaving) run(undo.change, () => setUndo(undefined), refuse);
   };
 
+  // The offer to take a change back lapses here: what is typed as text may already have put the
+  // entry back, and a restore on top of it would list it twice.
   const openAsText = (id: string): void => {
     const note = NOTES_OF[list].find((name) => name === id);
     if (note === undefined) return;
     setDraft(undefined);
     setFailure(undefined);
+    setUndo(undefined);
     setAsText({ note, text: memory.notes[note], opened: memory.notes[note] });
   };
 
