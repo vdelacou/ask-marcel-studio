@@ -6,6 +6,138 @@ Newest first.
 
 ---
 
+## [gotcha] 2026-09-27 | the commit-size gate counts test files toward its ten; prove partial slices in a scratch index
+
+This sharpens the 2026-07-27 gotcha on slicing a removal consumer-first: `scripts/check-commit-size.sh` leaves tests out of the 300 lines but not out of the 10 files, since it counts every staged path, which turned a planned five-commit series into six. A file split across commits without `git add -p` works by writing the intermediate version to a scratch file, running `git hash-object -w` on it and staging it with `git update-index --cacheinfo 100644,<blob>,<path>`, which leaves the working tree whole. Before asking for approval, every slice was rebuilt cumulatively in a throwaway index (`GIT_INDEX_FILE=<scratch> git read-tree HEAD`, then the same update-index calls), and each tree was archived and typechecked the way gate 6 does. One trap on the way: in zsh `path` is the array tied to `PATH`, so a `while read -r c path src` loop emptied `PATH` and every later command was "not found".
+Rule for next time: count test files when sizing a commit, and prove each partial slice compiles in a scratch index before staging the real one.
+Archived 2026-09-27: merge, into the entry dated 2026-09-27 "the commit gates judge each slice alone: consumer first, dependency removal last, test files counted".
+
+## [gotcha] `bun remove` a dependency first and every intermediate commit stops typechecking (2026-07-27)
+
+`bun remove better-sqlite3` ran early, while the code still imported it, because dropping
+the dependency felt like part of the same edit. The working tree was fine, since the file
+importing it was already deleted there. Every staged tree was not: any commit whose index
+still contained `sqlite-memory-store.ts` failed gate 6 with "Cannot find module
+'better-sqlite3'", and that included the three unrelated office commits queued ahead of the
+removal, which had nothing to do with sqlite at all. The failure points at a file the commit
+does not touch, which reads as nonsense until you know.
+
+Fixed by restoring the dependency (`git checkout HEAD -- package.json bun.lock && bun
+install`), landing all nine code slices, and removing it last. Rule for next time: a
+dependency removal is the LAST commit of a removal series, never the first. node_modules is
+shared by every staged tree the hook builds, so uninstalling early breaks commits that
+predate the change.
+Archived 2026-09-27: merge, into the entry dated 2026-09-27 "the commit gates judge each slice alone: consumer first, dependency removal last, test files counted".
+
+## [gotcha] pre-commit gate 6 typechecks the STAGED tree, so a removal must be sliced consumer-first (2026-07-27)
+
+Splitting the ~2000-line removal of the embedding-backed memory into commits that each fit
+the size gate looked like a bookkeeping exercise. It is not: gate 6 runs `tsc` over the
+staged content, not the working tree, so every commit is independently verified and any
+slice that deletes a module still imported by another file is rejected on the spot.
+
+Three orderings were caught this way, each of which would have left a commit that does not
+compile for `git bisect` to trip over. Deleting `sqlite-memory-store.ts` before the
+composition root stopped importing it. Updating `ipc-contract.ts` while `use-memory-store.ts`
+still called the api methods being removed. Deleting `fake-memory-store.ts` one commit
+before `memory-store.test.ts`, which imports it.
+
+Two slices therefore had to absorb a neighbour rather than stand alone: the main unwiring
+carries `context-blocks.ts` (agent-runtime stops passing `memoryPreamble` in the same
+commit), and the contract slice carries `memory-store.ts` (the contract was its last
+importer). Rule for next time: slice a deletion strictly consumer-before-module, and expect
+a file's last importer to pull that file into its commit. Two counting details make this
+easier than it looks: `--diff-filter=ACMR` means deleted files do not count toward the
+10-file limit, and `*.test.ts` lines do not count toward the 300-line limit.
+Archived 2026-09-27: merge, into the entry dated 2026-09-27 "the commit gates judge each slice alone: consumer first, dependency removal last, test files counted".
+
+## [decision] unsigned build means the app informs about updates and never installs them (2026-07-24)
+
+There is no Apple Developer certificate for this project, so the DMG ships unsigned, and
+macOS refuses to let an unsigned app silently replace itself. electron-updater and any
+autoupdate flow are therefore off the table, not deferred for effort reasons.
+
+What ships instead: a daily unauthenticated check of the GitHub releases API, a 10 second
+deadline, silent degradation to the last known answer on any failure, and a dismissable
+banner that links the DMG. Installing is a manual download. Two consequences bind future
+work. The update path is inert until a GitHub release actually exists, since the API returns
+404 for a repo with none. And the banner only appears when the published release is strictly
+higher than the running version, so a release tagged at the version already installed is
+correct behaviour showing nothing, not a bug.
+Archived 2026-09-27: graduate, README.md:80-84 (Packaging) states it: unsigned, no silent autoupdate, a daily release check, manual install.
+
+## [gotcha] `bun run dist` makes the lint gate hang, because eslint walks `release/` (2026-07-24)
+
+The first commit attempted after packaging timed out twice, once at two minutes and once at
+five. Nothing in the diff was slow: it was two doc files and a `package.json` field. `bun
+test` finished in a second, coverage in a second, typecheck in seven. `lint:strict` never
+came back.
+
+electron-builder writes the entire packaged app into `release/`, `node_modules` and all, and
+eslint's flat config ignored `out/`, `dist/` and `vendor/` but not `release/`. With no path
+argument eslint lints the whole working directory, so the type-aware pass was trying to build
+a program over a 295 MB app bundle. It presents as a mysterious pre-commit timeout with no
+error, which is the worst possible symptom, and it only appears on the first commit after a
+packaging run.
+
+Fixed by adding `release/**` to the ignores block in `eslint.config.js`. Rule for next time:
+any new build-output directory has to be added to eslint's ignores in the same change that
+creates it, not the first time it bites.
+Archived 2026-09-27: merge, into the entry dated 2026-07-24 "ESLint flat config ignores .gitignore, so every fetched or built folder needs its own ignores entry".
+
+## [gotcha] a pre-commit gate that reads the working tree does not guard the commit (2026-07-23)
+
+Seven commits landed green on this branch and a clean checkout of the tip failed typecheck on
+three separate errors: a port whose signature had moved, a store argument, and a page
+importing a module that was never staged. Every one of them passed the hook because gate 6
+ran `bun run typecheck`, which reads the WORKING TREE, and the missing halves were sitting
+unstaged in it the whole time. The gate was measuring the developer's desk, not the commit.
+
+It only surfaced because a `git worktree add --detach HEAD` was used to check the tip
+independently. Nothing in the normal loop would ever have caught it: the tree is green, the
+hook is green, and the break is invisible until someone clones.
+
+The general form: a gate must run against the artefact it is gating. `scripts/check-staged-typecheck.sh`
+now materialises the index with `git write-tree` + `git archive` into a temp dir and typechecks
+THAT, which never touches the working tree, so there is no stash to restore if it exits early.
+Rule for next time: when a commit stages a subset of the tree, verify the subset, and reach for
+a detached worktree to audit HEAD before trusting a branch.
+Archived 2026-09-27: graduate, scripts/check-staged-typecheck.sh:11-28 (gate 6) typechecks the staged tree materialised with `git write-tree` and `git archive`.
+
+## [gotcha] Stryker's incremental cache reports stale survivors after a test change (2026-07-21)
+
+Already in this file for scores you tried to improve; it bit repeatedly across M10 when
+splitting commits. `rm -f reports/stryker-incremental.json` before trusting any
+`mutate:staged` result on a file whose tests just changed. The pre-commit hook uses the same
+cache, so a commit can fail the gate on a score the file no longer has.
+Archived 2026-09-27: graduate, same as the 2026-07-17 entry of the same title: README.md:65-66 and scripts/mutate-staged.sh:38.
+
+## [gotcha] built-in skills were re-seeded with `cp force:true` on every launch (2026-07-21)
+
+Which meant editing one was pointless: the next start silently undid it. Fixed by recording a
+sha256 of what the app last wrote (`.seed-meta.json` in the skills dir, a leading dot so
+skill-name.ts can never accept it as a folder). Untouched since the last seed means an update
+may replace it; changed means the user changed it. A folder with no record predates the
+bookkeeping and is adopted once, then protected.
+Archived 2026-09-27: graduate, src/shared/seed-meta.ts:3-8 states the rule (hash of what was last written: untouched may be replaced, changed stays).
+
+## [decision] M10: no approval dialog, so the shell guard has to be silent and rare (2026-07-21)
+
+The app is for people who cannot judge "may I run `rm -rf ~/Documents`?", so an approval
+prompt would be worse than useless: it teaches clicking yes. The guard is a PreToolUse hook
+that denies a short list of irreversible shapes and says nothing to the user; the agent reads
+the reason and explains it in its own words.
+
+Two consequences worth remembering. A refusal has to be rare enough never to block ordinary
+work, which is why containment (is this path inside the conversation's folder?) is the rule
+rather than a blocklist of commands. And a hook denial short-circuits regardless of
+`permissionMode`, which is what lets `bypassPermissions` stay (verified in sdk.d.ts 0.3.185,
+line ~3736: "PreToolUse hook denies bypass canUseTool").
+
+Accepted residual risk, stated in the module header rather than papered over: shell
+redirection. `> file` truncates without naming a verb the scanner can recognise.
+Archived 2026-09-27: graduate, README.md:161-172 (Guardrails) states the no-dialog rule and its rarity; src/shared/bash-guard.ts:19-20 states the accepted redirection risk.
+
 ## [decision] 2026-07-20 | M365 knowledge ships as an always-on core + two trigger-split skills + a programmatic reader subagent
 
 The single `ask-marcel-office` built-in skill was replaced (M9, grilled decision record in the git history of `.claude/PLAN.md`) by: (1) a compact always-on core appended to every turn (CLI nature, auth doctrine, routing table, ground rules, Sources footer); (2) two on-demand skills split by TRIGGER not source — `answer-from-m365` (read) and `draft-outlook-email` (write) — because the read sections co-fire on real questions while draft has disjoint triggers and safety rules; (3) `m365-reader`, a programmatic subagent (`agents` option in agent-runtime, versioned in-repo) that reads one oversized artifact and returns a summary. `seedBuiltins` grew a `retiredBuiltinNames` list that rm's the old folder on launch, so a renamed pack does not strand the stale skill. Studio owns these forks (stamped "Verified against ask-marcel-office v2.2.0"); no doc compiler with the plugin until drift bites twice.
@@ -23,6 +155,12 @@ Archived 2026-09-27: graduate, src/main/services/agent/agent-runtime.ts:49-54 st
 Verified against the real Electron binary with an empty PATH: `ELECTRON_RUN_AS_NODE=1 electron npm-cli.js --version` runs, and a full `npm install -g leftpad` succeeds with only `<userData>/bin` on PATH, landing in the data-folder prefix (`npm_config_prefix`). This works because when npm re-spawns `node` for its own steps it resolves our `node` shim, which is electron-as-node again, closing the loop. All of this ran in dev where the CLIs resolve from repo `node_modules`; the packaged case reads `npm-cli.js` and `cli.js` out of `app.asar`, which is expected to work but stays UNVERIFIED until M6 (fallback: `asarUnpack` those packages).
 Applies to: the office CLI and node/npm/npx shims alike, and the M6 packaging smoke test.
 Archived 2026-09-27: graduate, README.md:130-133 states the offline npm and shims; the asar question it left open is moot, electron-builder.yml:9-16 ships `asar: false`.
+
+## [gotcha] 2026-07-20 | ESLint flat config does not honor .gitignore, so a fetched vendor/ breaks lint
+
+`bun run fetch:python` extracts an embedded CPython into `vendor/`, which is git-ignored. `lint:strict` runs `eslint` with no path argument, and ESLint's flat config ignores `.gitignore` entirely: it linted the runtime's bundled JS (pip's vendored urllib3) and failed the commit on `no-undef` for `self`, `fetch`, `TextEncoder`. The fix is to add `vendor/**` to ESLint's own `ignores` block. bun test, coverage, typecheck (tsconfig `include` is explicit), and gitleaks (staged-only) were all unaffected; only ESLint's catch-all glob was.
+Rule for next time: anything fetched into the working tree that ESLint could glob needs an entry in the ESLint `ignores`, not just `.gitignore`.
+Archived 2026-09-27: merge, into the entry dated 2026-07-24 "ESLint flat config ignores .gitignore, so every fetched or built folder needs its own ignores entry".
 
 ## [decision] 2026-07-20 | embedded runtimes: node/npm reuse ELECTRON_RUN_AS_NODE, python is vendored
 
@@ -53,6 +191,18 @@ Archived 2026-09-27: graduate, CLAUDE.md:37-39 and README.md:282-285 state that 
 The shipped `check-coverage.ts` and `stryker.conf.json` hardcode `src/domain/**` and `src/use-cases/**`, which this Electron layout does not have. Both files ship with an explicit "tune per-project" comment, so retuning them to `src/shared/**` is sanctioned configuration rather than a deviation. `src/shared/**` carries the 100% tier because it is the only tier guaranteed free of electron imports.
 Applies to: any new pure module that should be gate-enforced.
 Archived 2026-09-27: graduate, scripts/check-coverage.ts:86-94 (COVERAGE_RULES) and stryker.conf.json:11-14 (mutate glob) carry the retuned tiers.
+
+## [gotcha] 2026-07-17 | ask-marcel-office-cli 2.2.0 is not published to npm
+
+`docs/PLAN.md` pins the office CLI at `^2.2.0`, but the npm registry's latest is `2.1.0`. The machine's global `ask-marcel-office` is an npm symlink to the local sibling repo `../ask-marcel-office-cli` sitting at an unpublished 2.2.0, which is why the CLI works locally while the dependency would fail to resolve. The user chose to publish 2.2.0 to npm rather than use a `file:` dependency or downgrade. Blocks M4 and M6 only, not M0-M2.
+Affects: the `bun add ask-marcel-office-cli` step at M4.
+Archived 2026-09-27: archive, no longer true: package.json:38 depends on `ask-marcel-office-cli` `^2.6.0` from npm.
+
+## [gotcha] 2026-07-17 | electron 43 has no postinstall, so risk R1 and trustedDependencies are obsolete
+
+`docs/PLAN.md` R1 says bun blocks electron's postinstall and prescribes `trustedDependencies: [electron, esbuild, @tailwindcss/oxide]`. Electron 43.1.1 ships no `scripts` field at all: `index.js` lazily downloads the binary on first require and exposes a `bin: install-electron` for explicit installs, so there is no lifecycle script to block or trust. Verified independently that esbuild installs its binary with no trustedDependencies (bun default-trusts it) and that @tailwindcss/oxide uses napi optional deps rather than a postinstall, so all three entries were dead weight and were removed. The only blocked script in the tree is electron-winstaller, which is Windows-only and irrelevant to the mac target.
+Affects: risk R1 in docs/PLAN.md, which should be struck.
+Archived 2026-09-27: archive, done and stated: package.json carries no `trustedDependencies`, and README.md:36-37 says Electron has no postinstall.
 
 ## [gotcha] 2026-07-17 | "type": "module" makes electron-vite emit the preload as .mjs
 

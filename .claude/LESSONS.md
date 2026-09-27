@@ -63,11 +63,6 @@ chrome. The renderer-side layout (drag regions, insets, sticky header) is separa
 measurable with a `page.evaluate` returning `getBoundingClientRect` + `getComputedStyle`,
 including `-webkit-app-region`.
 
-## [gotcha] 2026-07-20 | ESLint flat config does not honor .gitignore, so a fetched vendor/ breaks lint
-
-`bun run fetch:python` extracts an embedded CPython into `vendor/`, which is git-ignored. `lint:strict` runs `eslint` with no path argument, and ESLint's flat config ignores `.gitignore` entirely: it linted the runtime's bundled JS (pip's vendored urllib3) and failed the commit on `no-undef` for `self`, `fetch`, `TextEncoder`. The fix is to add `vendor/**` to ESLint's own `ignores` block. bun test, coverage, typecheck (tsconfig `include` is explicit), and gitleaks (staged-only) were all unaffected; only ESLint's catch-all glob was.
-Rule for next time: anything fetched into the working tree that ESLint could glob needs an entry in the ESLint `ignores`, not just `.gitignore`.
-
 ## [gotcha] 2026-07-20 | mutate:changed skips untracked files, so a new shared module is unmutated until staged
 
 `scripts/mutate-changed.sh` collects files via `git diff ... HEAD`, which does not list untracked files. A brand-new `src/shared/*.ts` created in the working tree is therefore silently outside the mutation set, and a green `mutate:changed` says nothing about it. Verify a new shared module with `mutate:staged` (stage it first) or a direct `bunx stryker run --mutate <file>`. Related: stryker's `incremental: true` keys on source hashes, so a test-only edit to kill a mutant reports stale unless `reports/stryker-incremental.json` is deleted first (the mutate scripts do this; a direct `bunx stryker` call does not).
@@ -123,20 +118,10 @@ Applies to: any further rule borrowed from references/nextjs-monorepo.md.
 Two config objects that both match a file and both declare `no-restricted-imports` (or `no-restricted-syntax`) do not combine: the later object wins outright and the earlier one's entries vanish silently. The design-system block therefore has to re-declare the `bun:test` `mock` ban (hard rule 13) inline alongside its own `patterns`, because relying on the general block to supply it would drop the mock ban for `src/renderer/src/components/**` with no warning. The same hazard is why the rule 22 styling-seal block carries `ignores` for the design system instead of overlapping it.
 Rule for next time: when two blocks could match one file, hoist the shared entries into a constant and re-declare them in both, then verify with `eslint --print-config <file>`.
 
-## [gotcha] 2026-07-17 | electron 43 has no postinstall, so risk R1 and trustedDependencies are obsolete
-
-`docs/PLAN.md` R1 says bun blocks electron's postinstall and prescribes `trustedDependencies: [electron, esbuild, @tailwindcss/oxide]`. Electron 43.1.1 ships no `scripts` field at all: `index.js` lazily downloads the binary on first require and exposes a `bin: install-electron` for explicit installs, so there is no lifecycle script to block or trust. Verified independently that esbuild installs its binary with no trustedDependencies (bun default-trusts it) and that @tailwindcss/oxide uses napi optional deps rather than a postinstall, so all three entries were dead weight and were removed. The only blocked script in the tree is electron-winstaller, which is Windows-only and irrelevant to the mac target.
-Affects: risk R1 in docs/PLAN.md, which should be struck.
-
 ## [gotcha] 2026-07-17 | vite 8 and @vitejs/plugin-react 6 silently break electron-vite 5
 
 A plain `bun add -d vite @vitejs/plugin-react` resolves to vite 8.1.5 + plugin-react 6.0.3, which violates two peer ranges at once: electron-vite@5 caps vite at `^5 || ^6 || ^7`, and plugin-react@6 requires vite `^8.0.0` exclusively. Bun does not hard-fail on peer conflicts, so the install looks clean and the breakage surfaces later at build time. The only combination satisfying every peer today is vite `^7.3.6` + `@vitejs/plugin-react` `^5.2.0`, which is what the official scaffold independently pins.
 Rule for next time: after any `bun update`, re-check the vite / plugin-react / electron-vite peer triangle before trusting a green install.
-
-## [gotcha] 2026-07-17 | ask-marcel-office-cli 2.2.0 is not published to npm
-
-`docs/PLAN.md` pins the office CLI at `^2.2.0`, but the npm registry's latest is `2.1.0`. The machine's global `ask-marcel-office` is an npm symlink to the local sibling repo `../ask-marcel-office-cli` sitting at an unpublished 2.2.0, which is why the CLI works locally while the dependency would fail to resolve. The user chose to publish 2.2.0 to npm rather than use a `file:` dependency or downgrade. Blocks M4 and M6 only, not M0-M2.
-Affects: the `bun add ask-marcel-office-cli` step at M4.
 
 ## [decision] 2026-07-17 | electron-vite and electron-builder are a sanctioned deviation from hard rule 5
 
@@ -153,30 +138,6 @@ Applies to: every commit in this repo.
 The hand-rolled `parseSkillMd` (`src/shared/skill-md.ts`) takes everything after the first colon on the `description:` line as the value; it does not understand YAML folded (`>`) or literal (`|`) block scalars or multi-line continuations. A `description: >` frontmatter parsed to the 1-char value `>`, so the panel showed nothing (the SDK's real YAML parser still loaded the full text, so the skill worked, but the app UI did not). Built-in SKILL.md descriptions must be a single physical line, plain scalar, with NO `: ` colon-space (which would break the SDK's strict YAML parser) and no leading quote/indicator. Mid-string quotes are fine in both parsers.
 Applies to: every SKILL.md this app ships or validates via `add`.
 
-## [decision] M10: no approval dialog, so the shell guard has to be silent and rare (2026-07-21)
-
-The app is for people who cannot judge "may I run `rm -rf ~/Documents`?", so an approval
-prompt would be worse than useless: it teaches clicking yes. The guard is a PreToolUse hook
-that denies a short list of irreversible shapes and says nothing to the user; the agent reads
-the reason and explains it in its own words.
-
-Two consequences worth remembering. A refusal has to be rare enough never to block ordinary
-work, which is why containment (is this path inside the conversation's folder?) is the rule
-rather than a blocklist of commands. And a hook denial short-circuits regardless of
-`permissionMode`, which is what lets `bypassPermissions` stay (verified in sdk.d.ts 0.3.185,
-line ~3736: "PreToolUse hook denies bypass canUseTool").
-
-Accepted residual risk, stated in the module header rather than papered over: shell
-redirection. `> file` truncates without naming a verb the scanner can recognise.
-
-## [gotcha] built-in skills were re-seeded with `cp force:true` on every launch (2026-07-21)
-
-Which meant editing one was pointless: the next start silently undid it. Fixed by recording a
-sha256 of what the app last wrote (`.seed-meta.json` in the skills dir, a leading dot so
-skill-name.ts can never accept it as a folder). Untouched since the last seed means an update
-may replace it; changed means the user changed it. A folder with no record predates the
-bookkeeping and is adopted once, then protected.
-
 ## [gotcha] the transcript lived in a keyed component, so switching conversations lost it (2026-07-21)
 
 `<ChatPage key={activeId}>` unmounted on every switch, and the conversation file is only
@@ -189,13 +150,6 @@ The reconciliation rule matters: idle means the file wins (this is what swaps th
 user echo for the persisted message), mid-turn means file history plus live messages the file
 does not know about yet, matched by id. A new `turn-saved` event exists because `turn-done`
 fires from the SDK result, BEFORE the save, so re-reading on turn-done races the write.
-
-## [gotcha] Stryker's incremental cache reports stale survivors after a test change (2026-07-21)
-
-Already in this file for scores you tried to improve; it bit repeatedly across M10 when
-splitting commits. `rm -f reports/stryker-incremental.json` before trusting any
-`mutate:staged` result on a file whose tests just changed. The pre-commit hook uses the same
-cache, so a commit can fail the gate on a score the file no longer has.
 
 ## [gotcha] a missing cwd is reported by the SDK as a native-binary mismatch (2026-07-21)
 
@@ -327,24 +281,6 @@ steps with an explicit stop condition and an explicitly forbidden wrong conclusi
 load-bearing. And an eval you cannot re-run is a hope, not a gate: the Playwright driver
 (launch, fresh conversation, ask, wait, dump) is what made three wording iterations cheap.
 
-## [gotcha] a pre-commit gate that reads the working tree does not guard the commit (2026-07-23)
-
-Seven commits landed green on this branch and a clean checkout of the tip failed typecheck on
-three separate errors: a port whose signature had moved, a store argument, and a page
-importing a module that was never staged. Every one of them passed the hook because gate 6
-ran `bun run typecheck`, which reads the WORKING TREE, and the missing halves were sitting
-unstaged in it the whole time. The gate was measuring the developer's desk, not the commit.
-
-It only surfaced because a `git worktree add --detach HEAD` was used to check the tip
-independently. Nothing in the normal loop would ever have caught it: the tree is green, the
-hook is green, and the break is invisible until someone clones.
-
-The general form: a gate must run against the artefact it is gating. `scripts/check-staged-typecheck.sh`
-now materialises the index with `git write-tree` + `git archive` into a temp dir and typechecks
-THAT, which never touches the working tree, so there is no stash to restore if it exits early.
-Rule for next time: when a commit stages a subset of the tree, verify the subset, and reach for
-a detached worktree to audit HEAD before trusting a branch.
-
 ## [gotcha] Bun's node:http never fires `close` on the ServerResponse (2026-07-23)
 
 The gateway aborts its upstream call when the agent hangs up, which rides on
@@ -381,23 +317,10 @@ Rule for next time: before reporting anything as missing, read the path helper t
 it, and never write a reconstruction of a user's own content into their data on the strength
 of an absence.
 
-## [gotcha] `bun run dist` makes the lint gate hang, because eslint walks `release/` (2026-07-24)
+## [gotcha] 2026-07-24 | ESLint flat config ignores .gitignore, so every fetched or built folder needs its own ignores entry
 
-The first commit attempted after packaging timed out twice, once at two minutes and once at
-five. Nothing in the diff was slow: it was two doc files and a `package.json` field. `bun
-test` finished in a second, coverage in a second, typecheck in seven. `lint:strict` never
-came back.
-
-electron-builder writes the entire packaged app into `release/`, `node_modules` and all, and
-eslint's flat config ignored `out/`, `dist/` and `vendor/` but not `release/`. With no path
-argument eslint lints the whole working directory, so the type-aware pass was trying to build
-a program over a 295 MB app bundle. It presents as a mysterious pre-commit timeout with no
-error, which is the worst possible symptom, and it only appears on the first commit after a
-packaging run.
-
-Fixed by adding `release/**` to the ignores block in `eslint.config.js`. Rule for next time:
-any new build-output directory has to be added to eslint's ignores in the same change that
-creates it, not the first time it bites.
+ESLint's flat config does not honour `.gitignore`, and `lint:strict` runs `eslint` with no path argument, so it globs the whole working directory: a fetched `vendor/` (the embedded CPython from `bun run fetch:python`, pip's vendored urllib3) failed the commit on `no-undef` for `self`, `fetch` and `TextEncoder`, and electron-builder's `release/` (the whole 295 MB packaged app, `node_modules` and all) made the type-aware pass hang until the pre-commit hook timed out with no error, on the first commit after a packaging run. Both now sit in the `ignores` block of `eslint.config.js` (line 257), while bun test, coverage, typecheck (tsconfig `include` is explicit) and gitleaks (staged-only) were never affected. Any new fetched or build-output directory needs its ESLint `ignores` entry in the same change that creates it, not the first time it bites.
+Merges: 2026-07-20 (ESLint flat config does not honor .gitignore, so a fetched vendor/ breaks lint), 2026-07-24 (`bun run dist` makes the lint gate hang, because eslint walks `release/`).
 
 ## [gotcha] Bun's global `fetch` has a `preconnect` method, so `typeof fetch` is not a usable dep type (2026-07-24)
 
@@ -411,57 +334,6 @@ The repo already had the answer in `model-test-service.ts`: declare a narrow sli
 call shape actually used (`ModelTestFetch`), not the whole global. `update-checker.ts` now
 does the same with `UpdateFetch`. The slice is also the better seam, since a test fake only
 has to satisfy the one call the adapter makes.
-
-## [decision] unsigned build means the app informs about updates and never installs them (2026-07-24)
-
-There is no Apple Developer certificate for this project, so the DMG ships unsigned, and
-macOS refuses to let an unsigned app silently replace itself. electron-updater and any
-autoupdate flow are therefore off the table, not deferred for effort reasons.
-
-What ships instead: a daily unauthenticated check of the GitHub releases API, a 10 second
-deadline, silent degradation to the last known answer on any failure, and a dismissable
-banner that links the DMG. Installing is a manual download. Two consequences bind future
-work. The update path is inert until a GitHub release actually exists, since the API returns
-404 for a repo with none. And the banner only appears when the published release is strictly
-higher than the running version, so a release tagged at the version already installed is
-correct behaviour showing nothing, not a bug.
-
-## [gotcha] pre-commit gate 6 typechecks the STAGED tree, so a removal must be sliced consumer-first (2026-07-27)
-
-Splitting the ~2000-line removal of the embedding-backed memory into commits that each fit
-the size gate looked like a bookkeeping exercise. It is not: gate 6 runs `tsc` over the
-staged content, not the working tree, so every commit is independently verified and any
-slice that deletes a module still imported by another file is rejected on the spot.
-
-Three orderings were caught this way, each of which would have left a commit that does not
-compile for `git bisect` to trip over. Deleting `sqlite-memory-store.ts` before the
-composition root stopped importing it. Updating `ipc-contract.ts` while `use-memory-store.ts`
-still called the api methods being removed. Deleting `fake-memory-store.ts` one commit
-before `memory-store.test.ts`, which imports it.
-
-Two slices therefore had to absorb a neighbour rather than stand alone: the main unwiring
-carries `context-blocks.ts` (agent-runtime stops passing `memoryPreamble` in the same
-commit), and the contract slice carries `memory-store.ts` (the contract was its last
-importer). Rule for next time: slice a deletion strictly consumer-before-module, and expect
-a file's last importer to pull that file into its commit. Two counting details make this
-easier than it looks: `--diff-filter=ACMR` means deleted files do not count toward the
-10-file limit, and `*.test.ts` lines do not count toward the 300-line limit.
-
-## [gotcha] `bun remove` a dependency first and every intermediate commit stops typechecking (2026-07-27)
-
-`bun remove better-sqlite3` ran early, while the code still imported it, because dropping
-the dependency felt like part of the same edit. The working tree was fine, since the file
-importing it was already deleted there. Every staged tree was not: any commit whose index
-still contained `sqlite-memory-store.ts` failed gate 6 with "Cannot find module
-'better-sqlite3'", and that included the three unrelated office commits queued ahead of the
-removal, which had nothing to do with sqlite at all. The failure points at a file the commit
-does not touch, which reads as nonsense until you know.
-
-Fixed by restoring the dependency (`git checkout HEAD -- package.json bun.lock && bun
-install`), landing all nine code slices, and removing it last. Rule for next time: a
-dependency removal is the LAST commit of a removal series, never the first. node_modules is
-shared by every staged tree the hook builds, so uninstalling early breaks commits that
-predate the change.
 
 ## [mistake] a switch consumed the pointer that caused it, and left it there to cause it again (2026-08-11)
 
@@ -662,7 +534,7 @@ Rule for next time: capture a status command's real output for every state befor
 `auth login` opens the OAuth page through `settings.browser ?? $BROWSER`, falling back to `open`, so the scratch run of the built app pointed `BROWSER` at a two-line script that writes its first argument to a file. That proved the sign-in reached claude.com/cai/oauth/authorize from the bundled binary without a tab opening on the user's screen, and `BROWSER` survives `buildSignInEnv` because it is not one of the stripped variables. Killing the waiting login (pkill on the binary path plus `auth login`) then exercised the failed-sign-in copy, and since Claude Code stores tokens only after a completed exchange, no keychain item was left behind.
 Rule for next time: an automated check of a browser sign-in points `BROWSER` at a recorder, never at the user's real browser.
 
-## [gotcha] 2026-09-27 | the commit-size gate counts test files toward its ten; prove partial slices in a scratch index
+## [gotcha] 2026-09-27 | the commit gates judge each slice alone: consumer first, dependency removal last, test files counted
 
-This sharpens the 2026-07-27 gotcha on slicing a removal consumer-first: `scripts/check-commit-size.sh` leaves tests out of the 300 lines but not out of the 10 files, since it counts every staged path, which turned a planned five-commit series into six. A file split across commits without `git add -p` works by writing the intermediate version to a scratch file, running `git hash-object -w` on it and staging it with `git update-index --cacheinfo 100644,<blob>,<path>`, which leaves the working tree whole. Before asking for approval, every slice was rebuilt cumulatively in a throwaway index (`GIT_INDEX_FILE=<scratch> git read-tree HEAD`, then the same update-index calls), and each tree was archived and typechecked the way gate 6 does. One trap on the way: in zsh `path` is the array tied to `PATH`, so a `while read -r c path src` loop emptied `PATH` and every later command was "not found".
-Rule for next time: count test files when sizing a commit, and prove each partial slice compiles in a scratch index before staging the real one.
+Gate 6 typechecks the staged tree, not the working tree (`scripts/check-staged-typecheck.sh`), so every commit is verified on its own: a deletion is sliced strictly consumer-before-module, a file's last importer pulls that file into its commit, and a `bun remove` is the LAST commit of a removal series, since node_modules is shared by every staged tree the hook builds and an early removal fails commits that never touched the dependency (recover with `git checkout HEAD -- package.json bun.lock && bun install`). Gate 1 (`scripts/check-commit-size.sh`) keeps `*.test.ts` lines out of the 300 and deleted files out of the 10 (`--diff-filter=ACMR`), but counts every other staged path toward the 10, test files included. To split a file across commits without `git add -p`, write its intermediate version to a scratch file and stage it with `git update-index --cacheinfo 100644,$(git hash-object -w <file>),<path>`, which leaves the working tree whole, and prove each slice first in a throwaway index (`GIT_INDEX_FILE=<scratch> git read-tree HEAD`, the same update-index calls, then archive and typecheck the tree the way gate 6 does). In zsh never name a loop variable `path`: it is the array tied to `PATH`, and a `while read -r c path src` loop empties it.
+Merges: 2026-07-27 (pre-commit gate 6 typechecks the STAGED tree, so a removal must be sliced consumer-first), 2026-07-27 (`bun remove` a dependency first and every intermediate commit stops typechecking), 2026-09-27 (the commit-size gate counts test files toward its ten).
