@@ -63,7 +63,7 @@ export const SignaturePanel: FC<SignaturePanelProps> = ({
       <div className="flex flex-col gap-y-3">
         {html.trim().length === 0 ? (
           <p className="rounded-panel border border-dashed border-border-subtle p-8 text-center text-sm text-ink-muted">
-            No signature yet. Marcel takes one from your mailbox the first time it can, or you can write your own.
+            No signature yet. Take it from your mailbox, or write your own.
           </p>
         ) : (
           <HtmlPreview html={html} title="Your email signature" />

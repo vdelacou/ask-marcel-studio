@@ -11,7 +11,7 @@
  * try/catch is in-quarantine here (rule 17): this is the infra adapter whose job
  * is translating thrown library errors into Result.
  */
-import { mkdir, rename, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { formatError } from '../../../shared/utilities/format-error.ts';
@@ -85,5 +85,17 @@ export const removeFile = async (path: string): Promise<Result<null, JsonFileErr
   } catch (e) {
     if (isMissingFile(e)) return err({ kind: 'not-found', message: `no file at ${path}` });
     return err({ kind: 'write-failed', message: `could not delete ${path}: ${formatError(e)}` });
+  }
+};
+
+// Whether anything is at the path, empty or not. The launch jobs that fill in the signature and
+// the writing voice ask this: a document the user emptied is theirs as much as one they wrote,
+// and only one never written is fair game. Anything that cannot be looked at counts as absent.
+export const fileExists = async (path: string): Promise<boolean> => {
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
   }
 };

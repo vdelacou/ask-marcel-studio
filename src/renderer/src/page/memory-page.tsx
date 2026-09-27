@@ -256,7 +256,7 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory, conversations, onOpenC
                 onLeave={(text) => voice.saveOnLeave(text, voice.revision)}
               />
             }
-            {...(voice.draft.trim().length === 0 ? { emptyHint: 'Nothing yet. Marcel writes one from your sent mail the first time it can, or you can write your own.' } : {})}
+            {...(voice.draft.trim().length === 0 ? { emptyHint: 'Nothing yet. Rebuild it from your sent mail, or write your own.' } : {})}
             {...statusOf(voice)}
           />
         </VoicePanel>
