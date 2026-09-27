@@ -807,3 +807,18 @@ differs; three tests pin it.
 
 Rule for next time: any "save on unmount" beside a key-based remount must know which version
 the unmounting instance was showing, and drop its text when a newer one replaced it.
+
+## [mistake] 2026-09-27 | a scratch script resolved its folder from the working directory and wrote into the repo
+
+A probe for the launch jobs set its scratch folder with `path.resolve('prefill-probe')`, meant to
+land in the session scratchpad next to the script. The shell had just `cd`ed into the repo, so it
+resolved against the repo instead: `prefill-probe/userdata/` appeared in the working tree, holding
+a copy of the user's `current-account.json` and `quick-context.json`. It was caught by
+`git status` and deleted before anything was staged. The same run then hung for five minutes:
+`grep ... $(find "$P" -name "*.log")` found no files at the path it was given, and `grep` with no
+file arguments reads standard input and waits forever.
+
+Rule for next time: a scratch script builds every path from an absolute root (the scratchpad
+path, or `import.meta.dirname`), never from `path.resolve` of a relative name, and never touches
+the repo tree. When a command feeds `find` output to `grep`, give `grep` a file or `< /dev/null`
+so an empty match cannot leave it waiting.
