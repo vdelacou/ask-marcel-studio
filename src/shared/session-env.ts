@@ -18,6 +18,7 @@
 import { delimiter } from 'node:path';
 import { binDir, claudeConfigDir } from './paths.ts';
 import { formatModelRef } from './model-ref.ts';
+import { isClaudeCodeAlias } from './claude-plan.ts';
 import type { Provider } from './types.ts';
 
 // node:path is path manipulation, not IO, so it is allowed anywhere (rule 20).
@@ -145,6 +146,15 @@ export const buildSessionEnv = (input: SessionEnvInput): Record<string, string> 
   // gateway routes on the providerId.
   const model = gateway === undefined ? input.modelId : formatModelRef({ providerId: input.provider.id, modelId: input.modelId });
   env['ANTHROPIC_MODEL'] = model;
+  // A Claude Code alias (`sonnet`, `opus[1m]`) is resolved through these same three variables:
+  // pinned to the alias, Claude Code sends the literal "sonnet", and an inherited pin swaps the
+  // model outright. So a plan turn on an alias leaves all three to Claude Code.
+  if (input.provider.kind === 'claude-plan' && isClaudeCodeAlias(model)) {
+    delete env['ANTHROPIC_DEFAULT_OPUS_MODEL'];
+    delete env['ANTHROPIC_DEFAULT_SONNET_MODEL'];
+    delete env['ANTHROPIC_DEFAULT_HAIKU_MODEL'];
+    return env;
+  }
   env['ANTHROPIC_DEFAULT_OPUS_MODEL'] = model;
   env['ANTHROPIC_DEFAULT_SONNET_MODEL'] = model;
   env['ANTHROPIC_DEFAULT_HAIKU_MODEL'] = model;

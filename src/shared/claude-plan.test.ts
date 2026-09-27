@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { claudeCodeBinarySpecifier, explainTurnError, parseClaudeAuthStatus } from './claude-plan.ts';
+import { claudeCodeBinarySpecifier, explainTurnError, parseClaudeAuthStatus, parsePlanModels } from './claude-plan.ts';
 
 // What `claude auth status --json` prints, captured from Claude Code 2.1.185.
 const signedInOnPlan = JSON.stringify({
@@ -81,5 +81,44 @@ describe('telling a turn that cannot run where to sign in', () => {
 
   test('the same not-logged-in text on an api-key provider is left unchanged', () => {
     expect(explainTurnError(SDK_ENDED, 'anthropic')).toBe(SDK_ENDED);
+  });
+});
+
+describe('reading the models Claude Code offers a plan', () => {
+  // Entries as `supportedModels()` answered them from the bundled Claude Code 2.1.185.
+  const opus = { value: 'opus[1m]', displayName: 'Opus', description: 'Opus 4.8 with 1M context · Best for everyday, complex tasks' };
+  const sonnet = { value: 'sonnet', displayName: 'Sonnet', description: 'Sonnet 4.6 · Efficient for routine tasks' };
+  const haiku = { value: 'haiku', displayName: 'Haiku', description: 'Haiku 4.5 · Fastest for quick answers' };
+
+  test('Claude Code’s list becomes the plan’s models, in its order', () => {
+    expect(parsePlanModels([opus, sonnet])).toEqual({
+      ok: true,
+      value: [
+        { id: 'opus[1m]', label: 'Opus', description: 'Opus 4.8 with 1M context · Best for everyday, complex tasks' },
+        { id: 'sonnet', label: 'Sonnet', description: 'Sonnet 4.6 · Efficient for routine tasks' },
+      ],
+    });
+  });
+
+  test('the default entry is left out, since it only means no model set', () => {
+    const listed = [{ value: 'default', displayName: 'Default (recommended)', description: 'Use the default model' }, haiku];
+
+    expect(parsePlanModels(listed)).toEqual({ ok: true, value: [{ id: 'haiku', label: 'Haiku', description: 'Haiku 4.5 · Fastest for quick answers' }] });
+  });
+
+  test('an entry without a model id is skipped rather than listed blank', () => {
+    const listed = [{ displayName: 'Mystery', description: 'no id' }, { value: '', displayName: 'Blank' }, haiku];
+
+    expect(parsePlanModels(listed)).toEqual({ ok: true, value: [{ id: 'haiku', label: 'Haiku', description: 'Haiku 4.5 · Fastest for quick answers' }] });
+  });
+
+  test('a list that is not a list, or holds no usable model, is refused', () => {
+    for (const raw of ['nope', [], [{ value: 'default' }], [null]]) {
+      const result = parsePlanModels(raw);
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.length).toBeGreaterThan(0);
+    }
   });
 });

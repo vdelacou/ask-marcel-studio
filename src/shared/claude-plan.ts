@@ -15,6 +15,10 @@ import { err, ok } from './result.ts';
 
 export type ClaudePlanStatus = { readonly signedIn: false } | { readonly signedIn: true; readonly email?: string; readonly plan?: string };
 
+// One model Claude Code offers the plan, as its `supportedModels()` lists it. The id is what a
+// turn asks for, usually an alias Claude Code resolves itself (`sonnet`, `opus[1m]`).
+export type PlanModel = { readonly id: string; readonly label: string; readonly description: string };
+
 // What `auth status` calls a sign-in made on claude.ai. An api key, a token handed in
 // through the environment and a cloud provider all report `loggedIn: true` as well, and
 // none of them is the plan.
@@ -46,6 +50,29 @@ export const parseClaudeAuthStatus = (stdout: string): Result<ClaudePlanStatus, 
   const plan = detail(status['subscriptionType']);
   return ok({ signedIn: true, ...(email === undefined ? {} : { email }), ...(plan === undefined ? {} : { plan }) });
 };
+
+// Claude Code's picker entry for "no model set". Sent as a model it goes out literally and is
+// refused (probed 2026-09-27), and every turn here names a model, so it is never offered.
+const NO_MODEL_SET = 'default';
+
+const planModel = (entry: unknown): PlanModel | undefined => {
+  if (!isRecord(entry)) return undefined;
+  const id = detail(entry['value']);
+  if (id === undefined || id.length === 0 || id === NO_MODEL_SET) return undefined;
+  return { id, label: detail(entry['displayName']) ?? id, description: detail(entry['description']) ?? '' };
+};
+
+// The list crosses a process boundary, so it is read like any other untrusted output: an entry
+// that names no model is skipped, and a list with nothing usable left is refused.
+export const parsePlanModels = (raw: unknown): Result<readonly PlanModel[], string> => {
+  if (!Array.isArray(raw)) return err('Claude Code did not list its models');
+  const models = raw.map(planModel).filter((model): model is PlanModel => model !== undefined);
+  return models.length > 0 ? ok(models) : err('Claude Code listed no model a turn could use');
+};
+
+// Every Anthropic model id starts with `claude-`; anything else a plan turn names (`sonnet`,
+// `opus[1m]`, `haiku`) is one of Claude Code's aliases, which it resolves itself.
+export const isClaudeCodeAlias = (modelId: string): boolean => !modelId.startsWith('claude-');
 
 export const claudeCodeBinarySpecifier = (platform: string, arch: string): string => `${BINARY_PACKAGE}-${platform}-${arch}/claude${platform === 'win32' ? '.exe' : ''}`;
 

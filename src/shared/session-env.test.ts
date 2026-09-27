@@ -250,6 +250,28 @@ describe('running a turn on a Claude plan', () => {
     expect('CLAUDE_CODE_USE_FOUNDRY' in env).toBe(false);
   });
 
+  test('a plan turn on a Claude Code alias leaves the alias to Claude Code', () => {
+    // Pinned to the alias, Claude Code sends the literal "sonnet"; an inherited pin swaps the
+    // model outright (probed 2026-09-27: haiku went out as claude-sonnet-4-6).
+    const env = buildSessionEnv({
+      provider: plan,
+      modelId: 'sonnet',
+      configRoot: USER_DATA,
+      toolsRoot: USER_DATA,
+      inheritedEnv: {
+        ...INHERITED,
+        ANTHROPIC_DEFAULT_OPUS_MODEL: 'claude-sonnet-4-6',
+        ANTHROPIC_DEFAULT_SONNET_MODEL: 'claude-haiku-4-5',
+        ANTHROPIC_DEFAULT_HAIKU_MODEL: 'claude-sonnet-4-6',
+      },
+    });
+
+    expect(env['ANTHROPIC_MODEL']).toBe('sonnet');
+    expect('ANTHROPIC_DEFAULT_OPUS_MODEL' in env).toBe(false);
+    expect('ANTHROPIC_DEFAULT_SONNET_MODEL' in env).toBe(false);
+    expect('ANTHROPIC_DEFAULT_HAIKU_MODEL' in env).toBe(false);
+  });
+
   test('a Claude plan turn pins every model slot to the bare model id', () => {
     const env = onPlan(INHERITED);
 
