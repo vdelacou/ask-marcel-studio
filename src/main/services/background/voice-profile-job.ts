@@ -45,10 +45,15 @@ const unfence = (text: string): string => {
   return (fenced?.[1] ?? trimmed).trim();
 };
 
+const ALREADY: BackgroundJobError = { kind: 'skipped', message: 'there is already a writing voice' };
+
 export const createVoiceProfileJob = (deps: VoiceProfileJobDeps): VoiceProfileJob => {
+  // Never overwrite what the user wrote: the moment they edit it, it is theirs. Unless they asked
+  // for the rebuild, which is asking for exactly that.
+  const isTheirs = async (force: boolean): Promise<boolean> => !force && (await deps.hasProfile());
+
   const run = async (force: boolean, signal: AbortSignal): Promise<Result<null, BackgroundJobError>> => {
-    // Never overwrite what the user wrote: the moment they edit it, it is theirs.
-    if (!force && (await deps.hasProfile())) return err({ kind: 'skipped', message: 'there is already a writing voice' });
+    if (await isTheirs(force)) return err(ALREADY);
 
     const session = await deps.session();
     if (!session.ok) return err({ kind: 'skipped', message: session.error });
@@ -69,6 +74,8 @@ export const createVoiceProfileJob = (deps: VoiceProfileJobDeps): VoiceProfileJo
     // Too short means it found nothing usable and said so, which is not a profile.
     if (profile.length < MIN_BYTES) return err({ kind: 'skipped', message: 'not enough sent mail to tell how you write yet' });
 
+    // Asked again: reading the mail takes minutes, and a voice the user wrote meanwhile is theirs.
+    if (await isTheirs(force)) return err(ALREADY);
     const written = await deps.write(profile.slice(0, MAX_BYTES));
     if (!written.ok) return err({ kind: 'failed', message: written.error });
     return ok(null);
