@@ -14,7 +14,7 @@ import path from 'node:path';
 
 const APP_DIR = path.resolve(import.meta.dirname, '../../..');
 const OUT_DIR = process.env.RUN_DIR || path.join(os.tmpdir(), 'ask-marcel-studio-runs');
-const QUESTION = process.argv[2] || 'Who is the CIO of Celine?';
+const QUESTION = process.argv[2] || 'Who is the CIO of Contoso?';
 const TAG = process.argv[3] || `run-${Date.now()}`;
 const CAP_MS = 480_000;
 

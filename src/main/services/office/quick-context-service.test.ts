@@ -5,7 +5,7 @@ import type { OfficeRun, OfficeRunOutcome } from './office-service.ts';
 
 const contextJson = JSON.stringify({
   ok: true,
-  data: { user: { id: 'u1', displayName: 'Vincent DELACOURT', mail: 'v@x.com', jobTitle: 'CIO' }, tenantTimeZone: 'China Standard Time' },
+  data: { user: { id: 'u1', displayName: 'Example USER', mail: 'v@x.com', jobTitle: 'CIO' }, tenantTimeZone: 'China Standard Time' },
 });
 
 const ran = (stdout: string): OfficeRunOutcome => ({ ran: true, stdout, stderr: '', code: 0, timedOut: false });
@@ -49,8 +49,8 @@ describe('keeping the user’s quick context', () => {
     await service.refresh(false);
 
     expect(calls[0]).toEqual(['my-quick-context', '--output', 'json']);
-    expect(service.current()?.firstName).toBe('Vincent');
-    expect(written[0]?.context.displayName).toBe('Vincent DELACOURT');
+    expect(service.current()?.firstName).toBe('Example');
+    expect(written[0]?.context.displayName).toBe('Example USER');
   });
 
   test('a context fetched yesterday is reused, so launching costs nothing', async () => {
@@ -70,7 +70,7 @@ describe('keeping the user’s quick context', () => {
     await service.refresh(false);
 
     expect(calls).toHaveLength(1);
-    expect(service.current()?.firstName).toBe('Vincent');
+    expect(service.current()?.firstName).toBe('Example');
   });
 
   test('after signing in, the context is fetched again however fresh it looked', async () => {
@@ -108,6 +108,6 @@ describe('keeping the user’s quick context', () => {
     expect(service.block()).toBe('');
     await service.refresh(true);
 
-    expect(service.block()).toContain('Vincent DELACOURT');
+    expect(service.block()).toContain('Example USER');
   });
 });

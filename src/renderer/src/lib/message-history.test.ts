@@ -2,15 +2,15 @@ import { describe, expect, test } from 'bun:test';
 import { stepHistory } from './message-history.ts';
 
 // Oldest first, the order the transcript has them in.
-const SENT: readonly string[] = ['what is in my inbox', 'who is the CIO of Celine', 'draft a reply to Herve'];
+const SENT: readonly string[] = ['what is in my inbox', 'who is the CIO of Contoso', 'draft a reply to Finance'];
 
 describe('bringing back something you already sent', () => {
   test('pressing up in an empty box brings back the last thing you sent', () => {
-    expect(stepHistory({ entries: SENT, pending: '', direction: -1 })).toEqual({ draft: 'draft a reply to Herve', depth: 1 });
+    expect(stepHistory({ entries: SENT, pending: '', direction: -1 })).toEqual({ draft: 'draft a reply to Finance', depth: 1 });
   });
 
   test('pressing up again brings back the message before it', () => {
-    expect(stepHistory({ entries: SENT, depth: 1, pending: '', direction: -1 })).toEqual({ draft: 'who is the CIO of Celine', depth: 2 });
+    expect(stepHistory({ entries: SENT, depth: 1, pending: '', direction: -1 })).toEqual({ draft: 'who is the CIO of Contoso', depth: 2 });
   });
 
   test('pressing up at the oldest message stays there', () => {
@@ -18,7 +18,7 @@ describe('bringing back something you already sent', () => {
   });
 
   test('pressing down comes back to the newer message', () => {
-    expect(stepHistory({ entries: SENT, depth: 2, pending: '', direction: 1 })).toEqual({ draft: 'draft a reply to Herve', depth: 1 });
+    expect(stepHistory({ entries: SENT, depth: 2, pending: '', direction: 1 })).toEqual({ draft: 'draft a reply to Finance', depth: 1 });
   });
 
   test('pressing down past the newest gives back what you were typing', () => {
