@@ -51,6 +51,26 @@ easier than it looks: `--diff-filter=ACMR` means deleted files do not count towa
 10-file limit, and `*.test.ts` lines do not count toward the 300-line limit.
 Archived 2026-09-27: merge, into the entry dated 2026-09-27 "the commit gates judge each slice alone: consumer first, dependency removal last, test files counted".
 
+## [gotcha] 2026-07-26 | mdast-util-to-markdown escapes bare `&` before a letter, every save
+
+The rich editor (`@milkdown/crepe`, `src/renderer/src/render/markdown-editor.tsx`) serialises
+through `mdast-util-to-markdown`, which escapes any `&` immediately followed by `#` or an ASCII
+letter (`node_modules/mdast-util-to-markdown/lib/unsafe.js`: `{character: '&', after:
+'[#A-Za-z]', inConstruct: 'phrasing'}`), guarding against the next parse reading it as the
+start of a character reference like `&amp;`. Confirmed by direct repro (`remark().use(remark-
+gfm)` on `"AT&T"` produced `"AT\&T"`; `"Ben & Jerry"`, space after the ampersand, was left
+alone) before writing the fix, rather than guessing at the pattern. Real character references
+essentially never appear in this app's prose (skill files, voice profile), so the escape was
+pure noise, reappearing on every save. Fixed by reversing exactly that pattern post-serialise:
+`src/renderer/src/lib/markdown-ampersands.ts`, wired into the editor's `markdownUpdated`
+callback before the markdown reaches the caller.
+Known narrow gap, accepted rather than engineered around: the reversal is a blind string
+replace, so a fenced code block or inline code span containing a literal `\&letter` sequence
+(someone typing about this exact escape, for instance) would also get unescaped. Low
+likelihood given the prose use case; revisit with a proper mdast-scoped fix (an `unsafe`
+override passed to the serialiser, not a post-process regex) if it ever bites.
+Archived 2026-09-27: tighten, the rewrite stays in LESSONS.md under the same date and title.
+
 ## [decision] unsigned build means the app informs about updates and never installs them (2026-07-24)
 
 There is no Apple Developer certificate for this project, so the DMG ships unsigned, and
@@ -85,6 +105,31 @@ any new build-output directory has to be added to eslint's ignores in the same c
 creates it, not the first time it bites.
 Archived 2026-09-27: merge, into the entry dated 2026-07-24 "ESLint flat config ignores .gitignore, so every fetched or built folder needs its own ignores entry".
 
+## [gotcha] 2026-07-24 | hiddenInset honours trafficLightPosition; verify chrome from the main process, not a screenshot
+
+Folding the empty title band away needed the macOS traffic lights re-centred in the new
+48px sidebar strip via a `trafficLightPosition: { x: 18, y: 18 }` constructor option. The
+open question was whether `titleBarStyle: 'hiddenInset'` even honours a custom position, or
+whether it silently ignores it and forces a fall back to `'hidden'`. It honours it: verified
+without any OS screenshot by launching the BUILT app under Playwright and reading the real
+BrowserWindow from the MAIN process with `app.evaluate(({ BrowserWindow }) => BrowserWindow
+.getAllWindows()[0].getWindowButtonPosition())`, which returned `{ x: 18, y: 18 }`;
+`getBounds()` equalled `getContentBounds()`, confirming the lights overlay the web contents
+with no native title bar reserving space.
+
+Two capture dead-ends that wasted time first: a Playwright `page.screenshot()` shows only the
+web contents, never the OS-drawn traffic lights, so it cannot prove where they sit; and
+`screencapture` grabbed only the empty desktop because the detached app window opened on a
+different macOS Space, while `osascript` to read the window bounds failed with "not allowed
+assistive access" (the session lacks accessibility permission and cannot grant it).
+
+Rule for next time: to check window-chrome geometry, drive the built app with Playwright and
+read the truth from the main process via `app.evaluate`, rather than trying to photograph OS
+chrome. The renderer-side layout (drag regions, insets, sticky header) is separately
+measurable with a `page.evaluate` returning `getBoundingClientRect` + `getComputedStyle`,
+including `-webkit-app-region`.
+Archived 2026-09-27: tighten, the rewrite stays in LESSONS.md under the same date and title.
+
 ## [gotcha] a pre-commit gate that reads the working tree does not guard the commit (2026-07-23)
 
 Seven commits landed green on this branch and a clean checkout of the tip failed typecheck on
@@ -103,6 +148,56 @@ THAT, which never touches the working tree, so there is no stash to restore if i
 Rule for next time: when a commit stages a subset of the tree, verify the subset, and reach for
 a detached worktree to audit HEAD before trusting a branch.
 Archived 2026-09-27: graduate, scripts/check-staged-typecheck.sh:11-28 (gate 6) typechecks the staged tree materialised with `git write-tree` and `git archive`.
+
+## [gotcha] WebSearch is Anthropic's own tool, so off Anthropic it answers nothing (2026-07-21)
+
+A conversation on `[provider label redacted under rule 26] · deepseek-v4-pro` searched the web eight times and got eight empty
+results, no error. The agent then wrote a confident answer from memory and cited a Wikipedia
+page it had fetched, which made the whole thing read as a successful search.
+
+WebSearch is not run locally. The CLI offers it in the turn as an ordinary tool (name,
+description, input_schema, like Bash), and when the model calls it, executes it by making a
+SECOND request to the same `ANTHROPIC_BASE_URL` carrying `{ type: 'web_search_20250305',
+name: 'web_search', max_uses: 8 }` and the message "Perform a web search for the query: ...".
+The real API runs that server-side tool and streams back `web_search_tool_result` blocks. Any
+other endpoint has no such tool, returns none, and the CLI renders its zero-result template:
+the "Web search results for query" header, then nothing, then the cite-your-sources reminder.
+Not even its own "No links found." line, which needs a result block to be absent from.
+
+Proven by pointing the vendored `claude` binary at a capture server (scratchpad, not the
+repo): request 2 carried 28 typeless tools including WebSearch, request 3 carried the single
+server-tool spec above. That probe also corrected the first guess, which was that the server
+tool rode in the main turn's `tools` array. It does not.
+
+WebFetch is the opposite and kept working throughout: the CLI does that HTTP itself and only
+uses the model to summarise, which any provider can do.
+
+Two consequences landed: `disallowedTools` on every turn plus a withdrawn-tools list in
+`agents-doc`, and a gateway that refuses a tool spec with a `type` and no `input_schema`
+instead of forwarding it as an ordinary one. The general form: when a capability silently
+returns nothing on a third-party endpoint, ask whether the real API was running it for you.
+Archived 2026-09-27: tighten, the rewrite stays in LESSONS.md under the same date and title.
+
+## [gotcha] a missing cwd is reported by the SDK as a native-binary mismatch (2026-07-21)
+
+The voice profile could not be built, and what the panel showed was: "Claude Code native
+binary at ...-darwin-x64/claude exists but failed to launch. This usually means the binary
+does not match this system's libc". The binary was fine, and this is an Intel Mac, so x64 was
+right too. The real fault was `<userData>/background-workspace`, which nothing ever created.
+
+The SDK checks `existsSync(binary)` when the spawn errors, then classifies ENOENT, EACCES,
+EPERM, ENOTDIR, ELOOP, ENAMETOOLONG and EROFS as a loader problem (sdk.mjs, `nE`/`AB`). A
+`cwd` that does not exist fails the spawn with ENOENT, and the message names the binary,
+because the binary is the only path the SDK thinks to mention.
+
+Reproduced in seconds against scripts/fake-anthropic.mjs with no key: run any background turn
+in a directory that is not there. Conversations never hit it because a conversation's
+workspace is created with the conversation; a background job belongs to no conversation, so
+`background-agent-io` now creates its own working directory before it spawns.
+
+The general form: when a spawn error names something that is obviously fine, suspect the cwd
+before the executable.
+Archived 2026-09-27: tighten, the rewrite stays in LESSONS.md under the same date and title.
 
 ## [gotcha] Stryker's incremental cache reports stale survivors after a test change (2026-07-21)
 
@@ -173,6 +268,12 @@ Archived 2026-09-27: graduate, README.md:130-140 states it (node/npm/npx through
 M7 added a React hook (`use-conversations`) and the markdown/shiki renderer (`render/markdown`), and `bun test` can run neither: a hook needs a React runtime and react-markdown needs a DOM. `check-coverage.ts` gives `src/renderer/src/lib/` the 100% tier on the premise that everything there is pure logic the runner executes for real, so these two do not belong in it. They live in `src/renderer/src/hooks/` and `src/renderer/src/render/`, which fall into the skipped tier alongside the components. Pure, tested renderer logic (format-usage, conversation-list, ui-event-fold) stays in lib.
 Rule for next time: if `bun test` cannot run a renderer module, it does not go in `src/renderer/src/lib`. See the paired gotcha below.
 Archived 2026-09-27: graduate, README.md:100-101 places pure tested logic in src/lib (the 100% tier) and hooks in the skipped tier.
+
+## [decision] 2026-07-17 | commit identity is the repo-local neutral atelier handle
+
+The machine's global git identity is a company email ([a work email, redacted under rule 26]) and this repo is MIT-licensed and may go public, so an inherited identity would be exactly the accidental leak rule 26 exists to prevent. Set `atelier <atelier@users.noreply.github.com>` via `git config --local` at repo birth, which is the only moment the choice is free. Gate 3 (`gitleaks protect --staged`) scans the diff and is blind to the author field, so nothing else would have caught it.
+Applies to: every commit in this repo.
+Archived 2026-09-27: tighten, the rewrite stays in LESSONS.md under the same date and title.
 
 ## [decision] 2026-07-17 | this repo is a hybrid variant, not one of atelier's three
 

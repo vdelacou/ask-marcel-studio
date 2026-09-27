@@ -22,46 +22,13 @@ this from "known weak-model gap" to a real prompt or app defect worth revisiting
 
 ## [gotcha] 2026-07-26 | mdast-util-to-markdown escapes bare `&` before a letter, every save
 
-The rich editor (`@milkdown/crepe`, `src/renderer/src/render/markdown-editor.tsx`) serialises
-through `mdast-util-to-markdown`, which escapes any `&` immediately followed by `#` or an ASCII
-letter (`node_modules/mdast-util-to-markdown/lib/unsafe.js`: `{character: '&', after:
-'[#A-Za-z]', inConstruct: 'phrasing'}`), guarding against the next parse reading it as the
-start of a character reference like `&amp;`. Confirmed by direct repro (`remark().use(remark-
-gfm)` on `"AT&T"` produced `"AT\&T"`; `"Ben & Jerry"`, space after the ampersand, was left
-alone) before writing the fix, rather than guessing at the pattern. Real character references
-essentially never appear in this app's prose (skill files, voice profile), so the escape was
-pure noise, reappearing on every save. Fixed by reversing exactly that pattern post-serialise:
-`src/renderer/src/lib/markdown-ampersands.ts`, wired into the editor's `markdownUpdated`
-callback before the markdown reaches the caller.
-Known narrow gap, accepted rather than engineered around: the reversal is a blind string
-replace, so a fenced code block or inline code span containing a literal `\&letter` sequence
-(someone typing about this exact escape, for instance) would also get unescaped. Low
-likelihood given the prose use case; revisit with a proper mdast-scoped fix (an `unsafe`
-override passed to the serialiser, not a post-process regex) if it ever bites.
+The rich editor (`@milkdown/crepe`, `src/renderer/src/render/markdown-editor.tsx`) serialises through `mdast-util-to-markdown`, which escapes any `&` followed by `#` or an ASCII letter (`node_modules/mdast-util-to-markdown/lib/unsafe.js`: `{character: '&', after: '[#A-Za-z]', inConstruct: 'phrasing'}`), so a direct repro (`remark().use(remark-gfm)`) turned `"AT&T"` into `"AT\&T"` on every save while `"Ben & Jerry"` was left alone. Real character references almost never appear in this app's prose, so `src/renderer/src/lib/markdown-ampersands.ts` reverses exactly that pattern in the editor's `markdownUpdated` callback. The accepted gap: the reversal is a blind string replace, so a fenced block or code span that literally contains `\&letter` is unescaped too.
+Rule for next time: if that gap ever bites, pass an `unsafe` override to the serialiser rather than post-processing with a regex.
 
 ## [gotcha] 2026-07-24 | hiddenInset honours trafficLightPosition; verify chrome from the main process, not a screenshot
 
-Folding the empty title band away needed the macOS traffic lights re-centred in the new
-48px sidebar strip via a `trafficLightPosition: { x: 18, y: 18 }` constructor option. The
-open question was whether `titleBarStyle: 'hiddenInset'` even honours a custom position, or
-whether it silently ignores it and forces a fall back to `'hidden'`. It honours it: verified
-without any OS screenshot by launching the BUILT app under Playwright and reading the real
-BrowserWindow from the MAIN process with `app.evaluate(({ BrowserWindow }) => BrowserWindow
-.getAllWindows()[0].getWindowButtonPosition())`, which returned `{ x: 18, y: 18 }`;
-`getBounds()` equalled `getContentBounds()`, confirming the lights overlay the web contents
-with no native title bar reserving space.
-
-Two capture dead-ends that wasted time first: a Playwright `page.screenshot()` shows only the
-web contents, never the OS-drawn traffic lights, so it cannot prove where they sit; and
-`screencapture` grabbed only the empty desktop because the detached app window opened on a
-different macOS Space, while `osascript` to read the window bounds failed with "not allowed
-assistive access" (the session lacks accessibility permission and cannot grant it).
-
-Rule for next time: to check window-chrome geometry, drive the built app with Playwright and
-read the truth from the main process via `app.evaluate`, rather than trying to photograph OS
-chrome. The renderer-side layout (drag regions, insets, sticky header) is separately
-measurable with a `page.evaluate` returning `getBoundingClientRect` + `getComputedStyle`,
-including `-webkit-app-region`.
+Re-centring the macOS traffic lights in the new 48px sidebar strip with `trafficLightPosition: { x: 18, y: 18 }` works under `titleBarStyle: 'hiddenInset'`: launching the BUILT app under Playwright and asking the main process, `app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getWindowButtonPosition())` returned `{ x: 18, y: 18 }`, and `getBounds()` equalled `getContentBounds()`, so no native title bar reserves space. Two dead ends came first: `page.screenshot()` shows only the web contents, never the OS-drawn lights, and `screencapture` grabbed an empty desktop because the window opened on another macOS Space, while `osascript` failed with "not allowed assistive access". Renderer-side layout (drag regions, insets, the sticky header, `-webkit-app-region`) is measurable separately with a `page.evaluate` over `getBoundingClientRect` and `getComputedStyle`.
+Rule for next time: to check window-chrome geometry, read it from the main process with `app.evaluate`, never from a photograph of the screen.
 
 ## [gotcha] 2026-07-20 | mutate:changed skips untracked files, so a new shared module is unmutated until staged
 
@@ -130,7 +97,7 @@ Applies to: every build and dev command in this repo.
 
 ## [decision] 2026-07-17 | commit identity is the repo-local neutral atelier handle
 
-The machine's global git identity is a company email (`vincent.delacourt@adama-development.com`) and this repo is MIT-licensed and may go public, so an inherited identity would be exactly the accidental leak rule 26 exists to prevent. Set `atelier <atelier@users.noreply.github.com>` via `git config --local` at repo birth, which is the only moment the choice is free. Gate 3 (`gitleaks protect --staged`) scans the diff and is blind to the author field, so nothing else would have caught it.
+The machine's global git identity is a work email, and this repo is MIT-licensed and may go public, so an inherited identity would be exactly the accidental leak rule 26 exists to prevent. The repo sets `atelier <atelier@users.noreply.github.com>` with `git config --local`, chosen at repo birth, the only moment the choice is free. Gate 3 (`gitleaks protect --staged`) scans the diff and is blind to the author field, so nothing else would catch a regression.
 Applies to: every commit in this repo.
 
 ## [gotcha] 2026-07-20 | skill-md.ts reads description as ONE physical line; no folded YAML
@@ -151,53 +118,15 @@ user echo for the persisted message), mid-turn means file history plus live mess
 does not know about yet, matched by id. A new `turn-saved` event exists because `turn-done`
 fires from the SDK result, BEFORE the save, so re-reading on turn-done races the write.
 
-## [gotcha] a missing cwd is reported by the SDK as a native-binary mismatch (2026-07-21)
+## [gotcha] 2026-07-21 | a missing cwd is reported by the SDK as a native-binary mismatch
 
-The voice profile could not be built, and what the panel showed was: "Claude Code native
-binary at ...-darwin-x64/claude exists but failed to launch. This usually means the binary
-does not match this system's libc". The binary was fine, and this is an Intel Mac, so x64 was
-right too. The real fault was `<userData>/background-workspace`, which nothing ever created.
+The voice profile failed with "Claude Code native binary at ...-darwin-x64/claude exists but failed to launch. This usually means the binary does not match this system's libc", on an Intel Mac where the binary and the arch were fine; the fault was `<userData>/background-workspace`, which nothing had created. The SDK checks `existsSync(binary)` when the spawn errors and classifies ENOENT, EACCES, EPERM, ENOTDIR, ELOOP, ENAMETOOLONG and EROFS as a loader problem (sdk.mjs, `nE`/`AB`), so a `cwd` that does not exist fails with ENOENT and the message names the binary, the only path the SDK thinks to mention. It reproduces in seconds against scripts/fake-anthropic.mjs with any background turn in a missing directory; conversations never hit it because a workspace is created with its conversation, and `background-agent-io` now creates its own working directory before it spawns.
+Rule for next time: when a spawn error names something that is obviously fine, suspect the cwd before the executable.
 
-The SDK checks `existsSync(binary)` when the spawn errors, then classifies ENOENT, EACCES,
-EPERM, ENOTDIR, ELOOP, ENAMETOOLONG and EROFS as a loader problem (sdk.mjs, `nE`/`AB`). A
-`cwd` that does not exist fails the spawn with ENOENT, and the message names the binary,
-because the binary is the only path the SDK thinks to mention.
+## [gotcha] 2026-07-21 | WebSearch is Anthropic's own tool, so off Anthropic it answers nothing
 
-Reproduced in seconds against scripts/fake-anthropic.mjs with no key: run any background turn
-in a directory that is not there. Conversations never hit it because a conversation's
-workspace is created with the conversation; a background job belongs to no conversation, so
-`background-agent-io` now creates its own working directory before it spawns.
-
-The general form: when a spawn error names something that is obviously fine, suspect the cwd
-before the executable.
-
-## [gotcha] WebSearch is Anthropic's own tool, so off Anthropic it answers nothing (2026-07-21)
-
-A conversation on `LVMH · deepseek-v4-pro` searched the web eight times and got eight empty
-results, no error. The agent then wrote a confident answer from memory and cited a Wikipedia
-page it had fetched, which made the whole thing read as a successful search.
-
-WebSearch is not run locally. The CLI offers it in the turn as an ordinary tool (name,
-description, input_schema, like Bash), and when the model calls it, executes it by making a
-SECOND request to the same `ANTHROPIC_BASE_URL` carrying `{ type: 'web_search_20250305',
-name: 'web_search', max_uses: 8 }` and the message "Perform a web search for the query: ...".
-The real API runs that server-side tool and streams back `web_search_tool_result` blocks. Any
-other endpoint has no such tool, returns none, and the CLI renders its zero-result template:
-the "Web search results for query" header, then nothing, then the cite-your-sources reminder.
-Not even its own "No links found." line, which needs a result block to be absent from.
-
-Proven by pointing the vendored `claude` binary at a capture server (scratchpad, not the
-repo): request 2 carried 28 typeless tools including WebSearch, request 3 carried the single
-server-tool spec above. That probe also corrected the first guess, which was that the server
-tool rode in the main turn's `tools` array. It does not.
-
-WebFetch is the opposite and kept working throughout: the CLI does that HTTP itself and only
-uses the model to summarise, which any provider can do.
-
-Two consequences landed: `disallowedTools` on every turn plus a withdrawn-tools list in
-`agents-doc`, and a gateway that refuses a tool spec with a `type` and no `input_schema`
-instead of forwarding it as an ordinary one. The general form: when a capability silently
-returns nothing on a third-party endpoint, ask whether the real API was running it for you.
+A conversation on a deepseek model behind an Anthropic-compatible endpoint searched the web eight times and got eight empty results with no error, then answered from memory and cited a page it had fetched, which read as a successful search. WebSearch is not run locally: the CLI offers it in the turn as an ordinary tool, and when the model calls it the CLI makes a second request to the same `ANTHROPIC_BASE_URL` carrying `{ type: 'web_search_20250305', name: 'web_search', max_uses: 8 }` and "Perform a web search for the query: ...", which only the real API executes, streaming back `web_search_tool_result` blocks. Any other endpoint returns none and the CLI renders its zero-result template (the header, nothing, the cite-your-sources reminder, not even its "No links found." line); a capture server pointed at the vendored `claude` proved it, request 2 carrying 28 typeless tools including WebSearch and request 3 the single server-tool spec, not the main turn's `tools` array as first guessed. WebFetch is the opposite, since the CLI does that HTTP itself and only uses the model to summarise, and two fixes landed: `disallowedTools` on every turn plus a withdrawn-tools list in `agents-doc`, and a gateway that refuses a tool spec with a `type` and no `input_schema` instead of forwarding it as an ordinary one.
+Rule for next time: when a capability silently returns nothing on a third-party endpoint, ask whether the real API was running it for you.
 
 ## [gotcha] a Gemini 3 tool loop dies on the second step without a thought signature (2026-07-22)
 
