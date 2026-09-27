@@ -18,14 +18,16 @@ import { Crepe } from '@milkdown/crepe';
 import '@milkdown/crepe/theme/common/style.css';
 import '@milkdown/crepe/theme/frame.css';
 import { unescapeAmpersands } from '../lib/markdown-ampersands.ts';
+import { reportedText } from '../lib/autosave.ts';
 
 export type MarkdownEditorProps = {
   defaultValue: string;
   onChange: (markdown: string) => void;
-  // The text as the editor closes. Crepe waits 200 ms before it reports a change and cancels
-  // that wait when it is destroyed, so the last words typed before a close reach the page only
-  // through here.
-  onLeave?: (markdown: string) => void;
+  // The text as the editor closes, and as it first showed it. Crepe waits 200 ms before it reports
+  // a change and cancels that wait when it is destroyed, so the last words typed before a close
+  // reach the page only through here. The opening text is in Crepe's own markdown, for telling a
+  // real change from Crepe writing the same document its own way.
+  onLeave?: (markdown: string, opened: string) => void;
 };
 
 export const MarkdownEditor: FC<MarkdownEditorProps> = ({ defaultValue, onChange, onLeave }) => {
@@ -47,17 +49,21 @@ export const MarkdownEditor: FC<MarkdownEditorProps> = ({ defaultValue, onChange
     const root = host.current;
     if (root === null) return undefined;
 
+    // The document as Crepe first wrote it out, once it has finished starting: only then does it
+    // have a document to report or hand over.
+    let opened: string | undefined;
     const crepe = new Crepe({ root, defaultValue: initial.current });
     crepe.on((listener) => {
-      listener.markdownUpdated((_context, markdown) => latest.current(unescapeAmpersands(markdown)));
+      listener.markdownUpdated((_context, markdown) => {
+        const text = reportedText(unescapeAmpersands(markdown), opened, initial.current);
+        if (text !== undefined) latest.current(text);
+      });
     });
-    // Only an editor that finished starting has a document to hand over.
-    let isReady = false;
     void crepe.create().then(() => {
-      isReady = true;
+      opened = unescapeAmpersands(crepe.getMarkdown());
     });
     return () => {
-      if (isReady) leave.current?.(unescapeAmpersands(crepe.getMarkdown()));
+      if (opened !== undefined) leave.current?.(unescapeAmpersands(crepe.getMarkdown()), opened);
       void crepe.destroy();
     };
     // Nothing: the editor owns its content once it starts, and the parent remounts it by

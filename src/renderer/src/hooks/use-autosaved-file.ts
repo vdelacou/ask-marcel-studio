@@ -1,14 +1,15 @@
 /*
  * A document the user writes and Marcel reads (who they are, how they write), saved as it is
  * typed: a moment after the typing stops, and at once when its editor closes with something
- * still unsaved. No Save button and no Cancel.
+ * still unsaved. No Save button and no Cancel. Nothing is saved while the page says its saving is
+ * paused (everything on it being cleared).
  *
  * Wiring only. What the draft becomes once a save lands is lib/autosave's call. Saves go one
  * after another in the order they were asked for: two in flight could land out of order and
  * leave the older text on disk.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { draftAfterSave, shouldSaveOnLeave } from '../lib/autosave.ts';
+import { draftAfterSave, draftOnLeave, isDueForSave, shouldSaveEditorOnClose } from '../lib/autosave.ts';
 import type { AgentFileDoc } from '../../../shared/agent-files.ts';
 
 export type AutosaveStatus = { readonly kind: 'idle' | 'saving' | 'saved' } | { readonly kind: 'error'; readonly message: string };
@@ -23,9 +24,9 @@ export type AutosavedFile = {
   // False once the app has said it cannot rebuild this yet.
   readonly canRegenerate: boolean;
   readonly setDraft: (text: string) => void;
-  // The editor's last word as it closes, with the revision it was showing: its own reporting
-  // lags the typing, so the final keystrokes reach the page only this way.
-  readonly saveOnLeave: (text: string, revision: number) => void;
+  // The editor's last word as it closes, with the text it opened with and the revision it was
+  // showing: its own reporting lags the typing, so the final keystrokes reach the page only this way.
+  readonly saveOnLeave: (leaving: { readonly text: string; readonly opened: string; readonly revision: number }) => void;
   readonly regenerate: () => void;
 };
 
@@ -34,7 +35,7 @@ const IDLE: AutosaveStatus = { kind: 'idle' };
 // How long the typing has to pause before the draft is saved.
 const QUIET_MS = 800;
 
-export const useAutosavedFile = (doc: AgentFileDoc): AutosavedFile => {
+export const useAutosavedFile = (doc: AgentFileDoc, isPaused: boolean): AutosavedFile => {
   const [draft, setDraft] = useState('');
   const [stored, setStored] = useState('');
   const [revision, setRevision] = useState(0);
@@ -48,6 +49,9 @@ export const useAutosavedFile = (doc: AgentFileDoc): AutosavedFile => {
   // and whether it was read: for a save asked for as an editor closes, when no render is coming
   // to carry the state.
   const onDisk = useRef({ text: '', revision: 0, isLoaded: false });
+  // Read as an editor closes, when the page may be going away with the pause still on.
+  const paused = useRef(isPaused);
+  paused.current = isPaused;
   const queue = useRef<Promise<void>>(Promise.resolve());
 
   const replace = useCallback((text: string): void => {
@@ -90,10 +94,10 @@ export const useAutosavedFile = (doc: AgentFileDoc): AutosavedFile => {
   // Saved once the typing pauses; never while a save is still on its way, and again when it
   // lands if more was typed meanwhile. A failed save waits for the next keystroke.
   useEffect(() => {
-    if (!isLoaded || draft === stored || status.kind === 'saving' || status.kind === 'error') return undefined;
+    if (!isDueForSave({ draft, stored, status: status.kind, isLoaded, isPaused })) return undefined;
     const timer = setTimeout(() => persist(draft), QUIET_MS);
     return () => clearTimeout(timer);
-  }, [draft, stored, status, isLoaded, persist]);
+  }, [draft, stored, status, isLoaded, isPaused, persist]);
 
   const edit = useCallback((text: string): void => {
     setDraft(text);
@@ -101,8 +105,10 @@ export const useAutosavedFile = (doc: AgentFileDoc): AutosavedFile => {
   }, []);
 
   const saveOnLeave = useCallback(
-    (text: string, fromRevision: number): void => {
-      if (shouldSaveOnLeave({ text, revision: fromRevision }, onDisk.current)) persist(text);
+    (leaving: { readonly text: string; readonly opened: string; readonly revision: number }): void => {
+      const isSaved = shouldSaveEditorOnClose(leaving, { ...onDisk.current, isPaused: paused.current });
+      setDraft((current) => draftOnLeave(current, leaving.text, isSaved));
+      if (isSaved) persist(leaving.text);
     },
     [persist]
   );

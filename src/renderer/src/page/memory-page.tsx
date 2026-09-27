@@ -55,15 +55,18 @@ export type MemoryPageProps = {
   onOpenConversation: (conversationId: string) => void;
   // Asks the shell to clear everything on this page, after its own question.
   onClearAll: () => void;
+  // True from that question until the clear is done: nothing typed here is saved meanwhile, or
+  // the page closing after the clear would write back what it cleared.
+  isClearing: boolean;
 };
 
-export const MemoryPage: FC<MemoryPageProps> = ({ memory, conversations, onOpenConversation, onClearAll }) => {
+export const MemoryPage: FC<MemoryPageProps> = ({ memory, conversations, onOpenConversation, onClearAll, isClearing }) => {
   const [section, setSection] = useState('waiting');
   const [drafts, setDrafts] = useState<MemoryDrafts>(emptyDrafts);
   const [isConfirmingAll, setIsConfirmingAll] = useState(false);
-  const about = useAutosavedFile('global-context');
+  const about = useAutosavedFile('global-context', isClearing);
   const signature = useAgentFile('signature');
-  const voice = useAutosavedFile('voice-profile');
+  const voice = useAutosavedFile('voice-profile', isClearing);
   const [isEditingSignature, setIsEditingSignature] = useState(false);
 
   // Three groups: what waits for an answer, what Marcel knows about the world around the user,
@@ -220,7 +223,7 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory, conversations, onOpenC
                 key={`about-${String(about.revision)}`}
                 defaultValue={about.draft}
                 onChange={about.setDraft}
-                onLeave={(text) => about.saveOnLeave(text, about.revision)}
+                onLeave={(text, opened) => about.saveOnLeave({ text, opened, revision: about.revision })}
               />
             }
             {...(about.draft.trim().length === 0
@@ -261,7 +264,7 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory, conversations, onOpenC
                 key={`voice-${String(voice.revision)}`}
                 defaultValue={voice.draft}
                 onChange={voice.setDraft}
-                onLeave={(text) => voice.saveOnLeave(text, voice.revision)}
+                onLeave={(text, opened) => voice.saveOnLeave({ text, opened, revision: voice.revision })}
               />
             }
             {...(voice.draft.trim().length === 0 ? { emptyHint: 'Nothing yet. Rebuild it from your sent mail, or write your own.' } : {})}

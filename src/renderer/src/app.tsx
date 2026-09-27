@@ -380,6 +380,7 @@ export const App: FC = () => {
               conversations.select(id);
             }}
             onClearAll={() => setIsClearingMemory(true)}
+            isClearing={isClearingMemory}
           />
         </OverlaySheet>
       )}
