@@ -41,15 +41,32 @@ export const SignaturePanel: FC<SignaturePanelProps> = ({
         <p className="text-sm text-ink-muted">Marcel puts this at the bottom of every draft it prepares for you.</p>
       </div>
       {!isEditing && (
-        <Button variant="secondary" onClick={onStartEdit}>
-          Edit
-        </Button>
+        <div className="flex shrink-0 items-center gap-x-2">
+          <Button variant="secondary" onClick={onRegenerate} disabled={isRegenerating || !canRegenerate}>
+            {isRegenerating ? 'Fetching…' : 'Take it from my mailbox'}
+          </Button>
+          <Button variant="secondary" onClick={onStartEdit}>
+            Edit
+          </Button>
+        </div>
       )}
     </header>
 
     {isEditing ? (
       <div className="flex flex-col gap-y-3">
-        <TextArea mono value={html} onChange={(event) => onChangeHtml(event.target.value)} aria-label="Signature HTML" />
+        <TextArea
+          mono
+          value={html}
+          onChange={(event) => onChangeHtml(event.target.value)}
+          // Escape cancels the edit, as Cancel does, rather than closing Memory around it.
+          onKeyDown={(event) => {
+            if (event.key !== 'Escape') return;
+            event.preventDefault();
+            event.stopPropagation();
+            if (!isSaving) onCancel();
+          }}
+          aria-label="Signature HTML"
+        />
         <div className="flex items-center justify-end gap-x-2">
           <Button variant="secondary" onClick={onCancel} disabled={isSaving}>
             Cancel
@@ -68,9 +85,6 @@ export const SignaturePanel: FC<SignaturePanelProps> = ({
         ) : (
           <HtmlPreview html={html} title="Your email signature" />
         )}
-        <Button variant="secondary" onClick={onRegenerate} disabled={isRegenerating || !canRegenerate}>
-          {isRegenerating ? 'Fetching…' : 'Take it from my mailbox'}
-        </Button>
       </div>
     )}
 

@@ -53,7 +53,20 @@ export const DocumentEditor: FC<DocumentEditorProps> = ({
     {mode === 'rich' && richNode !== undefined ? (
       <div className="rounded-panel border border-border-subtle p-2">{richNode}</div>
     ) : (
-      <TextArea mono value={markdownValue} onChange={(event) => onChangeMarkdown(event.target.value)} aria-label="Markdown" />
+      <TextArea
+        mono
+        value={markdownValue}
+        onChange={(event) => onChangeMarkdown(event.target.value)}
+        // The box is the innermost thing open, so Escape is its alone: it cancels, as the Cancel
+        // button does, rather than closing the sheet around it and everything typed with it.
+        onKeyDown={(event) => {
+          if (event.key !== 'Escape') return;
+          event.preventDefault();
+          event.stopPropagation();
+          if (!isSaving) onCancel();
+        }}
+        aria-label="Markdown"
+      />
     )}
 
     <div className="flex items-center justify-end gap-x-2">
