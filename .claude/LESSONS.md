@@ -6,6 +6,11 @@ Each entry is one of `[mistake]`, `[decision]`, or `[gotcha]`. Newest first.
 
 ---
 
+## [gotcha] 2026-09-28 | playwright's getByText ignores case and matches part of a string, so a check can find the wrong words
+
+Given a plain string, `getByText` ignores case and matches any element whose text contains it, so a scratch in-app check that asked whether the Memory sheet was open by its "Waiting for you" heading also found the sidebar's "3 waiting for you in Memory", and reported Memory open after Escape had closed it. The failing check looked like a bug in the app until a probe showed the fault was the check. The fixed script recognises the sheet by a control only it has (the "Clear all memories" button, by role and name); `exact: true` is the fallback for a text match.
+Rule for next time: an in-app check that asks whether something is on screen matches a role and a name unique to it, never a plain text string.
+
 ## [decision] 2026-09-27 | one settingsEnvelope carries the non-provider fields, so a new one is not dropped by half the callers
 
 `Settings` and `StoredSettings` differ only in how a provider holds its key, so four functions
