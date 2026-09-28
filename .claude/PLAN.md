@@ -1,3 +1,28 @@
+# Current run: the two gaps the second memory pass left (approved 2026-09-28, "1 then 2")
+
+1. [x] Tidy-up: L below checked off, the stash from the sync dropped (every file in it was
+       already committed, bar the plan's superseded lines and a formatter reflow), and the
+       getByText lesson added to LESSONS.md.
+2. [x] M1. A signature fetched from the mailbox lands in a scratch file beside the user's and
+       takes its place only if they still have none, or asked for it; a signature saved during
+       the fetch is kept. The office CLI wrote straight onto the file before, so the fetch
+       overwrote it. Approved: edit the existing signature-service.test.ts (fetchPath for
+       signaturePath, the two new deps, the first test renamed).
+       Done when: a new test file shows a signature written meanwhile kept and the fetch thrown
+       away, the forced rebuild still replacing it; gates green. The fetch itself needs a real
+       Microsoft 365 sign-in, so the wiring in index.ts is checked by reading, not in the app.
+       DONE: signature-service-late.test.ts (5 tests), the approved edit to the existing test,
+       and each fetch starting from an empty scratch file so an earlier run's is never taken.
+3. [x] M2. A note that cannot be read says so on its list, naming it, instead of showing as an
+       empty list that says "Nothing yet".
+       Done when: checked in the built app with a note made unreadable on a scratch folder;
+       gates green.
+       DONE: 7/7 checks in the built app (two notes unreadable, then readable again), and the
+       H, I and focus checks rerun green on the same build. Page and hook only, so no unit test.
+4. [ ] Commits on a yes, then the push on a yes.
+
+---
+
 # Current run: fixes from the second memory pass (approved 2026-09-27, all four groups)
 
 The second pass over the memory work found bugs, most in code from the last two days. Every
@@ -40,8 +65,8 @@ J. [x] Polish: focus after the confirms, Undo, delete, save and cancel, the last
        removed; the memory-doc and memory-review headers say what the code does now. 21/21
        focus checks in the built app, and the H and I checks rerun green on the same build.
 K. [x] The scratch-path lesson, committed (bd4208c).
-L. [ ] Sync main (done: 26 upstream commits in, only this file conflicted), then the commits on
-       a yes, then the push on a yes.
+L. [x] Sync main (26 upstream commits in, only this file conflicted), then 14 commits
+       (dd6604b..6ad0e63), each through the 9-gate hook, pushed on a yes.
 
 ---
 
