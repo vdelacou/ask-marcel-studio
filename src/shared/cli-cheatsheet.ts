@@ -17,9 +17,11 @@
 import type { Result } from './result.ts';
 import { err, ok } from './result.ts';
 
-// The commands the archive shows the agent reaching for. Resolved by exact name; a
-// `download-file`/`convert-drive-item` style family is covered by listing the members
-// that exist.
+// The commands the archive shows the agent reaching for, and the three since 2.8.0 that
+// answer "what changed" (the files changed since a date, and a line diff between two files or
+// two versions of one), which are new enough that the agent would not reach for them itself.
+// Resolved by exact name; a `download-file`/`convert-drive-item` style family is covered by
+// listing the members that exist.
 export const CHEATSHEET_COMMANDS: readonly string[] = [
   'my-quick-context',
   'list-mail-messages',
@@ -32,6 +34,9 @@ export const CHEATSHEET_COMMANDS: readonly string[] = [
   'get-drive-item',
   'download-drive-item-as-markdown',
   'download-drive-item-content',
+  'list-changed-files',
+  'diff-drive-items',
+  'diff-drive-item-versions',
   'get-user',
   'get-user-manager',
   'list-relevant-people',
