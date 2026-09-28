@@ -107,6 +107,24 @@ export const unreadNotice = (count: number): readonly MemoryListNotice[] => {
   return [{ id: 'unread', tone: 'neutral', message: `${lines}, so the list cannot show ${them}. Marcel still reads ${them}: open the note as text to see ${them}.` }];
 };
 
+// How a note that could not be read is named on its list: the words list is that one note.
+const UNREADABLE_NAME: Record<MemoryFileName, string> = { jargon: 'This list', team: 'My team', people: 'Other people' };
+
+// A note that could not be read shows as empty, and main refuses any change to it: said first,
+// naming it, so the empty list is not taken for an empty note.
+export const unreadableNotice = (notes: readonly MemoryFileName[]): readonly MemoryListNotice[] => {
+  if (notes.length === 0) return [];
+  const [it, they] = notes.length === 1 ? ['it', 'it'] : ['them', 'they'];
+  const names = listed(notes.map((note) => UNREADABLE_NAME[note]));
+  return [
+    {
+      id: 'unreadable',
+      tone: 'error',
+      message: `${names} could not be read from disk, so nothing in ${it} shows here, and nothing can be changed in ${it} until ${they} can be read.`,
+    },
+  ];
+};
+
 export const noticesOf = (failure: string | undefined, undo: MemoryListUndo | undefined, onUndo: () => void): readonly MemoryListNotice[] => [
   ...(failure === undefined ? [] : [{ id: 'failure', tone: 'error' as const, message: failure }]),
   ...(undo === undefined ? [] : [{ id: 'undo', tone: 'neutral' as const, message: undo.message, action: { label: 'Undo', onAction: onUndo } }]),
@@ -144,7 +162,8 @@ export const segmentsOf = (rows: readonly MemoryListRow[], team: MemoryTeamFilte
 });
 
 // Why the view is empty, in that order: a search with no match (and the offer to add it), a
-// filter hiding every entry there is, lines the list cannot show, or nothing there at all.
+// filter hiding every entry there is, something the list cannot show (lines in another shape,
+// or a note it could not read), or nothing there at all.
 export const emptyOf = (copy: MemoryListCopy, query: string, hasEntries: boolean, hasUnread: boolean, onAdd: (term: string) => void): MemoryListEmpty => {
   const wanted = query.trim();
   if (wanted.length > 0) return { message: `Nothing matches “${wanted}”.`, action: { label: `Add “${wanted}”`, onAction: () => onAdd(wanted) } };

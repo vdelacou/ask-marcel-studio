@@ -7,6 +7,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import type { MemoryEditError, MemoryEntryEdit, MemoryNotes } from '../../../shared/memory-entry-edit.ts';
+import { MEMORY_FILES } from '../../../shared/memory-file-name.ts';
 import type { MemoryFileName } from '../../../shared/memory-file-name.ts';
 import type { StoreError } from '../../../shared/ipc-contract.ts';
 import type { Result } from '../../../shared/result.ts';
@@ -15,6 +16,9 @@ export type MemoryNotesController = {
   readonly notes: MemoryNotes;
   // False until the first read lands, so a list never claims to be empty before it knows.
   readonly isLoaded: boolean;
+  // The notes that are there but could not be read, as of the last read: each shows as empty,
+  // and its list says why.
+  readonly unreadable: readonly MemoryFileName[];
   readonly reload: () => void;
   // Resolves once main has answered; on success the notes are already the new ones.
   readonly edit: (change: MemoryEntryEdit) => Promise<Result<MemoryNotes, MemoryEditError>>;
@@ -25,18 +29,22 @@ export type MemoryNotesController = {
 
 const NO_NOTES: MemoryNotes = { jargon: '', team: '', people: '' };
 
-// A note that cannot be read shows as empty, as the editor it replaces did: the list still
-// opens, and a change goes through main, which reads the file for itself.
+// A note that cannot be read shows as empty, so the list still opens, and is named in
+// `unreadable` so the list can say so. A change to it goes through main, which reads the file
+// for itself and refuses.
 const textOf = (read: Result<string, StoreError>): string => (read.ok ? read.value : '');
 
 export const useMemoryNotes = (): MemoryNotesController => {
   const [notes, setNotes] = useState<MemoryNotes>(NO_NOTES);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [unreadable, setUnreadable] = useState<readonly MemoryFileName[]>([]);
 
   const reload = useCallback((): void => {
     void (async (): Promise<void> => {
       const [jargon, team, people] = await Promise.all([studio.memory.read('jargon'), studio.memory.read('team'), studio.memory.read('people')]);
+      const reads = { jargon, team, people };
       setNotes({ jargon: textOf(jargon), team: textOf(team), people: textOf(people) });
+      setUnreadable(MEMORY_FILES.filter((name) => !reads[name].ok));
       setIsLoaded(true);
     })();
   }, []);
@@ -55,5 +63,5 @@ export const useMemoryNotes = (): MemoryNotesController => {
     return saved;
   }, []);
 
-  return { notes, isLoaded, reload, edit, save };
+  return { notes, isLoaded, unreadable, reload, edit, save };
 };

@@ -16,7 +16,22 @@ import { useMemoryNotes } from '../hooks/use-memory-notes.ts';
 import { useListFocus } from '../hooks/use-list-focus.ts';
 import { useFocusSoon } from '../hooks/use-focus-soon.ts';
 import { landingOf } from '../lib/list-focus.ts';
-import { AS_TEXT, AsText, COPY, editorOf, emptyOf, isTeamFilter, itemOf, noteForNew, noticesOf, segmentsOf, summaryOf, twinsNotice, unreadNotice } from './memory-list-view.tsx';
+import {
+  AS_TEXT,
+  AsText,
+  COPY,
+  editorOf,
+  emptyOf,
+  isTeamFilter,
+  itemOf,
+  noteForNew,
+  noticesOf,
+  segmentsOf,
+  summaryOf,
+  twinsNotice,
+  unreadNotice,
+  unreadableNotice,
+} from './memory-list-view.tsx';
 import type { MemoryListDraft, MemoryListUndo } from './memory-list-view.tsx';
 import type { MemoryEditError, MemoryEntryEdit } from '../../../shared/memory-entry-edit.ts';
 import type { MemoryFileName } from '../../../shared/memory-file-name.ts';
@@ -185,6 +200,7 @@ export const MemoryListSection: FC<MemoryListSectionProps> = ({ list }) => {
   }
 
   const unread = unreadLines(memory.notes, list);
+  const unreadable = NOTES_OF[list].filter((note) => memory.unreadable.includes(note));
   const editor = draft === undefined ? undefined : editorOf(copy, list, draft, isSaving, { onChange: setDraft, onSave: save, onCancel: cancel });
 
   return (
@@ -192,14 +208,19 @@ export const MemoryListSection: FC<MemoryListSectionProps> = ({ list }) => {
       title={copy.title}
       description={copy.description}
       addLabel={copy.add}
-      notices={[...noticesOf(failure, undo, takeBack), ...twinsNotice(twins, isShowingTwins, () => setTwinsOnly(!isShowingTwins)), ...unreadNotice(unread)]}
+      notices={[
+        ...unreadableNotice(unreadable),
+        ...noticesOf(failure, undo, takeBack),
+        ...twinsNotice(twins, isShowingTwins, () => setTwinsOnly(!isShowingTwins)),
+        ...unreadNotice(unread),
+      ]}
       query={query}
       queryLabel={`Filter ${copy.things}`}
       queryPlaceholder={`Filter ${String(rows.length)} ${copy.things}`}
       {...(list === 'people' ? { segments: segmentsOf(rows, team) } : {})}
       items={shown.map((row) => itemOf(list, row))}
       {...(editor === undefined ? {} : { editor })}
-      empty={emptyOf(copy, query, rows.length > 0, unread > 0, startAdd)}
+      empty={emptyOf(copy, query, rows.length > 0, unread > 0 || unreadable.length > 0, startAdd)}
       summary={summaryOf(rows.length, unread, approximateTokens(memory.notes, list))}
       textModes={NOTES_OF[list].map((note) => ({ id: note, label: AS_TEXT[note].link }))}
       onAdd={() => startAdd('')}
