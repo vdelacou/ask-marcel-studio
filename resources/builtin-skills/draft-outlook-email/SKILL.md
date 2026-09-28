@@ -18,8 +18,9 @@ subject line. These steps are numbered because they have an explicit stop:
 1. Classify the invocation. If the user named the exact thread or message AND the intent is
    clear (reply / forward / new, and to whom), go straight to the drafting procedure below.
 2. If it is topic-only or ambiguous (a subject, a person, "the pricing thing"), run AT MOST
-   two cheap identification searches: `search-mail-messages` on the key nouns, and
-   `find-person` if only a name is given. Take snippets only. Do not read a full thread yet.
+   two cheap identification searches: `search-mail-messages` on the key nouns, and, if only a
+   name is given, `microsoft-search-query --query '<name>' --top 5`, whose people hits carry
+   the full name and address. Take snippets only. Do not read a full thread yet.
 3. STOP. Do not go further. Tell the user what you found: the candidate thread as sender +
    subject + date (at most three candidates), and your reading of the intent (reply, forward,
    or new mail). Ask which thread and which intent. Do NOT read the thread in full, do NOT
