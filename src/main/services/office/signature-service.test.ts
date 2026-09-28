@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { createSignatureService } from './signature-service.ts';
 import type { OfficeRun, OfficeRunOutcome } from './office-service.ts';
 
-const SIGNATURE_PATH = '/data/claude-config/signature.html';
+const FETCH_PATH = '/data/claude-config/signature.fetched.html';
 
 const ran = (over: Partial<Extract<OfficeRunOutcome, { ran: true }>> = {}): OfficeRunOutcome => ({ ran: true, stdout: '', stderr: '', code: 0, timedOut: false, ...over });
 
@@ -17,19 +17,21 @@ const service = (scripted: Scripted = {}): { readonly prefill: (force?: boolean)
   };
   const built = createSignatureService({
     run,
-    signaturePath: SIGNATURE_PATH,
+    fetchPath: FETCH_PATH,
     hasSignature: () => Promise.resolve(scripted.hasSignature ?? false),
     wroteSomething: () => Promise.resolve(writes.shift() ?? false),
+    keepFetched: () => Promise.resolve(true),
+    dropFetched: () => Promise.resolve(),
   });
   return { prefill: (force = false) => built.prefill(force) as never, calls };
 };
 
 describe('taking the user’s signature from their mailbox', () => {
-  test('a signature is fetched straight into the file the agent reads', async () => {
+  test('a signature is fetched beside the file the agent reads, then put in its place', async () => {
     const { prefill, calls } = service();
 
     expect(await prefill()).toEqual({ ok: true, value: null });
-    expect(calls[1]).toEqual(['get-mail-signature', '--output-path', SIGNATURE_PATH]);
+    expect(calls[1]).toEqual(['get-mail-signature', '--output-path', FETCH_PATH]);
   });
 
   test('a signature the user already has is never overwritten', async () => {
@@ -57,7 +59,14 @@ describe('taking the user’s signature from their mailbox', () => {
 
   test('a CLI that cannot be launched at all is skipped quietly too', async () => {
     const run: OfficeRun = () => Promise.resolve({ ran: false, message: 'ENOENT' });
-    const built = createSignatureService({ run, signaturePath: SIGNATURE_PATH, hasSignature: () => Promise.resolve(false), wroteSomething: () => Promise.resolve(false) });
+    const built = createSignatureService({
+      run,
+      fetchPath: FETCH_PATH,
+      hasSignature: () => Promise.resolve(false),
+      wroteSomething: () => Promise.resolve(false),
+      keepFetched: () => Promise.resolve(true),
+      dropFetched: () => Promise.resolve(),
+    });
 
     expect((await built.prefill(false)).ok).toBe(false);
   });
@@ -67,7 +76,7 @@ describe('taking the user’s signature from their mailbox', () => {
     const { prefill, calls } = service({ writes: [false, true], outcomes: { 'list-mail-folder-messages': ran({ stdout: sent }) } });
 
     expect(await prefill()).toEqual({ ok: true, value: null });
-    expect(calls.at(-1)).toEqual(['get-mail-signature', '--output-path', SIGNATURE_PATH, '--message-id', 'AAA']);
+    expect(calls.at(-1)).toEqual(['get-mail-signature', '--output-path', FETCH_PATH, '--message-id', 'AAA']);
   });
 
   test('an empty sent folder is skipped: there is nothing to take one from yet', async () => {

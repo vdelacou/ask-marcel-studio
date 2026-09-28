@@ -9,7 +9,7 @@
  * The single top-level catch lives here (rule 17): everything below returns Result.
  */
 import { dirname, join } from 'node:path';
-import { stat } from 'node:fs/promises';
+import { rename, rm, stat } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { electronApp, is, optimizer } from '@electron-toolkit/utils';
 import { BrowserWindow, app, shell } from 'electron';
@@ -237,6 +237,19 @@ const hasContent = async (path: string): Promise<boolean> => {
   }
 };
 
+// Where the signature prefill has the office CLI write, beside the signature and never over it.
+const fetchedSignaturePath = (userData: string): string => join(dirname(signatureFilePath(userData)), 'signature.fetched.html');
+
+// Puts a fetched file in another's place in one step, so a reader never sees half of it.
+const moveInto = async (from: string, to: string): Promise<boolean> => {
+  try {
+    await rename(from, to);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const buildRuntime = (
   emit: (event: UIEvent) => void,
   emitMemory: (event: MemoryEvent) => void,
@@ -375,10 +388,13 @@ const buildRuntime = (
     officeCommandCategories: officeCatalog.commandCategories(),
     signature: createSignatureService({
       run: officeRun,
-      signaturePath: signatureFilePath(userData),
+      fetchPath: fetchedSignaturePath(userData),
       // A signature the user emptied, by hand or with Clear all memories, stays empty.
       hasSignature: () => fileExists(signatureFilePath(userData)),
-      wroteSomething: () => hasContent(signatureFilePath(userData)),
+      wroteSomething: () => hasContent(fetchedSignaturePath(userData)),
+      keepFetched: () => moveInto(fetchedSignaturePath(userData), signatureFilePath(userData)),
+      // Nothing there, or nothing that can be removed: the next fetch overwrites it either way.
+      dropFetched: () => rm(fetchedSignaturePath(userData), { force: true }).catch(() => undefined),
     }),
     memoryExtractor: createMemoryExtractor({
       conversations,
