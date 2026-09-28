@@ -6,6 +6,11 @@ Each entry is one of `[mistake]`, `[decision]`, or `[gotcha]`. Newest first.
 
 ---
 
+## [gotcha] 2026-09-28 | a bare stryker run replays old survivors when only the tests changed
+
+`incremental: true` in stryker.conf.json keys its cache on source-file hashes, and the command runner cannot tell which test covers which mutant, so a run after adding tests for an unchanged file reuses the cached results. Adding a test file for `cli-cheatsheet.ts` and running `bunx stryker run --mutate src/shared/cli-cheatsheet.ts` reported the same 88.8% and the same 20 survivors; `bun run mutate:changed`, which deletes `reports/stryker-incremental.json` first, measured 95.5%. The pre-commit gate's `mutate:staged` clears the cache the same way, so only a hand-run was fooled.
+Rule for next time: measure new tests' effect on mutation with `bun run mutate:changed`, never a bare `stryker run`.
+
 ## [gotcha] 2026-09-28 | playwright's getByText ignores case and matches part of a string, so a check can find the wrong words
 
 Given a plain string, `getByText` ignores case and matches any element whose text contains it, so a scratch in-app check that asked whether the Memory sheet was open by its "Waiting for you" heading also found the sidebar's "3 waiting for you in Memory", and reported Memory open after Escape had closed it. The failing check looked like a bug in the app until a probe showed the fault was the check. The fixed script recognises the sheet by a control only it has (the "Clear all memories" button, by role and name); `exact: true` is the fallback for a text match.
