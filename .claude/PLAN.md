@@ -1,3 +1,24 @@
+# Current run: three leftovers from the memory work (approved 2026-09-29)
+
+1. [x] The last step of the run below ticked: its four commits and the push landed.
+2. [x] Two test names in memory-list.test.ts say "Other people", the name the screen uses,
+       instead of "Others". Existing tests: the diff shown and a yes first.
+       DONE: approved with the diff, names only.
+3. [x] A heading of the user's that ends up on a note's top line, once everything above it is
+       removed, stays. Only a title the app itself wrote before notes stopped carrying them
+       ('Words we use', 'My team', 'People I work with', exactly as written) is dropped.
+       Done when: a new test file shows such a heading surviving the parse, the next change and
+       Marcel's reading, and each old title still dropped; the existing tests that use made-up
+       titles moved to real ones on a yes; gates green, mutation on memory-doc.ts.
+       DONE: memory-doc-title.test.ts (8 tests, 3 red before the fix); withoutHeading became
+       withoutOldTitle; three made-up titles in memory-doc and memory-doc-heading tests moved to
+       real ones on a yes. 1980 tests, lint:strict, typecheck, coverage green; mutation 95.7% on
+       the changed files, no survivor on a changed line.
+4. [x] Commits on a yes, then the push on a yes.
+       DONE: three commits ending in this one, each through the hook, pushed on a yes.
+
+---
+
 # Current run: the two gaps the second memory pass left (approved 2026-09-28, "1 then 2")
 
 1. [x] Tidy-up: L below checked off, the stash from the sync dropped (every file in it was
@@ -19,7 +40,8 @@
        gates green.
        DONE: 7/7 checks in the built app (two notes unreadable, then readable again), and the
        H, I and focus checks rerun green on the same build. Page and hook only, so no unit test.
-4. [ ] Commits on a yes, then the push on a yes.
+4. [x] Commits on a yes, then the push on a yes.
+       DONE: 6614a05..70c9a3d, each through the hook, pushed on a yes.
 
 ---
 
