@@ -18,7 +18,7 @@ describe('reading the notes the app keeps', () => {
   });
 
   test('a title left over from when notes had them is dropped, not kept as a stray line', () => {
-    expect(serialiseMemoryDoc(parse('# Who is who\n\n- **Anna**: product'))).toBe('- **Anna**: product\n');
+    expect(serialiseMemoryDoc(parse('# People I work with\n\n- **Anna**: product'))).toBe('- **Anna**: product\n');
   });
 
   test('a note with no title reads exactly the same', () => {
@@ -138,7 +138,7 @@ describe('reading a file however it was saved', () => {
   });
 
   test('a title further down the file is dropped too, along with what preceded it', () => {
-    expect(listEntries(parse('\n# Who is who\n\n- **Anna**: product'))).toEqual([{ term: 'Anna', detail: 'product' }]);
+    expect(listEntries(parse('\n# People I work with\n\n- **Anna**: product'))).toEqual([{ term: 'Anna', detail: 'product' }]);
   });
 
   test('a plain entry written without a space after the colon still reads', () => {

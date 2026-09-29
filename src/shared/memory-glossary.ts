@@ -13,7 +13,7 @@
  *
  * Pure: zero electron imports, so `bun test` covers it.
  */
-import { withoutHeading } from './memory-doc.ts';
+import { withoutOldTitle } from './memory-doc.ts';
 
 export type GlossaryFiles = {
   readonly jargon: string;
@@ -32,6 +32,6 @@ const SECTIONS: readonly { readonly key: keyof GlossaryFiles; readonly heading: 
 // model competing with the heading this adds.
 export const buildGlossaryBlocks = (files: GlossaryFiles): readonly string[] =>
   SECTIONS.flatMap((section) => {
-    const body = withoutHeading(files[section.key]).trim();
+    const body = withoutOldTitle(files[section.key]).trim();
     return body.length === 0 ? [] : [`## ${section.heading}\n${body}`];
   });

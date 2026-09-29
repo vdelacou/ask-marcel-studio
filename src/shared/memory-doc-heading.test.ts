@@ -26,7 +26,7 @@ describe('a heading typed in the middle of a note', () => {
   });
 
   test('a title at the top, under blank lines, is still dropped', () => {
-    expect(serialiseMemoryDoc(parseMemoryDoc('\n  \n# Words\n- **QW**: quick win'))).toBe('- **QW**: quick win\n');
+    expect(serialiseMemoryDoc(parseMemoryDoc('\n  \n# Words we use\n- **QW**: quick win'))).toBe('- **QW**: quick win\n');
   });
 });
 

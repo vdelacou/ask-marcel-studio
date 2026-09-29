@@ -6,7 +6,8 @@
  * or as text, and the agent reads them as part of its prompt. A format that survives a hand
  * edit matters more here than a tidy one: anything this cannot parse is kept as it was found
  * and written back out unchanged, so an edit is never silently eaten. The one line dropped is
- * a title on the top line, which notes no longer carry (see withoutHeading).
+ * a title the app itself once wrote on the top line, which notes no longer carry (see
+ * withoutOldTitle).
  *
  *   - **TLA**: three-letter acronym, how finance labels quick wins
  *
@@ -50,20 +51,24 @@ const readEntry = (line: string): MemoryEntry | undefined => {
   return { term, detail: rawDetail.trim() };
 };
 
+// The titles the app wrote on the top line of the jargon, team and people notes, exactly as
+// it wrote them, until notes stopped carrying one.
+const OLD_TITLES: ReadonlySet<string> = new Set(['# Words we use', '# My team', '# People I work with']);
+
 // A note no longer carries a title of its own: the screen already names it, and repeating
 // it inside cost a heading in the editor and a line in every prompt. Notes written before
 // that lose theirs on the way in, so an old file is cleaned by being opened rather than by
-// a migration, and nothing has to remember which shape it is looking at. Only a title at
-// the top is one: a heading typed further down is the user's, and taking it for a title
-// would drop every entry above it.
-export const withoutHeading = (markdown: string): string => {
+// a migration, and nothing has to remember which shape it is looking at. Only one of the
+// app's own titles on the top line is one. Any other heading is the user's, typed further
+// down or risen to the top once every entry above it was removed, and it stays.
+export const withoutOldTitle = (markdown: string): string => {
   const lines = markdown.replace(/\r/g, '').split('\n');
   const top = lines.findIndex((line) => line.trim().length > 0);
-  return lines[top]?.startsWith('# ') === true ? lines.slice(top + 1).join('\n') : lines.join('\n');
+  return lines.filter((line, index) => index !== top || !OLD_TITLES.has(line)).join('\n');
 };
 
 export const parseMemoryDoc = (markdown: string): MemoryDoc => {
-  const read = withoutHeading(markdown)
+  const read = withoutOldTitle(markdown)
     .split('\n')
     .map((line): MemoryLine => {
       const entry = readEntry(line);
