@@ -69,7 +69,7 @@ describe('finding a row', () => {
     expect(terms(visibleRows(rows, { ...EVERYTHING, query: 'on time' }))).toEqual(['OTIF']);
   });
 
-  test('the My team / Others filter splits the people list', () => {
+  test('the My team / Other people filter splits the people list', () => {
     const rows = rowsOf(notes({ team: '- **Mei Chen**: finance lead\n', people: '- **Hannah Weiss**: audit partner\n' }), 'people');
 
     expect(terms(visibleRows(rows, { ...EVERYTHING, team: 'team' }))).toEqual(['Mei Chen']);
@@ -89,7 +89,7 @@ describe('spotting duplicates', () => {
     expect(duplicateTerms(rowsOf(notes({ jargon: '- **CAB**: advisory board\n- **QW**: quick win\n- **cab**: approval board\n' }), 'words'))).toEqual(['CAB']);
   });
 
-  test('names that differ only by an accent, case or a space are the same person, even across My team and Others', () => {
+  test('names that differ only by an accent, case or a space are the same person, even across My team and Other people', () => {
     const rows = rowsOf(
       notes({
         team: '- **José Álvarez**: WMS vendor\n- **Aiko Tanaka**: ERP programme\n- **Tin Yi**: SEA manager\n',
