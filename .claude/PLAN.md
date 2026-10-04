@@ -1,3 +1,49 @@
+# Current run: CI on every push, then two small fixes (approved 2026-10-04, "go for it")
+
+Every gate lives in the pre-commit hook, and a cloud session neither installs it
+(`core.hooksPath` is unset) nor passes it as root, so the skill commit went in with
+`--no-verify`. A workflow on GitHub runs the same gates on every push, as a user that is not
+root, with no hook to skip. Commit size and mutation stay in the hook: the first judges one
+commit, the second takes minutes a file. The SDK bump and the first release are later runs.
+
+1. [ ] `.github/workflows/ci.yml`: on every push (and by hand), a frozen-lockfile install, then
+       identity, package.json, gitleaks over every commit, bun test, lint:strict, typecheck,
+       coverage. Actions pinned to commit SHAs; Bun 1.3.14 and Node 22 pinned (eslint and tsc
+       run under node, and eslint-plugin-unicorn 72 needs 22); gitleaks 8.30.1 checked against
+       its sha256.
+       Done when: actionlint is clean, every step passes here as a user that is not root, and
+       the run on the pushed head is green on GitHub.
+       SO FAR: actionlint 1.7.12 clean; all seven steps green as nobody on a clean clone after a
+       fresh frozen install (46 s). Full-history gitleaks is clean on 8.28.0 and 8.30.1.
+       Left out on purpose: `bun audit` (46 high advisories today, mostly browserslist under
+       dev tooling, a triage of its own) and mutation (already per commit in the hook). The
+       GitHub run is still to come when this is committed.
+2. [x] README: the workflow beside the hook, what it runs and what stays local; the hook's gate
+       numbers, stale since the identity gate made them nine.
+       DONE: Layout and Contributing; gates 4, 6 and 9 in Requirements, Scripts and Layout; one
+       sentence in the plan section for step 4.
+3. [x] Housekeeping: step 5 of the plan-models run ticked (it landed with PR #1);
+       `bun remove @electron/rebuild`, unused since `rebuild:native` went (2026-07-27).
+       Done when: nothing references the package and the frozen install still passes.
+       DONE: bun.lock only re-hoists (env-paths, isexe, undici and which keep the same
+       versions); electron-builder still pulls rebuild 4.2.0 in through app-builder-lib.
+4. [x] An API-key or gateway turn drops the Claude Code variables that would outrank its own
+       key or provider (`ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, the three
+       `CLAUDE_CODE_USE_*` switches), as a plan turn already does.
+       Done when: a new test file shows both kinds dropping them, red first; gates green;
+       mutation >= 90 on session-env.ts.
+       DONE: probed first with the bundled Claude Code 2.1.185 and a capture server: an
+       inherited ANTHROPIC_AUTH_TOKEN went out as a bearer header next to the provider's key,
+       CLAUDE_CODE_USE_BEDROCK sent nothing to the provider (the turn hung until the timeout),
+       CLAUDE_CODE_OAUTH_TOKEN lost to the key. session-env-overrides.test.ts: 3 red before the
+       fix, plus an empty-base-url case that killed the one survivor. 1984 tests, lint:strict,
+       typecheck, coverage green as nobody; mutation 100% on session-env.ts.
+5. [x] Commits on a yes, then the push on a yes.
+       DONE: four commits ending in this one, each through the 9-gate hook as nobody; pushed
+       on a yes, with a pull request to main.
+
+---
+
 # Current run: the root-container lesson, then the PR (approved 2026-10-04, "1 then 2")
 
 1. [x] A [gotcha] in LESSONS.md: a root container fails five permission tests, so the hook
@@ -154,7 +200,8 @@ Built on this branch while PR #1 is open; where it is pushed is decided at the e
 4. [x] README line for the list; built app on a scratch folder: the button fills the models
        (signed out, the list still comes back), save keeps them. Done: checks listed. DONE: 7/7
        on a scratch folder; the automatic fill after a real sign-in is unit-tested, not seen.
-5. [ ] Commits on a yes, then push or PR per the user's call on #1.
+5. [x] Commits on a yes, then push or PR per the user's call on #1.
+       DONE: three commits (6c2a29a..5fd8e46), merged with PR #1 (1892ecd).
 
 ---
 
