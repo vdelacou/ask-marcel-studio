@@ -46,7 +46,6 @@
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^2.0.0",
-    "@electron/rebuild": "^4.2.0",
     "@eslint/js": "^10.0.1",
     "@stryker-mutator/core": "^9.6.1",
     "@tailwindcss/vite": "^4.3.3",
