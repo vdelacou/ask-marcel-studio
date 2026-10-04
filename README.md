@@ -30,7 +30,7 @@ Electron + React, MIT licensed. Built to the atelier engineering standard.
 - macOS. The plan targets a mac build; nothing here is Windows- or Linux-tested.
 - Node on `PATH`, for `bun run mutate` only. Stryker cannot run under Bun's runtime; it works
   because `bun run` delegates to real node. Everything else is Bun-only.
-- Optional: `gitleaks` for pre-commit gate 3 (`brew install gitleaks`). The hook warns and
+- Optional: `gitleaks` for pre-commit gate 4 (`brew install gitleaks`). The hook warns and
   continues without it.
 
 Running the app needs no separate Node install: Electron ships its own runtime. It has no
@@ -55,7 +55,7 @@ bun run dev     # opens the app with renderer HMR
 | `bun run dist:dir` | same, but an unpacked `.app` (faster; for a quick launch test) |
 | `bun test` | unit tests (pure modules only — see Testing) |
 | `bun run lint` | fast ESLint, 0 warnings tolerated |
-| `bun run lint:strict` | adds type-aware rules (~25s); what pre-commit gate 5 runs |
+| `bun run lint:strict` | adds type-aware rules (~25s); what pre-commit gate 6 runs |
 | `bun run typecheck` | `tsc --noEmit` across both tsconfig projects |
 | `bun run typecheck:node` / `typecheck:web` | one project each (main+preload+shared / renderer) |
 | `bun run coverage` | per-tier coverage gate |
@@ -104,7 +104,8 @@ src/renderer/     React + Tailwind v4
   src/styles/globals.css                            design tokens (@theme)
 src/test-helpers/ test-only helpers; never imported by production code
 scripts/          atelier gate scripts
-.githooks/        pre-commit (8 gates) + commit-msg (Conventional Commits)
+.githooks/        pre-commit (9 gates) + commit-msg (Conventional Commits)
+.github/          workflows/ci.yml: the hook's gates again, on every push (see Contributing)
 docs/PLAN.md      the full 7-milestone plan
 .claude/          PLAN.md (current run), LESSONS.md (append-only memory)
 ```
@@ -304,3 +305,7 @@ This repo follows the [atelier](.claude/skills/atelier) standard. Before changin
   (the vite/plugin-react peer triangle, the `.mjs` preload path, Stryker's incremental cache).
 - Commits are Conventional Commits, enforced by a hook. Run `git config core.hooksPath .githooks`
   once per clone.
+- Every push runs the hook's gates again on GitHub (`.github/workflows/ci.yml`), on a fresh
+  frozen-lockfile install and as a user that is not root: identity, package.json, gitleaks over
+  every commit, tests, strict lint, typecheck and coverage. Commit size and mutation run only in
+  the hook, since one judges a single commit and the other takes minutes a file.
