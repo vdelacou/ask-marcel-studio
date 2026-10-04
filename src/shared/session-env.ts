@@ -7,8 +7,10 @@
  *
  * The inherited environment is data, not authority. Whatever the developer has
  * exported (ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL, ANTHROPIC_MODEL) is overwritten
- * by the provider's own values: an inherited var silently redirecting a turn to the
- * wrong endpoint or the wrong key is exactly the bug this ordering prevents.
+ * by the provider's own values, and Claude Code's switches that would outrank them
+ * (a bearer token, a cloud provider) are dropped: an inherited var silently
+ * redirecting a turn to the wrong endpoint or the wrong key is exactly the bug this
+ * ordering prevents.
  *
  * An openai-compatible provider is pointed at the local gateway instead of the real
  * API: the agent speaks Anthropic to 127.0.0.1 and the gateway translates. The model
@@ -68,10 +70,12 @@ const withoutUndefined = (env: Readonly<Record<string, string | undefined>>): Re
   return copy;
 };
 
-// Everything Claude Code would use ahead of a Claude plan sign-in, or that would carry the
-// plan's token to another address. A key exported in the shell that launched the app would
-// otherwise quietly bill every turn to it, with the plan sitting unused.
-const PLAN_OVERRIDES: ReadonlySet<string> = new Set([
+// Everything Claude Code would use ahead of the provider a turn names, or that would send a
+// credential somewhere else. Exported in the shell that launched the app, a key would bill a
+// plan turn to itself with the plan sitting unused, a bearer token would travel next to a
+// provider's own key, and a cloud switch would take the turn to Bedrock, Vertex or Foundry.
+// Every turn starts without them and gets back only what its provider gives it.
+const CLAUDE_CODE_OVERRIDES: ReadonlySet<string> = new Set([
   'ANTHROPIC_API_KEY',
   'ANTHROPIC_AUTH_TOKEN',
   'CLAUDE_CODE_OAUTH_TOKEN',
@@ -81,8 +85,8 @@ const PLAN_OVERRIDES: ReadonlySet<string> = new Set([
   'CLAUDE_CODE_USE_FOUNDRY',
 ]);
 
-const withoutPlanOverrides = (env: Readonly<Record<string, string>>): Record<string, string> =>
-  Object.fromEntries(Object.entries(env).filter(([name]) => !PLAN_OVERRIDES.has(name)));
+const withoutOverrides = (env: Readonly<Record<string, string>>): Record<string, string> =>
+  Object.fromEntries(Object.entries(env).filter(([name]) => !CLAUDE_CODE_OVERRIDES.has(name)));
 
 export type SignInEnvInput = {
   // The account whose claude-config the agent's turns use.
@@ -94,7 +98,7 @@ export type SignInEnvInput = {
 // after CLAUDE_CONFIG_DIR, so this has to be the folder a turn is given, or a sign-in would
 // land where no turn ever looks.
 export const buildSignInEnv = (input: SignInEnvInput): Record<string, string> => ({
-  ...withoutPlanOverrides(withoutUndefined(input.inheritedEnv)),
+  ...withoutOverrides(withoutUndefined(input.inheritedEnv)),
   CLAUDE_CONFIG_DIR: claudeConfigDir(input.configRoot),
 });
 
@@ -110,20 +114,16 @@ const applyCredentials = (env: Record<string, string>, provider: Provider, gatew
   }
   if (provider.kind === 'claude-plan') return;
   env['ANTHROPIC_API_KEY'] = provider.apiKey;
-  // No provider base url means the real Anthropic API. An inherited one would silently
-  // redirect the traffic, so it is removed rather than left in place.
-  if (provider.baseUrl === undefined || provider.baseUrl.length === 0) {
-    delete env['ANTHROPIC_BASE_URL'];
-    return;
-  }
+  // No provider base url means the real Anthropic API. An inherited one cannot redirect the
+  // traffic: it went with the other overrides.
+  if (provider.baseUrl === undefined || provider.baseUrl.length === 0) return;
   env['ANTHROPIC_BASE_URL'] = normaliseBaseUrl(provider.baseUrl);
 };
 
 export const buildSessionEnv = (input: SessionEnvInput): Record<string, string> => {
-  // Copy first: process.env is shared mutable state and must never be written to. A plan
-  // turn's copy leaves out everything that would outrank its sign-in.
-  const inherited = withoutUndefined(input.inheritedEnv);
-  const env = input.provider.kind === 'claude-plan' ? withoutPlanOverrides(inherited) : inherited;
+  // Copy first: process.env is shared mutable state and must never be written to. The copy
+  // leaves out everything that would outrank the provider this turn names.
+  const env = withoutOverrides(withoutUndefined(input.inheritedEnv));
   const inheritedPath = env['PATH'];
 
   env['CLAUDE_CONFIG_DIR'] = claudeConfigDir(input.configRoot);

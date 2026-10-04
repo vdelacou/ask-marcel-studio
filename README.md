@@ -203,7 +203,9 @@ Three consequences worth knowing:
   `CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_BASE_URL` or any `CLAUDE_CODE_USE_*` switch, whatever the
   app inherited, so a key exported in the shell that launched it cannot quietly take over the bill
   (`src/shared/session-env.ts`). On an alias it also leaves the `ANTHROPIC_DEFAULT_*_MODEL`
-  variables to Claude Code: pinned to the alias, it would send the literal `"sonnet"`.
+  variables to Claude Code: pinned to the alias, it would send the literal `"sonnet"`. A turn on a
+  key or through the gateway drops them too, and gets back only the key and address it is meant
+  to use.
 - A plan model has no Test button: there is no key to try, and a real request would spend plan
   usage. A wrong model name shows up as an error on the first message instead.
 
