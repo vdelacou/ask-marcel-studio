@@ -74,7 +74,9 @@ const withoutUndefined = (env: Readonly<Record<string, string | undefined>>): Re
 // credential somewhere else. Exported in the shell that launched the app, a key would bill a
 // plan turn to itself with the plan sitting unused, a bearer token would travel next to a
 // provider's own key, and a cloud switch would take the turn to Bedrock, Vertex or Foundry.
-// Every turn starts without them and gets back only what its provider gives it.
+// Every turn starts without them and gets back only what its provider gives it. The last three
+// are switches the Claude Code in SDK 0.3.289 reads: each one fails a turn before it reaches the
+// provider.
 const CLAUDE_CODE_OVERRIDES: ReadonlySet<string> = new Set([
   'ANTHROPIC_API_KEY',
   'ANTHROPIC_AUTH_TOKEN',
@@ -83,6 +85,9 @@ const CLAUDE_CODE_OVERRIDES: ReadonlySet<string> = new Set([
   'CLAUDE_CODE_USE_BEDROCK',
   'CLAUDE_CODE_USE_VERTEX',
   'CLAUDE_CODE_USE_FOUNDRY',
+  'CLAUDE_CODE_USE_ANTHROPIC_AWS',
+  'CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD',
+  'CLAUDE_CODE_USE_MANTLE',
 ]);
 
 const withoutOverrides = (env: Readonly<Record<string, string>>): Record<string, string> =>
