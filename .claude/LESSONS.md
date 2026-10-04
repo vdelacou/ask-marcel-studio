@@ -6,6 +6,11 @@ Each entry is one of `[mistake]`, `[decision]`, or `[gotcha]`. Newest first.
 
 ---
 
+## [gotcha] 2026-10-04 | in a root container five permission tests fail, so the hook cannot pass there
+
+A cloud session runs as root, and root reads and writes a file whatever its mode, so the five tests that make a file unreadable or unwritable (in `json-file.test.ts` and `memory-safety.test.ts`) fail on a clean HEAD: `bun test` exits non-zero, coverage refuses to run behind it, and the pre-commit hook stops at its tests on every commit, whatever the commit touches. As `nobody` the same tests pass, so the hook runs whole, with no bypass, from a clone that `nobody` owns. Make it with `git clone --no-hardlinks` into a `mktemp -d` folder under `/tmp` (the session scratchpad is mode 700, and shared hardlinks would let the chown reach the main checkout's objects), set the clone's `user.name` and `user.email` to the main checkout's, copy `bun` and `gitleaks` into the folder, link the main checkout's `node_modules` into the clone, and `chown -R nobody` the folder. Commit there with `runuser -u nobody -- env HOME=<folder> PATH=<folder>:/opt/node22/bin:/usr/bin:/bin git -c core.hooksPath=.githooks commit`, then fetch it back as root with `git fetch --upload-pack='git -c safe.directory=<clone>/.git upload-pack' <clone> <branch>` (a plain `-c safe.directory` never reaches the upload-pack a local fetch starts) and fast-forward.
+Rule for next time: check `id -u` before reading a red `bun test` in a cloud session as a regression; at 0, commit through a `nobody` clone rather than with `--no-verify`.
+
 ## [gotcha] 2026-09-28 | a bare stryker run replays old survivors when only the tests changed
 
 `incremental: true` in stryker.conf.json keys its cache on source-file hashes, and the command runner cannot tell which test covers which mutant, so a run after adding tests for an unchanged file reuses the cached results. Adding a test file for `cli-cheatsheet.ts` and running `bunx stryker run --mutate src/shared/cli-cheatsheet.ts` reported the same 88.8% and the same 20 survivors; `bun run mutate:changed`, which deletes `reports/stryker-incremental.json` first, measured 95.5%. The pre-commit gate's `mutate:staged` clears the cache the same way, so only a hand-run was fooled.
