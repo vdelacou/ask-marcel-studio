@@ -179,7 +179,7 @@ Enterprise) instead of an API key. It has no key and no address: pick the kind a
 in with Claude**.
 
 The models fill themselves. Opened with no models while you are signed in, the provider asks
-Claude Code for the list its own model picker offers (`opus[1m]`, `sonnet`, `sonnet[1m]`,
+Claude Code for the list its own model picker offers (aliases like `opus`, `sonnet` and
 `haiku`), through the SDK's `supportedModels()`, without sending a message; **Load models from
 Claude Code** asks again. These are Claude Code's aliases, resolved by the bundled version to
 the models it knows, so a newer model appears with an SDK upgrade; a full id typed by hand,

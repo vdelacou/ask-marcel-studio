@@ -177,6 +177,11 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
             type: 'preset',
             preset: 'claude_code',
             append: [deps.corePrompt, ...contextBlocks, ...glossary].filter((block) => block.length > 0).join('\n\n'),
+            // Rendered fresh on every request. From SDK 0.3.289 the default records a
+            // conversation's prompt on its first request and ignores a later `append` until
+            // compaction, but this append changes between turns (a word remembered, About you
+            // edited) and has to reach the next message of the same conversation.
+            snapshot: false,
           },
           agents,
           // The main agent otherwise gets the whole Claude Code toolset, helper
