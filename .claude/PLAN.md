@@ -1,3 +1,24 @@
+# Current run: the Simplified Technical English skill, kept in the repo (approved 2026-10-04)
+
+1. [x] `npx skills add 0xpili/simplified-technical-english` installs the skill the way the four
+       atelier skills are: files under `.agents/skills/`, a link from `.claude/skills/`, an entry
+       in `skills-lock.json`.
+       Done when: the installed files match upstream commit 1e148d6, read in full first (no
+       hidden characters; the checker script uses only the standard library and opens nothing
+       but the files it is given).
+       DONE: skills 1.7.0 with `-a claude-code codex` (claude-code alone copies into
+       `.claude/skills/` instead of linking); diff against the reviewed clone is empty.
+2. [x] One commit for the skill, past the size gate: the word list alone is 994 lines, so no
+       slice fits under 300. The other gates run by hand first, and the body says why and that
+       they passed.
+       DONE: identity, package.json, gitleaks 8.28.0, lint:strict, typecheck and mutation green
+       as root; bun test and coverage green as a non-root user. As root, five tests that make a
+       file unreadable fail on HEAD as well (root ignores file permissions), so the hook cannot
+       pass in a root container and this plan rides in the same commit.
+3. [x] The push to main-uzfekw, on the yes the run was approved with.
+
+---
+
 # Current run: three leftovers from the memory work (approved 2026-09-29)
 
 1. [x] The last step of the run below ticked: its four commits and the push landed.
