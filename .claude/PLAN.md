@@ -1,3 +1,12 @@
+# Current run: the root-container lesson, then the PR (approved 2026-10-04, "1 then 2")
+
+1. [x] A [gotcha] in LESSONS.md: a root container fails five permission tests, so the hook
+       cannot pass there; the way round it that keeps the hook.
+       Done when: this commit itself went through all nine gates that way, with no bypass.
+2. [x] A pull request from main-uzfekw to main, carrying the skill commit and this one.
+
+---
+
 # Current run: the Simplified Technical English skill, kept in the repo (approved 2026-10-04)
 
 1. [x] `npx skills add 0xpili/simplified-technical-english` installs the skill the way the four
