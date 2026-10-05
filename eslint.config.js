@@ -244,6 +244,12 @@ export default [
       // IS the contract it maps onto, so there is nothing to refactor it into, and a
       // wrapper type would be ceremony that helps nobody.
       'sonarjs/function-return-type': 'off',
+      // Turned on as an error by the recommended set in eslint-plugin-sonarjs 4.2.2. It asks
+      // for tests that share a shape to become one table, but each test here names its own
+      // scenario in domain language (atelier rule 14), and several carry the reason the case
+      // exists: 'a traversal PREFIXED to a real uuid is rejected' was pinned after a mutant
+      // survived. A table of inputs under one generic name would lose both.
+      'sonarjs/parameterized-tests': 'off',
     },
   },
   // Non-source paths must not be linted: Stryker copies the tree into .stryker-tmp/

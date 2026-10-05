@@ -60,7 +60,7 @@ No multi-window, tray, auto-update, i18n, custom theme system (Tailwind light/da
 
 - Bun = package manager + unit test runner (`bun test` on pure modules only; modules importing `electron` are excluded from unit tests).
 - electron-vite (dev/build), electron-builder (packaging). Recorded as the sanctioned atelier deviation in `.claude/LESSONS.md`.
-- Exact pin `@anthropic-ai/claude-agent-sdk@0.3.185` (no caret): env contract and options shape are load-bearing. `ai` + `@ai-sdk/openai` pinned at install time.
+- Exact pin `@anthropic-ai/claude-agent-sdk@0.3.289` (no caret; 0.3.185 until 2026-10-04): env contract and options shape are load-bearing. `ai` + `@ai-sdk/openai` pinned at install time.
 - package.json `trustedDependencies`: `electron`, `esbuild`, `@tailwindcss/oxide` (bun blocks postinstall by default; playwright's browser download staying blocked is desirable).
 - atelier rules apply: arrow functions only, no classes/interfaces, `Result<T,E>` at IO boundaries, discriminated-union errors, TDD on pure logic, Tailwind sealed inside `components/**`, ESLint + SonarJS flat config, atelier git hooks. Scaffold via atelier-greenfield.
 

@@ -105,7 +105,7 @@ src/renderer/     React + Tailwind v4
 src/test-helpers/ test-only helpers; never imported by production code
 scripts/          atelier gate scripts
 .githooks/        pre-commit (9 gates) + commit-msg (Conventional Commits)
-.github/          workflows/ci.yml: the hook's gates again, on every push (see Contributing)
+.github/          workflows: ci.yml (the hook's gates on every push), audit.yml (weekly)
 docs/PLAN.md      the full 7-milestone plan
 .claude/          PLAN.md (current run), LESSONS.md (append-only memory)
 ```
@@ -179,7 +179,7 @@ Enterprise) instead of an API key. It has no key and no address: pick the kind a
 in with Claude**.
 
 The models fill themselves. Opened with no models while you are signed in, the provider asks
-Claude Code for the list its own model picker offers (`opus[1m]`, `sonnet`, `sonnet[1m]`,
+Claude Code for the list its own model picker offers (aliases like `opus`, `sonnet` and
 `haiku`), through the SDK's `supportedModels()`, without sending a message; **Load models from
 Claude Code** asks again. These are Claude Code's aliases, resolved by the bundled version to
 the models it knows, so a newer model appears with an SDK upgrade; a full id typed by hand,
@@ -311,3 +311,6 @@ This repo follows the [atelier](.claude/skills/atelier) standard. Before changin
   frozen-lockfile install and as a user that is not root: identity, package.json, gitleaks over
   every commit, tests, strict lint, typecheck and coverage. Commit size and mutation run only in
   the hook, since one judges a single commit and the other takes minutes a file.
+- Every Monday, `.github/workflows/audit.yml` runs `bun audit --audit-level=high` on the
+  lockfile, so an advisory against a package nobody touched still turns up. Run `bun audit`
+  locally for the moderate and low ones too.
