@@ -6,6 +6,26 @@ Each entry is one of `[mistake]`, `[decision]`, or `[gotcha]`. Newest first.
 
 ---
 
+## [gotcha] 2026-10-16 | agent sdk 0.3.289 records the system prompt once, so a resumed turn ignores a new append
+
+From SDK 0.3.289 (Claude Code 2.1.289), `systemPrompt` by default records a conversation's prompt on its first request and sends that record on every later request and resume, ignoring a different `append` until compaction. This app re-sends its `append` on every turn (the memory notes, About you, the quick context), so in a resumed conversation a word remembered after the first turn would never reach the agent: a capture-server probe saw the default resend the first turn's append. `agent-runtime.ts` passes `snapshot: false`, which renders the prompt fresh on every request, as 0.3.185 always did.
+Rule for next time: on every SDK bump, diff the `Options` declarations the app passes and probe a resumed turn's system prompt before trusting a default.
+
+## [gotcha] 2026-10-16 | a newer claude code can read provider switches that session-env does not strip
+
+The Claude Code bundled with SDK 0.3.289 reads `CLAUDE_CODE_USE_ANTHROPIC_AWS`, `CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD` and `CLAUDE_CODE_USE_MANTLE`: exported in the shell that launched the app, each failed a turn on a key before a request reached the provider, until they joined `CLAUDE_CODE_OVERRIDES`. `grep -aoE 'CLAUDE_CODE_USE_[A-Z_]+' node_modules/@anthropic-ai/claude-agent-sdk-<platform>/claude | sort -u` lists every such name the binary knows, provider switches and feature flags alike (`CLAUDE_CODE_USE_GATEWAY` moved nothing when probed).
+Rule for next time: on every SDK bump, run that grep and probe each new name that picks a provider against a capture server before deciding whether it joins the stripped set.
+
+## [gotcha] 2026-10-16 | bun update keeps a locked transitive version, so only a regenerated lockfile picks up its fix
+
+`bun update` moves direct dependencies within their ranges, but a transitive package whose locked version still satisfies its parent's range stays put, and `bun update --force` reinstalls without moving it either: 42 high advisories survived both. Deleting `bun.lock` and running `bun install` re-resolved the tree, every fix landed inside the ranges the parents already declared, and `bun audit --audit-level=high` went from 46 to 0. The regenerated lockfile ran to 748 changed lines, past the size gate, so that commit took the generated-file bypass with every other gate run by hand on its tree.
+Rule for next time: when `bun audit` flags a transitive package, regenerate the lockfile rather than repeating `bun update`.
+
+## [gotcha] 2026-10-16 | a probe that dies leaves its spawned stand-in holding the output pipe open
+
+A bun probe spawned `scripts/fake-openai.mjs` with `stderr: 'inherit'` while its own output was piped into `tail`; when the probe threw, the orphaned stand-in kept the pipe's write end open, so `tail` never saw end of file and the command hung for ten minutes without printing a line. Killing the child on exit (`process.on('exit', () => child.kill())`) and writing the probe's results to a file instead of a pipe each prevent it.
+Rule for next time: a probe that spawns a server kills it on exit and writes its results to a file, never straight into a pipe.
+
 ## [gotcha] 2026-10-04 | in a root container five permission tests fail, so the hook cannot pass there
 
 A cloud session runs as root, and root reads and writes a file whatever its mode, so the five tests that make a file unreadable or unwritable (in `json-file.test.ts` and `memory-safety.test.ts`) fail on a clean HEAD: `bun test` exits non-zero, coverage refuses to run behind it, and the pre-commit hook stops at its tests on every commit, whatever the commit touches. As `nobody` the same tests pass, so the hook runs whole, with no bypass, from a clone that `nobody` owns. Make it with `git clone --no-hardlinks` into a `mktemp -d` folder under `/tmp` (the session scratchpad is mode 700, and shared hardlinks would let the chown reach the main checkout's objects), set the clone's `user.name` and `user.email` to the main checkout's, copy `bun` and `gitleaks` into the folder, link the main checkout's `node_modules` into the clone, and `chown -R nobody` the folder. Commit there with `runuser -u nobody -- env HOME=<folder> PATH=<folder>:/opt/node22/bin:/usr/bin:/bin git -c core.hooksPath=.githooks commit`, then fetch it back as root with `git fetch --upload-pack='git -c safe.directory=<clone>/.git upload-pack' <clone> <branch>` (a plain `-c safe.directory` never reaches the upload-pack a local fetch starts) and fast-forward.
