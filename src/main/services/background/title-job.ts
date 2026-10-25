@@ -44,6 +44,12 @@ const firstTextOf = (parts: readonly { readonly type: string; readonly text?: st
     .join(' ')
     .trim();
 
+// The words of the first message the given side wrote.
+const firstTextBy = (
+  messages: readonly { readonly role: string; readonly parts: readonly { readonly type: string; readonly text?: string }[] }[],
+  role: 'user' | 'assistant'
+): string => firstTextOf(messages.find((message) => message.role === role)?.parts ?? []);
+
 export const createTitleJob = (deps: TitleJobDeps): TitleJob => {
   const run = async (conversationId: string, signal: AbortSignal): Promise<Result<null, BackgroundJobError>> => {
     const conversation = await deps.conversations.get(conversationId);
@@ -51,8 +57,8 @@ export const createTitleJob = (deps: TitleJobDeps): TitleJob => {
     if (!conversation.ok) return err({ kind: 'skipped', message: 'that conversation is gone' });
     if (conversation.value.userRenamed === true) return err({ kind: 'skipped', message: 'the user named this one themselves' });
 
-    const userText = firstTextOf(conversation.value.messages.find((message) => message.role === 'user')?.parts ?? []);
-    const assistantText = firstTextOf(conversation.value.messages.find((message) => message.role === 'assistant')?.parts ?? []);
+    const userText = firstTextBy(conversation.value.messages, 'user');
+    const assistantText = firstTextBy(conversation.value.messages, 'assistant');
     // A turn that produced no words (only tool calls, or a failure) says nothing about
     // what the conversation is; the derived title stands until the next turn.
     if (userText.length === 0 || assistantText.length === 0) return err({ kind: 'skipped', message: 'nothing was said yet' });
@@ -74,8 +80,11 @@ export const createTitleJob = (deps: TitleJobDeps): TitleJob => {
 
     const title = sanitizeGeneratedTitle(answer.value);
     if (title === undefined) return err({ kind: 'skipped', message: 'the model did not answer with a name' });
+    return applyTitle(conversationId, title);
+  };
 
-    // Reads fresh: a rename that landed while the model was thinking wins.
+  // Reads fresh: a rename that landed while the model was thinking wins.
+  const applyTitle = async (conversationId: string, title: string): Promise<Result<null, BackgroundJobError>> => {
     const named = await deps.conversations.setGeneratedTitle(conversationId, title);
     if (!named.ok) return err({ kind: 'failed', message: named.error.message });
     if (named.value.title === title) deps.onTitle(conversationId, title);

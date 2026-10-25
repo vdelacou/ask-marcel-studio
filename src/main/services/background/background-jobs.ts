@@ -11,6 +11,8 @@
 import { buildAgentHooks } from '../agent/agent-hooks.ts';
 import { buildSessionEnv } from '../../../shared/session-env.ts';
 import { formatModelRef, modelRefIsConfigured, parseModelRef } from '../../../shared/model-ref.ts';
+import type { ModelRef } from '../../../shared/model-ref.ts';
+import type { Provider, Settings } from '../../../shared/types.ts';
 import type { Options } from '@anthropic-ai/claude-agent-sdk';
 import type { BackgroundJob, BackgroundJobError } from './background-runner.ts';
 import type { SignatureService } from '../office/signature-service.ts';
@@ -59,19 +61,14 @@ export const createBackgroundJobs = (deps: BackgroundJobsDeps): BackgroundJobs =
     const settings = await deps.settings.get();
     if (!settings.ok) return err(settings.error.message);
 
-    const configured = preferredModel !== undefined && modelRefIsConfigured(settings.value.providers, preferredModel) ? preferredModel : undefined;
-    const reference = configured ?? settings.value.defaultModel ?? defaultReference(settings.value.providers);
-    if (reference === undefined) return err('no model is set up yet');
-
-    const parsed = parseModelRef(reference);
-    if (!parsed.ok) return err(parsed.error.message);
-    const provider = settings.value.providers.find((candidate) => candidate.id === parsed.value.providerId);
-    if (provider === undefined) return err('the model this app is set to use is not configured any more');
+    const chosen = chooseProvider(settings.value, preferredModel);
+    if (!chosen.ok) return chosen;
+    const { provider, parsed } = chosen.value;
 
     // Same gateway path a conversation takes, so an OpenAI-compatible provider works
     // here exactly as it does on screen.
     const gateway = provider.kind === 'openai' ? await deps.gateway.start() : undefined;
-    const model = gateway === undefined ? parsed.value.modelId : formatModelRef({ providerId: provider.id, modelId: parsed.value.modelId });
+    const model = gateway === undefined ? parsed.modelId : formatModelRef({ providerId: provider.id, modelId: parsed.modelId });
     const disabledOfficeCategories = settings.value.officePolicy?.disabledCategories ?? [];
 
     return ok({
@@ -79,7 +76,7 @@ export const createBackgroundJobs = (deps: BackgroundJobsDeps): BackgroundJobs =
       cwd: deps.workspaceDir,
       env: buildSessionEnv({
         provider,
-        modelId: parsed.value.modelId,
+        modelId: parsed.modelId,
         configRoot: deps.userData,
         toolsRoot: deps.toolsRoot,
         inheritedEnv: deps.inheritedEnv,
@@ -97,6 +94,20 @@ export const createBackgroundJobs = (deps: BackgroundJobsDeps): BackgroundJobs =
   };
 
   return { run, session };
+};
+
+// The provider and model a job runs on: the conversation's own model while its provider is
+// still set up, else the app's default, else the first model of the first provider.
+const chooseProvider = (settings: Settings, preferredModel: string | undefined): Result<{ readonly provider: Provider; readonly parsed: ModelRef }, string> => {
+  const configured = preferredModel !== undefined && modelRefIsConfigured(settings.providers, preferredModel) ? preferredModel : undefined;
+  const reference = configured ?? settings.defaultModel ?? defaultReference(settings.providers);
+  if (reference === undefined) return err('no model is set up yet');
+
+  const parsed = parseModelRef(reference);
+  if (!parsed.ok) return err(parsed.error.message);
+  const provider = settings.providers.find((candidate) => candidate.id === parsed.value.providerId);
+  if (provider === undefined) return err('the model this app is set to use is not configured any more');
+  return ok({ provider, parsed: parsed.value });
 };
 
 // With no explicit choice, the same fallback the app makes on screen: the first model
