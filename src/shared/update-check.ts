@@ -74,15 +74,29 @@ export const isNewer = (latest: string, current: string): boolean => {
   return false;
 };
 
-// The macOS disk image to link, if the release carries one.
-export const pickDmgUrl = (assets: readonly ReleaseAsset[]): string | undefined => assets.find((asset) => asset.name.toLowerCase().endsWith('.dmg'))?.downloadUrl;
+// The architectures a release names its disk images by, as the build writes them
+// (`<product>-<version>-<arch>.dmg`).
+const MAC_ARCHES = ['arm64', 'x64'];
+
+const isDmg = (asset: ReleaseAsset): boolean => asset.name.toLowerCase().endsWith('.dmg');
+const archOf = (asset: ReleaseAsset): string | undefined => MAC_ARCHES.find((arch) => asset.name.toLowerCase().endsWith(`-${arch}.dmg`));
+
+// The macOS disk image to link, if the release carries one this Mac can run: the one named
+// for its architecture, else one named for none (a release from before the images were
+// split), never one built for the other architecture. Without an architecture, the first.
+export const pickDmgUrl = (assets: readonly ReleaseAsset[], arch?: string): string | undefined => {
+  const images = assets.filter(isDmg);
+  const exact = images.find((asset) => arch !== undefined && archOf(asset) === arch);
+  const unnamed = images.find((asset) => arch === undefined || archOf(asset) === undefined);
+  return (exact ?? unnamed)?.downloadUrl;
+};
 
 // Fold the running version and the parsed release into what the UI shows. A release older
 // than or equal to the running build, or one we could not parse, is simply "up to date".
-export const evaluateRelease = (input: { readonly current: string; readonly release: Release }): UpdateStatus => {
+export const evaluateRelease = (input: { readonly current: string; readonly release: Release; readonly arch?: string }): UpdateStatus => {
   const latest = input.release.tag.replace(/^v/i, '');
   if (!isNewer(input.release.tag, input.current)) return { current: input.current, latest, updateAvailable: false };
-  const downloadUrl = pickDmgUrl(input.release.assets);
+  const downloadUrl = pickDmgUrl(input.release.assets, input.arch);
   return {
     current: input.current,
     latest,

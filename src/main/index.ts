@@ -429,6 +429,7 @@ const buildRuntime = (
     repo: UPDATE_REPO,
     currentVersion: app.getVersion(),
     timeoutMs: UPDATE_TIMEOUT_MS,
+    arch: process.arch,
   });
 
   registerIpc({
