@@ -44,6 +44,8 @@ export type ComposerProps = {
   onChangeModel: (value: string) => void;
 };
 
+const isVerticalArrow = (key: string): boolean => key === 'ArrowUp' || key === 'ArrowDown';
+
 export const Composer: FC<ComposerProps> = ({
   value,
   isStreaming,
@@ -74,28 +76,30 @@ export const Composer: FC<ComposerProps> = ({
   // While the skill list is open the arrows and Enter drive it; otherwise Enter sends
   // and shift+enter newlines. A keydown handler on a real textarea, not a
   // contenteditable div: the native element already does selection, IME and undo.
-  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
-    if (isSuggesting) {
-      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-        event.preventDefault();
-        onMoveSuggestion(event.key === 'ArrowDown' ? 1 : -1);
-        return;
-      }
-      if (event.key === 'Enter' || event.key === 'Tab') {
-        event.preventDefault();
-        onPickSuggestion(suggestions[activeSuggestion]?.id ?? '');
-        return;
-      }
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onDismissSuggestions();
-        return;
-      }
+  // The skill list's own keys. True when the key was one of them.
+  const onSuggestionKey = (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
+    if (isVerticalArrow(event.key)) {
+      event.preventDefault();
+      onMoveSuggestion(event.key === 'ArrowDown' ? 1 : -1);
+      return true;
     }
+    if (event.key === 'Enter' || event.key === 'Tab') {
+      event.preventDefault();
+      onPickSuggestion(suggestions[activeSuggestion]?.id ?? '');
+      return true;
+    }
+    if (event.key !== 'Escape') return false;
+    event.preventDefault();
+    onDismissSuggestions();
+    return true;
+  };
+
+  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
+    if (isSuggesting && onSuggestionKey(event)) return;
     // Only when the shell says so, which is never while there is text of the user's own in
     // the box: a multi-line draft needs the arrows for the caret, the way any text area
     // does.
-    if (canRecallHistory && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+    if (canRecallHistory && isVerticalArrow(event.key)) {
       event.preventDefault();
       onRecall(event.key === 'ArrowUp' ? -1 : 1);
       return;

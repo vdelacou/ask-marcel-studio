@@ -40,22 +40,9 @@ const patchMessage = (view: ChatView, messageId: string, patch: (parts: readonly
   return { ...view, messages: view.messages.map((m) => (m.id === messageId ? { ...m, parts: patch(m.parts) } : m)) };
 };
 
-export const applyUIEvent = (view: ChatView, event: UIEvent): ChatView => {
-  if (view.conversationId !== undefined && event.conversationId !== view.conversationId) return view;
-
+// The events that start or resolve a tool call, the agent's own or a helper's.
+const applyToolEvent = (view: ChatView, event: UIEvent): ChatView => {
   switch (event.type) {
-    case 'turn-start':
-      return {
-        ...view,
-        // A new turn clears the last one's error: the user is watching this one now.
-        error: undefined,
-        isStreaming: true,
-        messages: [...view.messages, { id: event.messageId, role: 'assistant', parts: [], createdAt: '' }],
-      };
-
-    case 'text-delta':
-      return patchMessage(view, event.messageId, (parts) => appendText(parts, event.delta));
-
     case 'tool-start':
       return patchMessage(view, event.messageId, (parts) => [...parts, { type: 'tool', toolUseId: event.toolUseId, name: event.name, input: event.input, status: 'running' }]);
 
@@ -74,6 +61,27 @@ export const applyUIEvent = (view: ChatView, event: UIEvent): ChatView => {
         { type: 'tool', toolUseId: event.toolUseId, name: event.name, input: event.input, status: 'running', parentToolUseId: event.parentToolUseId },
       ]);
 
+    default:
+      return view;
+  }
+};
+
+export const applyUIEvent = (view: ChatView, event: UIEvent): ChatView => {
+  if (view.conversationId !== undefined && event.conversationId !== view.conversationId) return view;
+
+  switch (event.type) {
+    case 'turn-start':
+      return {
+        ...view,
+        // A new turn clears the last one's error: the user is watching this one now.
+        error: undefined,
+        isStreaming: true,
+        messages: [...view.messages, { id: event.messageId, role: 'assistant', parts: [], createdAt: '' }],
+      };
+
+    case 'text-delta':
+      return patchMessage(view, event.messageId, (parts) => appendText(parts, event.delta));
+
     case 'turn-done':
       return { ...view, isStreaming: false, lastUsage: event.usage };
 
@@ -84,7 +92,7 @@ export const applyUIEvent = (view: ChatView, event: UIEvent): ChatView => {
       return { ...view, title: event.title };
 
     default:
-      return view;
+      return applyToolEvent(view, event);
   }
 };
 

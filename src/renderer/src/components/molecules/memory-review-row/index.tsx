@@ -42,6 +42,32 @@ const KIND_OPTIONS: readonly { value: MemoryReviewKind; label: string }[] = [
   { value: 'people', label: 'Other people' },
 ];
 
+type ProvenanceProps = Pick<MemoryReviewRowProps, 'quote' | 'enrichment' | 'source' | 'onOpenSource'>;
+
+// Where the word came from: the sentence it was heard in, what the directory adds, and the
+// conversation to open.
+const Provenance: FC<ProvenanceProps> = ({ quote, enrichment, source, onOpenSource }) => (
+  <>
+    {quote.length > 0 && <blockquote className="border-l-2 border-border-subtle pl-3 text-xs italic text-ink-muted">{quote}</blockquote>}
+    {enrichment !== undefined && <p className="text-xs text-ink-muted">From your directory: {enrichment}</p>}
+    {source !== undefined && (
+      <p className="text-xs text-ink-muted">
+        Heard in{' '}
+        <button
+          type="button"
+          onClick={onOpenSource}
+          aria-label={`Open ${source}`}
+          className="rounded font-medium text-ink underline underline-offset-2 transition hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          {source}
+        </button>
+      </p>
+    )}
+  </>
+);
+
+Provenance.displayName = 'Provenance';
+
 export const MemoryReviewRow: FC<MemoryReviewRowProps> = ({
   term,
   kind,
@@ -104,21 +130,7 @@ export const MemoryReviewRow: FC<MemoryReviewRowProps> = ({
         </label>
       </header>
 
-      {quote.length > 0 && <blockquote className="border-l-2 border-border-subtle pl-3 text-xs italic text-ink-muted">{quote}</blockquote>}
-      {enrichment !== undefined && <p className="text-xs text-ink-muted">From your directory: {enrichment}</p>}
-      {source !== undefined && (
-        <p className="text-xs text-ink-muted">
-          Heard in{' '}
-          <button
-            type="button"
-            onClick={onOpenSource}
-            aria-label={`Open ${source}`}
-            className="rounded font-medium text-ink underline underline-offset-2 transition hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
-            {source}
-          </button>
-        </p>
-      )}
+      <Provenance quote={quote} enrichment={enrichment} source={source} onOpenSource={onOpenSource} />
 
       <TextArea
         size="compact"
