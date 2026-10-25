@@ -21,6 +21,9 @@ export type UpdateCheckerDeps = {
   readonly repo: string;
   readonly currentVersion: string;
   readonly timeoutMs: number;
+  // The Mac's architecture (process.arch), so a release with one image per architecture
+  // links the one this Mac runs. Absent, the first image is linked.
+  readonly arch?: string;
 };
 
 export type UpdateChecker = {
@@ -42,7 +45,7 @@ export const createUpdateChecker = (deps: UpdateCheckerDeps): UpdateChecker => {
       if (!response.ok) return undefined;
       const release = parseRelease(await response.json());
       if (release === undefined) return undefined;
-      return evaluateRelease({ current: deps.currentVersion, release });
+      return evaluateRelease({ current: deps.currentVersion, release, ...(deps.arch === undefined ? {} : { arch: deps.arch }) });
     } catch {
       // Offline, timed out, rate-limited, or malformed: keep the status we had.
       return undefined;
