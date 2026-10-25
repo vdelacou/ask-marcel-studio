@@ -38,33 +38,36 @@ const asString = (v: unknown): string | undefined => (typeof v === 'string' ? v 
 
 // Everything else, including anything a future ai release invents, ends the turn
 // cleanly rather than inventing a reason.
-const STOP_REASONS: Readonly<Record<string, StopReason>> = { stop: 'end_turn', length: 'max_tokens', 'tool-calls': 'tool_use' };
-const toStopReason = (finishReason: unknown): StopReason => {
-  const key = asString(finishReason);
-  if (key === 'stop') return STOP_REASONS.stop as StopReason;
-  if (key === 'length') return STOP_REASONS.length as StopReason;
-  if (key === 'tool-calls') return STOP_REASONS['tool-calls'] as StopReason;
-  return 'end_turn';
-};
+const STOP_REASONS: ReadonlyMap<unknown, StopReason> = new Map<unknown, StopReason>([
+  ['stop', 'end_turn'],
+  ['length', 'max_tokens'],
+  ['tool-calls', 'tool_use'],
+]);
+const toStopReason = (finishReason: unknown): StopReason => STOP_REASONS.get(finishReason) ?? 'end_turn';
 
 const closeOpen = (state: StreamState): Step => {
   if (state.open === undefined) return nothing(state);
   return { state: { ...state, open: undefined }, events: [{ type: 'content_block_stop', index: state.open.index }] };
 };
 
-const openText = (state: StreamState, id: string): Step => {
+// The block just opened, and its index for the deltas that follow.
+type Opened = Step & { readonly index: number };
+
+const openText = (state: StreamState, id: string): Opened => {
   const closed = closeOpen(state);
   const index = closed.state.nextIndex;
   return {
+    index,
     state: { ...closed.state, nextIndex: index + 1, open: { index, kind: 'text', id } },
     events: [...closed.events, { type: 'content_block_start', index, content_block: { type: 'text', text: '' } }],
   };
 };
 
-const openTool = (state: StreamState, id: string, name: string): Step => {
+const openTool = (state: StreamState, id: string, name: string): Opened => {
   const closed = closeOpen(state);
   const index = closed.state.nextIndex;
   return {
+    index,
     state: { ...closed.state, nextIndex: index + 1, open: { index, kind: 'tool', id }, relayedTools: [...closed.state.relayedTools, id] },
     // input starts empty: the arguments arrive as input_json_delta.
     events: [...closed.events, { type: 'content_block_start', index, content_block: { type: 'tool_use', id, name, input: {} } }],
@@ -75,11 +78,12 @@ const textDelta = (state: StreamState, part: Record<string, unknown>): Step => {
   const text = asString(part['text']);
   if (text === undefined || text.length === 0) return nothing(state);
 
+  const delta = (index: number): AnthropicSseEvent => ({ type: 'content_block_delta', index, delta: { type: 'text_delta', text } });
+  if (state.open?.kind === 'text') return { state, events: [delta(state.open.index)] };
   // Some providers stream deltas without a text-start; open the block rather than
   // dropping the answer on the floor.
-  const opened = state.open?.kind === 'text' ? nothing(state) : openText(state, asString(part['id']) ?? 'text');
-  const index = opened.state.open?.index ?? 0;
-  return { state: opened.state, events: [...opened.events, { type: 'content_block_delta', index, delta: { type: 'text_delta', text } }] };
+  const opened = openText(state, asString(part['id']) ?? 'text');
+  return { state: opened.state, events: [...opened.events, delta(opened.index)] };
 };
 
 const toolInputDelta = (state: StreamState, part: Record<string, unknown>): Step => {
@@ -96,11 +100,14 @@ const wholeToolCall = (state: StreamState, part: Record<string, unknown>): Step 
   if (id === undefined || name === undefined || state.relayedTools.includes(id)) return nothing(state);
 
   const opened = openTool(state, id, name);
-  const index = opened.state.open?.index ?? 0;
   const closed = closeOpen(opened.state);
   return {
     state: closed.state,
-    events: [...opened.events, { type: 'content_block_delta', index, delta: { type: 'input_json_delta', partial_json: JSON.stringify(part['input'] ?? {}) } }, ...closed.events],
+    events: [
+      ...opened.events,
+      { type: 'content_block_delta', index: opened.index, delta: { type: 'input_json_delta', partial_json: JSON.stringify(part['input'] ?? {}) } },
+      ...closed.events,
+    ],
   };
 };
 
