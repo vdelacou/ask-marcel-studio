@@ -125,6 +125,10 @@ export default [
     languageOptions: { globals: globals.node },
     rules: {
       'func-style': ['error', 'expression'],
+      // Hard rule 35: cyclomatic complexity at most 10 per function. It counts what the size
+      // caps cannot see, a one-line chain of `&&`/`??`/ternaries or a wide `switch`. The fix
+      // is never a bigger number: split the function or dispatch on a map.
+      complexity: ['error', 10],
       'no-console': ['error'],
       'prefer-template': 'error',
       quotes: ['error', 'single', { avoidEscape: true }],
@@ -316,7 +320,7 @@ export default [
     rules: {
       'sonarjs/no-unused-vars': 'off', // duplicates @typescript-eslint/no-unused-vars
       'sonarjs/no-empty-test-file': 'off', // false positives on `describe` test layout
-      'sonarjs/cognitive-complexity': 'off', // we already cap function size; this is noise
+      'sonarjs/cognitive-complexity': 'off', // one metric is enough: the cyclomatic cap of rule 35 above
       // This app's model reference is `providerId::modelId`, and every literal of
       // that shape ('a::b', 'anthropic::claude-opus-4-8') is read by the rule as a
       // compressed IPv6 address. Every hit is a false positive on the core domain
