@@ -23,11 +23,101 @@ const MOCK_BAN_PATHS = [
   },
 ];
 
+// Hard rule 37, dependencies point inward, as lint. The canonical zones name the
+// domain/use-cases/infra layers; this repo's tiers are the Electron processes instead.
+// shared is the pure kernel and imports no other tier and no electron; main and preload
+// see shared only; the renderer sees shared, never main or preload, which reach it
+// through the contextBridge alone; no production code imports src/test-helpers. One
+// object per tier, each carrying the mock ban again, for the replace-not-merge reason
+// above. Tests are outside the zones, and the design system keeps its stricter block.
+const layerZone = (tier, forbidden, extraGroups = []) => ({
+  files: [`src/${tier}/**/*.ts`, `src/${tier}/**/*.tsx`],
+  ignores: ['**/*.test.ts', '**/*.test.tsx', 'src/renderer/src/components/**'],
+  rules: {
+    'no-restricted-imports': [
+      'error',
+      {
+        paths: MOCK_BAN_PATHS,
+        patterns: [
+          {
+            group: [...forbidden.flatMap((name) => [`**/${name}`, `**/${name}/**`]), ...extraGroups],
+            message: `src/${tier} must not import ${[...forbidden, ...extraGroups].join(', ')}: dependencies point inward (hard rule 37).`,
+          },
+        ],
+      },
+    ],
+  },
+});
+
+// The design system's own ban, shared by its block and the two layer blocks after it:
+// atoms never import molecules or organisms, molecules never organisms (rule 37).
+const COMPONENT_PATTERNS = [
+  {
+    // The Electron equivalent of the canonical block's `next`/`next/*` group.
+    // A design-system component reaching for electron, the preload bridge, or
+    // the store is the rule-21 breach this exists to catch.
+    group: ['electron', 'electron/*', '@electron/*', 'zustand', 'zustand/*'],
+    message: 'Design-system components import only `react` and lower design-system layers (rule 21). State and IPC live in src/renderer/src/lib and arrive as props.',
+  },
+  {
+    group: ['**/lib/**', '**/page/**', '**/store/**', '**/ipc/**', '**/shared/**', '**/preload/**', '**/main/**'],
+    message: 'Design-system components never import application code (rule 21). Pass what they need in as props.',
+  },
+];
+
+const componentLayer = (layer, higher) => ({
+  files: [`src/renderer/src/components/${layer}/**/*.tsx`, `src/renderer/src/components/${layer}/**/*.ts`],
+  rules: {
+    'no-restricted-imports': [
+      'error',
+      {
+        paths: MOCK_BAN_PATHS,
+        patterns: [
+          ...COMPONENT_PATTERNS,
+          {
+            group: higher.map((name) => `**/${name}/**`),
+            message: `${layer} never import ${higher.join(' or ')}: the design system's layers point upward only (hard rule 37).`,
+          },
+        ],
+      },
+    ],
+  },
+});
+
 /** @type {import('eslint').Linter.Config[]} */
 export default [
   pluginJs.configs.recommended,
   ...tsPlugin.configs.recommended,
   securityPlugin.configs.recommended,
+  {
+    // Hard rule 15 as lint. A directive comment (`eslint-disable` and kin) is inert and
+    // reported, so nothing inside a file can switch a rule off; every `@ts-` comment is an
+    // error; and the markers other tools read are errors wherever a comment carries them.
+    linterOptions: { noInlineConfig: true },
+    rules: {
+      '@typescript-eslint/ban-ts-comment': ['error', { 'ts-expect-error': true, 'ts-ignore': true, 'ts-nocheck': true, 'ts-check': false }],
+      'no-warning-comments': [
+        'error',
+        {
+          terms: [
+            'prettier-ignore',
+            'stryker disable',
+            'nosonar',
+            'sonar-ignore',
+            'snyk-ignore',
+            'deepcode ignore',
+            'biome-ignore',
+            'oxlint-disable',
+            'c8 ignore',
+            'v8 ignore',
+            'istanbul ignore',
+            'gitleaks:allow',
+          ],
+          location: 'anywhere',
+        },
+      ],
+    },
+  },
   {
     // .mjs included for the dev harnesses in scripts/ (e.g. fake-anthropic.mjs),
     // which run under plain node and need its globals.
@@ -73,6 +163,10 @@ export default [
     files: ['**/*.mjs'],
     rules: { '@typescript-eslint/explicit-function-return-type': 'off' },
   },
+  layerZone('shared', ['main', 'preload', 'renderer', 'test-helpers'], ['electron', 'electron/*', '@electron-toolkit/*']),
+  layerZone('main', ['preload', 'renderer', 'test-helpers']),
+  layerZone('preload', ['main', 'renderer', 'test-helpers']),
+  layerZone('renderer', ['main', 'preload', 'test-helpers']),
   {
     // React + a11y registration. In the canonical Next.js config these plugins arrive
     // via `next/core-web-vitals`. There is no Next here, so they MUST be registered
@@ -103,20 +197,7 @@ export default [
         'error',
         {
           paths: MOCK_BAN_PATHS,
-          patterns: [
-            {
-              // The Electron equivalent of the canonical block's `next`/`next/*` group.
-              // A design-system component reaching for electron, the preload bridge, or
-              // the store is the rule-21 breach this exists to catch.
-              group: ['electron', 'electron/*', '@electron/*', 'zustand', 'zustand/*'],
-              message:
-                'Design-system components import only `react` and lower design-system layers (rule 21). State and IPC live in src/renderer/src/lib and arrive as props.',
-            },
-            {
-              group: ['**/lib/**', '**/page/**', '**/store/**', '**/ipc/**', '**/shared/**', '**/preload/**', '**/main/**'],
-              message: 'Design-system components never import application code (rule 21). Pass what they need in as props.',
-            },
-          ],
+          patterns: COMPONENT_PATTERNS,
         },
       ],
       'no-restricted-syntax': [
@@ -140,6 +221,10 @@ export default [
       'jsx-a11y/click-events-have-key-events': 'error',
     },
   },
+  // After the design-system block, so these win for their files: each re-declares
+  // COMPONENT_PATTERNS beside its own upward-only ban.
+  componentLayer('atoms', ['molecules', 'organisms']),
+  componentLayer('molecules', ['organisms']),
   {
     // ── Styling seal (hard rule 22) ──────────────────────────────────────────────
     // The mirror of rule 21: Tailwind exists only inside components/**. The app side

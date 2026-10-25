@@ -9,7 +9,7 @@
 #   2. commit size       — ≤10 files AND ≤300 lines (insertions + deletions)
 #   3. package.json      — no "latest" / "*" version strings
 #   4. secret scan       — gitleaks protect --staged (degrades gracefully)
-#   5. tests             — bun test
+#   5. tests             — bun run test (random order, rule 36)
 #   6. strict lint       — bun run lint:strict (0 errors AND 0 warnings)
 #   7. typecheck         — the STAGED tree, not the working one (see the script's header)
 #   8. coverage          — bun run coverage (per-tier gates)
@@ -49,8 +49,8 @@ else
   echo "  install: brew install gitleaks (or https://github.com/gitleaks/gitleaks/releases)" >&2
 fi
 
-echo "[5/9] bun test"
-bun test
+echo "[5/9] bun run test"
+bun run test
 
 echo "[6/9] bun run lint:strict"
 bun run lint:strict
