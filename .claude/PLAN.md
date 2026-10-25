@@ -14,13 +14,18 @@ bypass. One pull request per step, each at most 300 lines.
        Done when: lint:strict and the randomized tests green; a planted import across each zone,
        an inline directive and a foreign tool's marker each fail lint.
        DONE: PR #10, 71cd5e0. The tree already obeyed every zone; 13 planted violations failed.
-2. [ ] Rule 38: `check-commit-range.sh` and `check-commit-messages.sh` in CI, the size count
+2. [x] Rule 38: `check-commit-range.sh` and `check-commit-messages.sh` in CI, the size count
        matching the hook's plus the two vendored paths, in the hook too.
        Done when: the range gate's selftest passes with a vendored and an oversized case; the
        skills refresh (4cb8d08) and PR #7's lockfile commit pass it; both run green in CI.
+       DONE: PR #11, 8c68813. The message gate runs from the skill unchanged.
 2b. [ ] `branches.yml` daily (`check-branches.sh`, `check-host.py`), once the owner has run
        `check-host.py --apply`, since it fails until the host settings are in place.
-3. [ ] Rule 35 in shared (16 functions), behind its 100% coverage and mutation gates.
+3. [x] Rule 35 in shared (16 functions), behind its 100% coverage and mutation gates.
+       DONE: four commits, no test edited, every file at 90% mutation or above except
+       translate-stream.ts, 82.14% against 82.41% before the change (a gap that predates it;
+       raising it means new tests, rule 24). Found on the way: PR #10's `bun run test` as
+       Stryker's command killed no mutant at all; fixed first, in 1776f1c.
 4. [ ] Rule 35 in main and scripts (6 functions).
 5. [ ] Rule 35 in the renderer (11 functions), each page checked in the built app.
 6. [ ] `complexity: ['error', 10]` on, and CLAUDE.md binds rules 1-38.
