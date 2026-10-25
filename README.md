@@ -105,7 +105,7 @@ src/renderer/     React + Tailwind v4
 src/test-helpers/ test-only helpers; never imported by production code
 scripts/          atelier gate scripts
 .githooks/        pre-commit (9 gates) + commit-msg (Conventional Commits)
-.github/          workflows: ci.yml (the hook's gates on every push), audit.yml (weekly)
+.github/          workflows: ci.yml (the hook's gates and the commit checks on every push), audit.yml (weekly)
 docs/PLAN.md      the full 7-milestone plan
 .claude/          PLAN.md (current run), LESSONS.md (append-only memory)
 ```
@@ -318,8 +318,13 @@ This repo follows the [atelier](.claude/skills/atelier) standard. Before changin
   once per clone.
 - Every push runs the hook's gates again on GitHub (`.github/workflows/ci.yml`), on a fresh
   frozen-lockfile install and as a user that is not root: identity, package.json, gitleaks over
-  every commit, tests, strict lint, typecheck and coverage. Commit size and mutation run only in
-  the hook, since one judges a single commit and the other takes minutes a file.
+  every commit, tests, strict lint, typecheck and coverage. Each commit the push added is checked
+  for size, a Conventional message and not being a merge commit, so `--no-verify` skips nothing
+  for long. Mutation runs only in the hook, since it takes minutes a file.
+- `main` stays linear (atelier rule 38): a branch lands by rebase or fast-forward, never a merge
+  commit, and the same day it was cut. The size cap is at most 10 files and 300 lines a commit;
+  test lines don't count toward the 300, and `bun.lock` and `.agents/skills/**` don't count at
+  all, so a dependency or skill refresh lands without a bypass.
 - Every Monday, `.github/workflows/audit.yml` runs `bun audit --audit-level=high` on the
   lockfile, so an advisory against a package nobody touched still turns up. Run `bun audit`
   locally for the moderate and low ones too.

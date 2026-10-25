@@ -26,8 +26,16 @@ set -euo pipefail
 MAX_FILES=10
 MAX_LINES=300
 
-files=$(git diff --cached --name-only --diff-filter=ACMR | grep -c '^' || true)
-lines=$(git diff --cached --numstat | awk '$3 !~ /\.(test|spec)\.(ts|tsx)$/ { sum += $1 + $2 } END { print sum + 0 }')
+# VENDORED AND GENERATED FILES ARE NOT COUNTED AT ALL: bun.lock, which the
+# package manager writes, and .agents/skills/**, which `bunx skills update`
+# copies in wholesale. A refresh of either is one upstream change that no
+# slicing can make smaller, and every one before this rule needed --no-verify.
+# The owner's call, 2026-10-25. Keep this in lockstep with
+# scripts/check-commit-range.sh, which applies the same counts in CI.
+VENDORED='^(bun[.]lock|[.]agents/skills/)'
+
+files=$(git diff --cached --name-only --diff-filter=ACMR | grep -cvE "$VENDORED" || true)
+lines=$(git diff --cached --numstat | awk -v vendored="$VENDORED" '$3 !~ /\.(test|spec)\.(ts|tsx)$/ && $3 !~ vendored { sum += $1 + $2 } END { print sum + 0 }')
 
 if [ "${files:-0}" -le "$MAX_FILES" ] && [ "${lines:-0}" -le "$MAX_LINES" ]; then
   exit 0
