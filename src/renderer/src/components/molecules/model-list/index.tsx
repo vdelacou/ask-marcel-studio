@@ -27,44 +27,68 @@ const toneStyles: Record<ModelTestTone, string> = {
 
 const toneStyle = (tone: ModelTestTone | undefined): string => (tone === undefined ? 'text-ink-muted' : toneStyles[tone]);
 
+// What a row's buttons call the model before it has a name.
+const labelFor = (model: string): string => (model === '' ? 'model' : model);
+
+type ModelRowProps = {
+  model: string;
+  test: ModelTestRow | undefined;
+  onRename: (model: string) => void;
+  onRemove: () => void;
+  onTest?: (model: string) => void;
+};
+
+const ModelRow: FC<ModelRowProps> = ({ model, test, onRename, onRemove, onTest }) => (
+  <div className="flex flex-col gap-y-1">
+    <div className="flex items-center gap-x-2">
+      <input
+        value={model}
+        aria-label="Model"
+        placeholder="claude-opus-4-8"
+        onChange={(e) => onRename(e.target.value)}
+        className="min-w-0 flex-1 rounded-md border border-border-subtle bg-surface px-3 py-1.5 text-sm text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+      />
+      {onTest !== undefined && (
+        <button
+          type="button"
+          onClick={() => onTest(model)}
+          disabled={model.trim().length === 0 || test?.isRunning === true}
+          aria-label={`Test ${labelFor(model)}`}
+          className="shrink-0 rounded-md border border-border-subtle px-2.5 py-1.5 text-sm leading-none text-ink transition hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          Test
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`Remove ${labelFor(model)}`}
+        className="shrink-0 rounded-md border border-border-subtle px-2 py-1.5 text-sm leading-none text-ink-muted transition hover:bg-surface-raised hover:text-ink"
+      >
+        ×
+      </button>
+    </div>
+    {test?.message !== undefined && (
+      <p role="status" className={`pl-1 text-xs ${toneStyle(test.tone)}`}>
+        {test.message}
+      </p>
+    )}
+  </div>
+);
+
+ModelRow.displayName = 'ModelRow';
+
 export const ModelList: FC<ModelListProps> = ({ models, tests, onChange, onTest }) => (
   <div className="flex flex-col gap-y-2">
     {models.map((model, index) => (
-      <div key={`model-${String(index)}`} className="flex flex-col gap-y-1">
-        <div className="flex items-center gap-x-2">
-          <input
-            value={model}
-            aria-label="Model"
-            placeholder="claude-opus-4-8"
-            onChange={(e) => onChange(models.map((m, i) => (i === index ? e.target.value : m)))}
-            className="min-w-0 flex-1 rounded-md border border-border-subtle bg-surface px-3 py-1.5 text-sm text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
-          />
-          {onTest !== undefined && (
-            <button
-              type="button"
-              onClick={() => onTest(model)}
-              disabled={model.trim().length === 0 || tests?.[model]?.isRunning === true}
-              aria-label={`Test ${model === '' ? 'model' : model}`}
-              className="shrink-0 rounded-md border border-border-subtle px-2.5 py-1.5 text-sm leading-none text-ink transition hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            >
-              Test
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => onChange(models.filter((_, i) => i !== index))}
-            aria-label={`Remove ${model === '' ? 'model' : model}`}
-            className="shrink-0 rounded-md border border-border-subtle px-2 py-1.5 text-sm leading-none text-ink-muted transition hover:bg-surface-raised hover:text-ink"
-          >
-            ×
-          </button>
-        </div>
-        {tests?.[model]?.message !== undefined && (
-          <p role="status" className={`pl-1 text-xs ${toneStyle(tests[model]?.tone)}`}>
-            {tests[model]?.message}
-          </p>
-        )}
-      </div>
+      <ModelRow
+        key={`model-${String(index)}`}
+        model={model}
+        test={tests?.[model]}
+        onRename={(renamed) => onChange(models.map((m, i) => (i === index ? renamed : m)))}
+        onRemove={() => onChange(models.filter((_, i) => i !== index))}
+        {...(onTest === undefined ? {} : { onTest })}
+      />
     ))}
     <button
       type="button"

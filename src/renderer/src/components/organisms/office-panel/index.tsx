@@ -69,6 +69,80 @@ const statusTone = (view: OfficeView): string => {
 // False while healthy: nothing is broken, so there is nothing for the button to fix.
 const canRefresh = (view: OfficeView): boolean => view.kind === 'signed-out' || (view.kind === 'signed-in' && view.unavailable.length > 0);
 
+type OfficeHeaderProps = Pick<OfficePanelProps, 'view' | 'isLoggingIn' | 'isSigningOut' | 'onLogin' | 'onSignOut'>;
+
+const OfficeHeader: FC<OfficeHeaderProps> = ({ view, isLoggingIn, isSigningOut, onLogin, onSignOut }) => (
+  <header className="flex items-baseline justify-between gap-x-4">
+    <div className="flex flex-col gap-y-1">
+      <h2 className="text-lg font-semibold tracking-tight text-ink">Microsoft 365</h2>
+      <p className={`text-sm ${statusTone(view)}`}>{statusLine(view)}</p>
+      {view.kind === 'signed-in' && view.renewalNote !== undefined && <p className="text-xs text-ink-muted">{view.renewalNote}</p>}
+    </div>
+    {view.kind !== 'loading' && (
+      <div className="flex shrink-0 items-center gap-x-2">
+        {canRefresh(view) && (
+          <Button variant={view.kind === 'signed-in' ? 'secondary' : 'primary'} onClick={onLogin} disabled={isLoggingIn || isSigningOut}>
+            {buttonLabel(view, isLoggingIn)}
+          </Button>
+        )}
+        {view.kind === 'signed-in' && (
+          <Button variant="secondary" onClick={onSignOut} disabled={isLoggingIn || isSigningOut}>
+            {isSigningOut ? 'Signing out…' : 'Sign out'}
+          </Button>
+        )}
+      </div>
+    )}
+  </header>
+);
+
+OfficeHeader.displayName = 'OfficeHeader';
+
+type SignedInDetailsProps = {
+  view: Extract<OfficeView, { kind: 'signed-in' }>;
+  isScopesOpen: boolean;
+  onToggleScopes: () => void;
+};
+
+// What a signed-in user can see about their own grant: what stopped working, and every
+// permission in words.
+const SignedInDetails: FC<SignedInDetailsProps> = ({ view, isScopesOpen, onToggleScopes }) => (
+  <>
+    {view.unavailable.length > 0 && (
+      <div className="flex flex-col gap-y-1 rounded-panel border border-border-subtle bg-surface-raised p-3">
+        <p className="text-sm text-ink">One part of your sign-in needs a quick refresh. Until then, Marcel cannot:</p>
+        <ul className="flex list-disc flex-col gap-y-0.5 pl-5 text-sm text-ink-muted">
+          {view.unavailable.map((entry) => (
+            <li key={entry}>{entry}</li>
+          ))}
+        </ul>
+      </div>
+    )}
+
+    <div className="flex flex-col gap-y-2">
+      <button
+        type="button"
+        aria-expanded={isScopesOpen}
+        onClick={onToggleScopes}
+        className="self-start rounded-md text-sm text-ink-muted underline-offset-4 transition hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      >
+        {isScopesOpen ? 'Hide the details' : 'What exactly can it access?'}
+      </button>
+      {isScopesOpen && (
+        <ul className="flex flex-col gap-y-1.5 rounded-panel border border-border-subtle p-4">
+          {view.scopes.map((row) => (
+            <li key={row.scope} className="flex flex-wrap items-baseline gap-x-2">
+              <span className="text-sm text-ink">{row.label}</span>
+              <span className="font-mono text-[10px] text-ink-muted">{row.scope}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  </>
+);
+
+SignedInDetails.displayName = 'SignedInDetails';
+
 export const OfficePanel: FC<OfficePanelProps> = ({
   view,
   isLoggingIn,
@@ -84,61 +158,9 @@ export const OfficePanel: FC<OfficePanelProps> = ({
   onSignOut,
 }) => (
   <section className="flex flex-col gap-y-4">
-    <header className="flex items-baseline justify-between gap-x-4">
-      <div className="flex flex-col gap-y-1">
-        <h2 className="text-lg font-semibold tracking-tight text-ink">Microsoft 365</h2>
-        <p className={`text-sm ${statusTone(view)}`}>{statusLine(view)}</p>
-        {view.kind === 'signed-in' && view.renewalNote !== undefined && <p className="text-xs text-ink-muted">{view.renewalNote}</p>}
-      </div>
-      {view.kind !== 'loading' && (
-        <div className="flex shrink-0 items-center gap-x-2">
-          {canRefresh(view) && (
-            <Button variant={view.kind === 'signed-in' ? 'secondary' : 'primary'} onClick={onLogin} disabled={isLoggingIn || isSigningOut}>
-              {buttonLabel(view, isLoggingIn)}
-            </Button>
-          )}
-          {view.kind === 'signed-in' && (
-            <Button variant="secondary" onClick={onSignOut} disabled={isLoggingIn || isSigningOut}>
-              {isSigningOut ? 'Signing out…' : 'Sign out'}
-            </Button>
-          )}
-        </div>
-      )}
-    </header>
+    <OfficeHeader view={view} isLoggingIn={isLoggingIn} isSigningOut={isSigningOut} onLogin={onLogin} onSignOut={onSignOut} />
 
-    {view.kind === 'signed-in' && view.unavailable.length > 0 && (
-      <div className="flex flex-col gap-y-1 rounded-panel border border-border-subtle bg-surface-raised p-3">
-        <p className="text-sm text-ink">One part of your sign-in needs a quick refresh. Until then, Marcel cannot:</p>
-        <ul className="flex list-disc flex-col gap-y-0.5 pl-5 text-sm text-ink-muted">
-          {view.unavailable.map((entry) => (
-            <li key={entry}>{entry}</li>
-          ))}
-        </ul>
-      </div>
-    )}
-
-    {view.kind === 'signed-in' && (
-      <div className="flex flex-col gap-y-2">
-        <button
-          type="button"
-          aria-expanded={isScopesOpen}
-          onClick={onToggleScopes}
-          className="self-start rounded-md text-sm text-ink-muted underline-offset-4 transition hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-        >
-          {isScopesOpen ? 'Hide the details' : 'What exactly can it access?'}
-        </button>
-        {isScopesOpen && (
-          <ul className="flex flex-col gap-y-1.5 rounded-panel border border-border-subtle p-4">
-            {view.scopes.map((row) => (
-              <li key={row.scope} className="flex flex-wrap items-baseline gap-x-2">
-                <span className="text-sm text-ink">{row.label}</span>
-                <span className="font-mono text-[10px] text-ink-muted">{row.scope}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    )}
+    {view.kind === 'signed-in' && <SignedInDetails view={view} isScopesOpen={isScopesOpen} onToggleScopes={onToggleScopes} />}
 
     {error !== undefined && (
       <p role="alert" className="rounded-md border border-danger bg-danger-wash px-3 py-2 text-xs text-danger">
