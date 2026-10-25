@@ -30,6 +30,8 @@ import type { TranslatedRequest } from '../../../shared/gateway/translate-reques
 import { parseModelRef } from '../../../shared/model-ref.ts';
 import { formatError } from '../../../shared/utilities/format-error.ts';
 import type { Provider } from '../../../shared/types.ts';
+import type { Result } from '../../../shared/result.ts';
+import { err, ok } from '../../../shared/result.ts';
 
 // The gateway is reached only by an openai-kind provider (session-env points the agent here
 // for those alone), and only that kind carries the baseUrl an upstream call needs.
@@ -245,6 +247,14 @@ export const createGateway = (deps: GatewayDeps): Gateway => {
     );
   };
 
+  const parseJsonBody = (body: string): Result<unknown, string> => {
+    try {
+      return ok(JSON.parse(body));
+    } catch (e) {
+      return err(`body is not json: ${formatError(e)}`);
+    }
+  };
+
   const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     // The SDK probes this before anything else; a 404 here and it never tries again.
     if (req.method === 'HEAD') {
@@ -259,14 +269,12 @@ export const createGateway = (deps: GatewayDeps): Gateway => {
     const path = new URL(req.url ?? '/', 'http://127.0.0.1').pathname;
     if (req.method !== 'POST' || path !== '/v1/messages') return sendError(res, 404, 'not_found_error', `no route for ${req.method ?? '?'} ${path}`);
 
-    const body = await readBody(req);
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(body);
-    } catch (e) {
-      return sendError(res, 400, 'invalid_request_error', `body is not json: ${formatError(e)}`);
-    }
+    const parsed = parseJsonBody(await readBody(req));
+    if (!parsed.ok) return sendError(res, 400, 'invalid_request_error', parsed.error);
+    return answer(res, parsed.value);
+  };
 
+  const answer = async (res: ServerResponse, parsed: unknown): Promise<void> => {
     const request = translateRequest(parsed);
     if (!request.ok) return sendError(res, 400, 'invalid_request_error', request.error.message);
 

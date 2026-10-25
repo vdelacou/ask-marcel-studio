@@ -25,7 +25,7 @@ import { WITHDRAWN_TOOLS, withdrawnTaskRules } from '../../../shared/agents-doc.
 import { buildContextBlocks } from '../../../shared/context-blocks.ts';
 import type { SdkAgentDefinition } from '../../../shared/agents-doc.ts';
 import type { ChatError, ChatSendInput, UIEvent } from '../../../shared/ipc-contract.ts';
-import type { Conversation, Provider, Settings } from '../../../shared/types.ts';
+import type { Conversation, MessagePart, Provider, Settings } from '../../../shared/types.ts';
 import type { ConversationsStore } from '../store/conversations-store.ts';
 import type { Gateway } from '../gateway/gateway-server.ts';
 import type { SettingsStore } from '../store/settings-store.ts';
@@ -85,6 +85,16 @@ export type AgentRuntime = {
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
+// The command of a Bash call this event reports as failed, or nothing.
+const failedBashCommand = (event: UIEvent, parts: readonly MessagePart[]): string | undefined => {
+  if (event.type !== 'tool-result' && event.type !== 'subagent-tool-result') return undefined;
+  if (!event.isError) return undefined;
+  const part = parts.find((candidate) => candidate.type === 'tool' && candidate.toolUseId === event.toolUseId);
+  if (part?.type !== 'tool' || part.name !== 'Bash') return undefined;
+  const command = isRecord(part.input) ? part.input['command'] : undefined;
+  return typeof command === 'string' ? command : undefined;
+};
+
 const newMessageId = (): string => crypto.randomUUID();
 
 const resolveProvider = (settings: Settings, modelRef: string): Result<{ provider: Provider; modelId: string }, ChatError> => {
@@ -133,12 +143,8 @@ export const createAgentRuntime = (deps: AgentRuntimeDeps): AgentRuntime => {
     // re-checked against the base policy WITHOUT the failure list, and recorded only if
     // that allows it.
     const noteFailure = (event: UIEvent): void => {
-      if (event.type !== 'tool-result' && event.type !== 'subagent-tool-result') return;
-      if (!event.isError) return;
-      const part = fold.parts.find((candidate) => candidate.type === 'tool' && candidate.toolUseId === event.toolUseId);
-      if (part?.type !== 'tool' || part.name !== 'Bash') return;
-      const command = isRecord(part.input) ? part.input['command'] : undefined;
-      if (typeof command !== 'string') return;
+      const command = failedBashCommand(event, fold.parts);
+      if (command === undefined) return;
       const base = evaluateBashCommand(command, { workspaceDir: workspace, disabledOfficeCategories, officeCommandCategories: deps.officeCommandCategories });
       if (!base.allow) return;
       failures.set(conversation.id, recordFailure(failures.get(conversation.id) ?? emptyFailures(), command));

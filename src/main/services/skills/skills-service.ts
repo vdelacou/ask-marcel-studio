@@ -225,7 +225,7 @@ export const createSkillsService = (deps: SkillsServiceDeps): SkillsService => {
    * Retired names are removed first, so an app update that renamed the pack does not
    * leave the old skill loading forever.
    */
-  const seedBuiltins = async (): Promise<Result<null, SkillsError>> => {
+  const retireBuiltins = async (): Promise<Result<null, SkillsError>> => {
     for (const name of deps.retiredBuiltinNames) {
       const checked = skillFolderName(name);
       // An unparseable retired name is not worth failing the whole seed over: it just
@@ -239,20 +239,31 @@ export const createSkillsService = (deps: SkillsServiceDeps): SkillsService => {
         return err({ kind: 'write-failed', message: `could not retire the built-in skill ${name}: ${formatError(e)}` });
       }
     }
+    return ok(null);
+  };
+
+  // One bundled skill: written, refreshed, or left alone because the user changed it.
+  // Returns the seed record as it stands afterwards.
+  const seedBuiltin = async (name: string, meta: ReturnType<typeof parseSeedMeta>): Promise<Result<ReturnType<typeof parseSeedMeta>, SkillsError>> => {
+    const checked = skillFolderName(name);
+    if (!checked.ok) return err({ kind: 'bad-name', message: checked.error.message });
+
+    const bundled = await readTextFile(join(deps.builtinSource, name, 'SKILL.md'));
+    if (!bundled.ok) return err({ kind: 'write-failed', message: `could not read the bundled skill ${name}: ${bundled.error.message}` });
+
+    const current = await readTextFile(join(skillDir(deps.userData, checked.value), 'SKILL.md'));
+    const userEdited = current.ok && hasSeedRecord(meta, checked.value) && !isSeededContent(meta, checked.value, sha256(current.value));
+    if (userEdited) return ok(meta);
+    return copyBuiltin(name, checked.value, bundled.value, meta);
+  };
+
+  const seedBuiltins = async (): Promise<Result<null, SkillsError>> => {
+    const retired = await retireBuiltins();
+    if (!retired.ok) return retired;
 
     let meta = await readMeta();
     for (const name of deps.builtinNames) {
-      const checked = skillFolderName(name);
-      if (!checked.ok) return err({ kind: 'bad-name', message: checked.error.message });
-
-      const bundled = await readTextFile(join(deps.builtinSource, name, 'SKILL.md'));
-      if (!bundled.ok) return err({ kind: 'write-failed', message: `could not read the bundled skill ${name}: ${bundled.error.message}` });
-
-      const current = await readTextFile(join(skillDir(deps.userData, checked.value), 'SKILL.md'));
-      const userEdited = current.ok && hasSeedRecord(meta, checked.value) && !isSeededContent(meta, checked.value, sha256(current.value));
-      if (userEdited) continue;
-
-      const seeded = await copyBuiltin(name, checked.value, bundled.value, meta);
+      const seeded = await seedBuiltin(name, meta);
       if (!seeded.ok) return seeded;
       meta = seeded.value;
     }
