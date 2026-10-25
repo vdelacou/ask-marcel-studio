@@ -67,48 +67,48 @@ export const toolBadge = (name: string, input: unknown): string => {
   return command !== undefined && OFFICE_CLI.test(command) ? 'Ask Marcel Command' : name;
 };
 
-export const toolLabel = (name: string, input: unknown): string => {
-  switch (name) {
-    case 'Bash':
-      // The agent writes this itself, in the user's language, for every bash call.
-      return truncate(field(input, 'description') ?? 'Running a command');
-    case 'Read':
-      return truncate(named(field(input, 'file_path'), 'Reading', 'Reading a file'));
-    case 'Write':
-      return truncate(named(field(input, 'file_path'), 'Creating', 'Creating a file'));
-    case 'Edit':
-    case 'MultiEdit':
-      return truncate(named(field(input, 'file_path'), 'Editing', 'Editing a file'));
-    case 'NotebookEdit':
-      return 'Editing a notebook';
-    case 'Grep':
-      return truncate(quoted(field(input, 'pattern'), 'Searching for', 'Searching your files'));
-    case 'Glob':
-      return 'Looking for files';
-    // Withdrawn (see WITHDRAWN_TOOLS): no new turn can produce one. Kept so the
-    // conversations that already contain a search still read as sentences.
-    case 'WebSearch':
-      return truncate(quoted(field(input, 'query'), 'Searching the web for', 'Searching the web'));
-    case 'WebFetch': {
-      const url = field(input, 'url');
-      const host = url === undefined ? undefined : hostOf(url);
-      return truncate(host === undefined ? 'Reading a web page' : `Reading ${host}`);
-    }
-    case 'Skill': {
-      const skill = field(input, 'skill') ?? field(input, 'command') ?? field(input, 'name');
-      return truncate(skill === undefined ? 'Using a skill' : `Using the ${skill} skill`);
-    }
-    // The SDK has named this tool both ways across versions.
-    case 'Task':
-    case 'Agent': {
-      const description = field(input, 'description');
-      if (description !== undefined) return truncate(description);
-      const helper = field(input, 'subagent_type');
-      return truncate(helper === undefined ? 'Asking an agent' : `Asking the ${helper} agent`);
-    }
-    case 'TodoWrite':
-      return 'Organising the steps';
-    default:
-      return truncate(prettifyName(name));
-  }
+type LabelOf = (input: unknown) => string;
+
+const fileLabel = (input: unknown, verb: string, fallback: string): string => truncate(named(field(input, 'file_path'), verb, fallback));
+
+const webPageLabel: LabelOf = (input) => {
+  const url = field(input, 'url');
+  const host = url === undefined ? undefined : hostOf(url);
+  return truncate(host === undefined ? 'Reading a web page' : `Reading ${host}`);
 };
+
+const skillLabel: LabelOf = (input) => {
+  const skill = field(input, 'skill') ?? field(input, 'command') ?? field(input, 'name');
+  return truncate(skill === undefined ? 'Using a skill' : `Using the ${skill} skill`);
+};
+
+const agentLabel: LabelOf = (input) => {
+  const description = field(input, 'description');
+  if (description !== undefined) return truncate(description);
+  const helper = field(input, 'subagent_type');
+  return truncate(helper === undefined ? 'Asking an agent' : `Asking the ${helper} agent`);
+};
+
+// One sentence per tool the agent knows. Anything else is named after the tool itself.
+const TOOL_LABELS: ReadonlyMap<string, LabelOf> = new Map<string, LabelOf>([
+  // The agent writes this itself, in the user's language, for every bash call.
+  ['Bash', (input) => truncate(field(input, 'description') ?? 'Running a command')],
+  ['Read', (input) => fileLabel(input, 'Reading', 'Reading a file')],
+  ['Write', (input) => fileLabel(input, 'Creating', 'Creating a file')],
+  ['Edit', (input) => fileLabel(input, 'Editing', 'Editing a file')],
+  ['MultiEdit', (input) => fileLabel(input, 'Editing', 'Editing a file')],
+  ['NotebookEdit', () => 'Editing a notebook'],
+  ['Grep', (input) => truncate(quoted(field(input, 'pattern'), 'Searching for', 'Searching your files'))],
+  ['Glob', () => 'Looking for files'],
+  // Withdrawn (see WITHDRAWN_TOOLS): no new turn can produce one. Kept so the
+  // conversations that already contain a search still read as sentences.
+  ['WebSearch', (input) => truncate(quoted(field(input, 'query'), 'Searching the web for', 'Searching the web'))],
+  ['WebFetch', webPageLabel],
+  ['Skill', skillLabel],
+  // The SDK has named this tool both ways across versions.
+  ['Task', agentLabel],
+  ['Agent', agentLabel],
+  ['TodoWrite', () => 'Organising the steps'],
+]);
+
+export const toolLabel = (name: string, input: unknown): string => TOOL_LABELS.get(name)?.(input) ?? truncate(prettifyName(name));
