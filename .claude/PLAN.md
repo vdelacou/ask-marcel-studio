@@ -29,8 +29,17 @@ bypass. One pull request per step, each at most 300 lines.
 4. [x] Rule 35 in main and scripts (6 functions).
        DONE: one commit; agent-runtime and background-jobs have no unit tests, so the built
        app (`bun run build`) and the typecheck back them.
-5. [ ] Rule 35 in the renderer (11 functions), each page checked in the built app.
-6. [ ] `complexity: ['error', 10]` on, and CLAUDE.md binds rules 1-38.
+5. [x] Rule 35 in the renderer (11 functions), each page checked in the built app.
+       DONE: five commits. The built app was driven under Xvfb against the pre-refactor build
+       (9a43225), same steps on both: 29 steps through Settings (a provider, its model rows,
+       the Claude plan kind, Skills and a skill, Helpers and one, Microsoft 365), the sidebar,
+       a conversation, the composer's skill list and keys, the attach menu, the model picker
+       and the collapsed sidebar. Every step's HTML is identical once random ids are masked,
+       and no page error. Not reached without a Microsoft 365 identity: Memory and its review
+       cards, the user menu, the signed-in office panel, the update banner.
+6. [x] `complexity: ['error', 10]` on, and CLAUDE.md binds rules 1-38.
+       DONE: lint:strict green on the whole tree; a planted 11-branch function fails it.
+       Rule 38's host settings and `branches.yml` (step 2b) still wait on the owner.
 
 # Current run: the dependency advisories, a weekly audit, then the agent SDK at 0.3.289 (approved 2026-10-04, "1 ok, 2 weekly is enough, 3 ok")
 
