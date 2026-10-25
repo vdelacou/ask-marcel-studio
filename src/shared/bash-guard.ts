@@ -70,56 +70,73 @@ type Segment = {
 
 const SEPARATORS = ['&', '|', ';', '\n', '(', ')', '{', '}'];
 
+// The scanner's state while it walks a command one character at a time.
+type Scan = {
+  readonly segments: Segment[];
+  words: string[];
+  word: string;
+  opaque: boolean;
+  quote: "'" | '"' | undefined;
+};
+
+const endWord = (scan: Scan): void => {
+  if (scan.word.length > 0) scan.words.push(scan.word);
+  scan.word = '';
+};
+
+const endSegment = (scan: Scan): void => {
+  endWord(scan);
+  scan.segments.push({ words: scan.words, opaque: scan.opaque });
+  scan.words = [];
+  scan.opaque = false;
+};
+
+const scanQuoted = (scan: Scan, character: string, next: string | undefined): void => {
+  if (character === scan.quote) {
+    scan.quote = undefined;
+    return;
+  }
+  // A substitution is literal text inside single quotes and a real command inside
+  // double ones, so only the second kind hides anything.
+  if (scan.quote === '"' && character === '$' && next === '(') {
+    scan.opaque = true;
+    return;
+  }
+  scan.word += character;
+};
+
+const scanUnquoted = (scan: Scan, character: string, next: string | undefined): void => {
+  if (character === "'" || character === '"') {
+    scan.quote = character;
+    return;
+  }
+  if (character === '`' || (character === '$' && next === '(')) {
+    scan.opaque = true;
+    scan.word += character;
+    return;
+  }
+  if (SEPARATORS.includes(character)) {
+    endSegment(scan);
+    return;
+  }
+  if (character === ' ' || character === '\t') {
+    endWord(scan);
+    return;
+  }
+  scan.word += character;
+};
+
 // A quote-aware split into the pieces the shell would run one after another. Anything
 // this cannot read confidently is marked opaque rather than guessed at.
 const splitSegments = (command: string): readonly Segment[] => {
-  const segments: Segment[] = [];
-  let words: string[] = [];
-  let word = '';
-  let opaque = false;
-  let quote: "'" | '"' | undefined;
-
-  const endWord = (): void => {
-    if (word.length > 0) words.push(word);
-    word = '';
-  };
-  const endSegment = (): void => {
-    endWord();
-    segments.push({ words, opaque });
-    words = [];
-    opaque = false;
-  };
-
+  const scan: Scan = { segments: [], words: [], word: '', opaque: false, quote: undefined };
   for (const [at, character] of [...command].entries()) {
-    if (quote !== undefined) {
-      if (character === quote) quote = undefined;
-      // A substitution is literal text inside single quotes and a real command inside
-      // double ones, so only the second kind hides anything.
-      else if (quote === '"' && character === '$' && command[at + 1] === '(') opaque = true;
-      else word += character;
-      continue;
-    }
-    if (character === "'" || character === '"') {
-      quote = character;
-      continue;
-    }
-    if (character === '`' || (character === '$' && command[at + 1] === '(')) {
-      opaque = true;
-      word += character;
-      continue;
-    }
-    if (SEPARATORS.includes(character)) {
-      endSegment();
-      continue;
-    }
-    if (character === ' ' || character === '\t') {
-      endWord();
-      continue;
-    }
-    word += character;
+    const next = command[at + 1];
+    if (scan.quote === undefined) scanUnquoted(scan, character, next);
+    else scanQuoted(scan, character, next);
   }
-  endSegment();
-  return segments.filter((segment) => segment.words.length > 0);
+  endSegment(scan);
+  return scan.segments.filter((segment) => segment.words.length > 0);
 };
 
 const isAssignment = (word: string): boolean => /^[A-Za-z_]\w*=/.test(word);
@@ -230,14 +247,73 @@ const MAX_SHELL_DEPTH = 3;
 
 const normaliseCommand = (command: string): string => command.replace(/\s+/g, ' ').trim();
 
+const machineVerdict = (head: string): BashGuardVerdict => {
+  if (PRIVILEGE.includes(head)) return deny(`commands run as an administrator are never available here. ${CONTINUE_HINT}`);
+  if (SYSTEM_TOOLS.includes(head) || FORMAT_TOOL_PREFIXES.some((prefix) => head.startsWith(prefix)))
+    return deny(`${head} changes the machine itself and is not available here. ${CONTINUE_HINT}`);
+  return ALLOW;
+};
+
+// Paths handed in on stdin cannot be checked, so a deletion driven by xargs is
+// refused whatever its arguments look like.
+const xargsVerdict = (_policy: BashGuardPolicy, _cwd: string | undefined, words: readonly string[]): BashGuardVerdict => {
+  const inner = words.slice(1).find((word) => !isFlag(word));
+  if (inner === undefined || !DELETE_VERBS.includes(inner)) return ALLOW;
+  return deny(`this deletes whatever another command produced, which cannot be checked. List the files first, then delete them by name. ${CONTINUE_HINT}`);
+};
+
+const deleteVerdict = (policy: BashGuardPolicy, cwd: string | undefined, words: readonly string[]): BashGuardVerdict => {
+  const outside = outsideTarget(policy, cwd, operandsOf(words));
+  if (outside === undefined) return ALLOW;
+  return deny(`this would delete ${outside}, which is outside this conversation's own folder. ${CONTINUE_HINT}`);
+};
+
+type HeadCheck = (policy: BashGuardPolicy, cwd: string | undefined, words: readonly string[]) => BashGuardVerdict;
+
+// The command names whose arguments decide whether they are allowed.
+const HEAD_CHECKS: ReadonlyMap<string, HeadCheck> = new Map<string, HeadCheck>([
+  ['xargs', xargsVerdict],
+  ['find', findVerdict],
+  ['dd', ddVerdict],
+  ...DELETE_VERBS.map((verb): [string, HeadCheck] => [verb, deleteVerdict]),
+  ...PERMISSION_TOOLS.map((tool): [string, HeadCheck] => [tool, permissionVerdict]),
+]);
+
+// Where a `cd` lands. A bare `cd`, `cd -`, `cd ~` or `cd $DIR` all land somewhere this
+// cannot name, and from then on no relative path in the line is provable.
+const cdTarget = (cwd: string | undefined, words: readonly string[]): string | undefined => {
+  const target = operandsOf(words)[0];
+  if (target === undefined || target === '-' || target.startsWith('~') || target.includes('$') || cwd === undefined) return undefined;
+  return resolve(cwd, target);
+};
+
+const segmentVerdict = (policy: BashGuardPolicy, cwd: string | undefined, words: readonly string[], depth: number): BashGuardVerdict => {
+  // Empty only when the whole segment was wrapper words; no rule matches '' either way.
+  const [head = ''] = words;
+
+  const office = officeVerdict(policy, words);
+  if (!office.allow) return office;
+  const machine = machineVerdict(head);
+  if (!machine.allow) return machine;
+  if (SHELLS.includes(head) && depth < MAX_SHELL_DEPTH) return shellVerdict(policy, words, depth);
+  return HEAD_CHECKS.get(head)?.(policy, cwd, words) ?? ALLOW;
+};
+
+// `sh -c '<string>'`: the string is the real command, checked as one more level down.
+const shellVerdict = (policy: BashGuardPolicy, words: readonly string[], depth: number): BashGuardVerdict => {
+  const flagAt = words.findIndex((word, index) => index > 0 && word.startsWith('-') && word.includes('c'));
+  const inner = flagAt === -1 ? undefined : words[flagAt + 1];
+  if (inner === undefined) return ALLOW;
+  return evaluate(inner, policy, depth + 1);
+};
+
+const REPEATED_FAILURE =
+  'this exact command has already failed twice in this conversation. Do not run it again unchanged: re-read the error, check the flags (cli-cheatsheet.md, --help, or `ask-marcel-office docs <command>`), and take a different approach.';
+
 const evaluate = (command: string, policy: BashGuardPolicy, depth: number): BashGuardVerdict => {
   // Checked before anything else and only at the top level (depth 0), because it is the
   // command the model actually ran that has been failing, not a fragment inside it.
-  if (depth === 0 && policy.repeatedlyFailedCommands?.includes(normaliseCommand(command)) === true) {
-    return deny(
-      'this exact command has already failed twice in this conversation. Do not run it again unchanged: re-read the error, check the flags (cli-cheatsheet.md, --help, or `ask-marcel-office docs <command>`), and take a different approach.'
-    );
-  }
+  if (depth === 0 && policy.repeatedlyFailedCommands?.includes(normaliseCommand(command)) === true) return deny(REPEATED_FAILURE);
   const segments = splitSegments(command);
   const opaque = opaqueVerdict(command, segments);
   if (!opaque.allow) return opaque;
@@ -245,68 +321,10 @@ const evaluate = (command: string, policy: BashGuardPolicy, depth: number): Bash
   let cwd: string | undefined = policy.workspaceDir;
   for (const segment of segments) {
     const words = realWords(segment.words);
-    // Empty only when the whole segment was wrapper words; no rule matches '' either way.
-    const [head = ''] = words;
-
-    const office = officeVerdict(policy, words);
-    if (!office.allow) return office;
-
-    if (PRIVILEGE.includes(head)) return deny(`commands run as an administrator are never available here. ${CONTINUE_HINT}`);
-    if (SYSTEM_TOOLS.includes(head) || FORMAT_TOOL_PREFIXES.some((prefix) => head.startsWith(prefix)))
-      return deny(`${head} changes the machine itself and is not available here. ${CONTINUE_HINT}`);
-
-    if (SHELLS.includes(head) && depth < MAX_SHELL_DEPTH) {
-      // `sh -c '<string>'`: the string is the real command.
-      const flagAt = words.findIndex((word, index) => index > 0 && word.startsWith('-') && word.includes('c'));
-      const inner = flagAt === -1 ? undefined : words[flagAt + 1];
-      if (inner !== undefined) {
-        const nested = evaluate(inner, policy, depth + 1);
-        if (!nested.allow) return nested;
-      }
-    }
-
-    if (head === 'cd') {
-      const target = operandsOf(words)[0];
-      // A bare `cd`, `cd -`, `cd ~` or `cd $DIR` all land somewhere this cannot name,
-      // and from then on no relative path in the line is provable.
-      cwd = target === undefined || target === '-' || target.startsWith('~') || target.includes('$') || cwd === undefined ? undefined : resolve(cwd, target);
-      continue;
-    }
-
-    // Paths handed in on stdin cannot be checked, so a deletion driven by xargs is
-    // refused whatever its arguments look like.
-    if (head === 'xargs') {
-      const inner = words.slice(1).find((word) => !isFlag(word));
-      if (inner !== undefined && DELETE_VERBS.includes(inner)) {
-        return deny(`this deletes whatever another command produced, which cannot be checked. List the files first, then delete them by name. ${CONTINUE_HINT}`);
-      }
-      continue;
-    }
-
-    if (DELETE_VERBS.includes(head)) {
-      const outside = outsideTarget(policy, cwd, operandsOf(words));
-      if (outside !== undefined) return deny(`this would delete ${outside}, which is outside this conversation's own folder. ${CONTINUE_HINT}`);
-      continue;
-    }
-
-    if (head === 'find') {
-      const verdict = findVerdict(policy, cwd, words);
-      if (!verdict.allow) return verdict;
-      continue;
-    }
-
-    if (head === 'dd') {
-      const verdict = ddVerdict(policy, cwd, words);
-      if (!verdict.allow) return verdict;
-      continue;
-    }
-
-    if (PERMISSION_TOOLS.includes(head)) {
-      const verdict = permissionVerdict(policy, cwd, words);
-      if (!verdict.allow) return verdict;
-    }
+    const verdict = segmentVerdict(policy, cwd, words, depth);
+    if (!verdict.allow) return verdict;
+    if (words[0] === 'cd') cwd = cdTarget(cwd, words);
   }
-
   return ALLOW;
 };
 
