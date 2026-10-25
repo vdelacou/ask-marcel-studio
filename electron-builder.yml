@@ -1,10 +1,17 @@
 # Packaging for Ask Marcel Studio. Manual step (bun run dist), not part of any gate.
 #
-# Unsigned x64 macOS only: the dev machine is Intel, and signing/notarisation needs an Apple
-# Developer certificate this project does not have. That is also why there is no autoupdate:
-# macOS refuses to silently replace an unsigned app, so the app only ever notices a newer
-# release and links the DMG (see services/update). arm64, signing and notarisation wait for
-# real hardware and a certificate.
+# macOS, Intel (x64) and Apple Silicon (arm64), one DMG each, built on a runner of that
+# architecture (.github/workflows/release.yml) because the Python runtime and its wheels are
+# fetched for the host. The arch comes from the command (--x64, --arm64) and the matching
+# Python folder from PYTHON_TRIPLE; `bun run dist` and `dist:arm64` set both.
+#
+# Ad-hoc signed, not Developer ID signed: notarisation needs an Apple Developer certificate
+# this project does not have. An Apple Silicon Mac will not run an arm64 binary with no
+# signature at all, and ad-hoc is the least that satisfies it. Gatekeeper still asks on first
+# launch. The hardened runtime stays off: with an ad-hoc signature it would refuse to load
+# Electron's own frameworks. That is also why there is no autoupdate: macOS refuses to
+# silently replace an app that is not notarised, so the app only notices a newer release and
+# links the DMG for its architecture (see services/update).
 #
 # asar: false on purpose. The Claude Agent SDK spawns its own CLI, which wants real files on
 # disk rather than an archive. The cost is a fatter, browsable app bundle, which for a
@@ -29,15 +36,16 @@ extraResources:
     to: builtin-skills
   - from: resources/background
     to: background
-  - from: vendor/python/x86_64-apple-darwin
+  - from: vendor/python/${env.PYTHON_TRIPLE}
     to: python-runtime
   - from: vendor/wheels
     to: python-wheels
 mac:
-  target:
-    - target: dmg
-      arch: x64
+  target: dmg
+  # The arch in the name: a release carries both, and the update notice picks by it.
+  artifactName: ${productName}-${version}-${arch}.${ext}
   category: public.app-category.productivity
   icon: resources/icons/icon.icns
-  # Unsigned: no certificate. Gatekeeper will ask the user to right-click Open the first time.
-  identity: null
+  # Ad-hoc ('-'): no certificate. Gatekeeper will ask the user to right-click Open the first time.
+  identity: '-'
+  hardenedRuntime: false
