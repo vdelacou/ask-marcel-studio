@@ -30,20 +30,27 @@ const rank = (name: string): number => {
   return at === -1 ? DISPLAY_ORDER.length : at;
 };
 
+const isNonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
+
+// A command with no name or no category cannot be shown or checked against a policy, so it
+// is skipped rather than half-listed.
+const readCommand = (entry: unknown): { readonly category: string; readonly info: OfficeCommandInfo } | undefined => {
+  if (!isRecord(entry)) return undefined;
+  const { name, category, summary } = entry;
+  if (!isNonEmptyString(name) || !isNonEmptyString(category)) return undefined;
+  return { category, info: { name, summary: typeof summary === 'string' ? summary : '' } };
+};
+
 export const parseOfficeCatalog = (raw: unknown): Result<readonly OfficeCategory[], OfficeCatalogError> => {
   if (!isRecord(raw) || !Array.isArray(raw['commands'])) return err({ kind: 'unreadable', message: 'the Microsoft 365 command list is not in the expected shape' });
 
   const grouped = new Map<string, OfficeCommandInfo[]>();
   for (const entry of raw['commands']) {
-    if (!isRecord(entry)) continue;
-    const { name, category, summary } = entry;
-    // A command with no name or no category cannot be shown or checked against a
-    // policy, so it is skipped rather than half-listed.
-    if (typeof name !== 'string' || name.length === 0) continue;
-    if (typeof category !== 'string' || category.length === 0) continue;
-    const commands = grouped.get(category) ?? [];
-    commands.push({ name, summary: typeof summary === 'string' ? summary : '' });
-    grouped.set(category, commands);
+    const command = readCommand(entry);
+    if (command === undefined) continue;
+    const commands = grouped.get(command.category) ?? [];
+    commands.push(command.info);
+    grouped.set(command.category, commands);
   }
 
   const categories = [...grouped.entries()].map(([name, commands]) => ({ name, commands }));
