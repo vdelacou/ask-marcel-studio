@@ -26,7 +26,9 @@ bypass. One pull request per step, each at most 300 lines.
        translate-stream.ts, 82.14% against 82.41% before the change (a gap that predates it;
        raising it means new tests, rule 24). Found on the way: PR #10's `bun run test` as
        Stryker's command killed no mutant at all; fixed first, in 1776f1c.
-4. [ ] Rule 35 in main and scripts (6 functions).
+4. [x] Rule 35 in main and scripts (6 functions).
+       DONE: one commit; agent-runtime and background-jobs have no unit tests, so the built
+       app (`bun run build`) and the typecheck back them.
 5. [ ] Rule 35 in the renderer (11 functions), each page checked in the built app.
 6. [ ] `complexity: ['error', 10]` on, and CLAUDE.md binds rules 1-38.
 
