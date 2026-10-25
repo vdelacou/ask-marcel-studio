@@ -68,14 +68,12 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 
 const invalid = (message: string): Result<never, AgentsDocError> => err({ kind: 'invalid', message });
 
-export const validateSubAgent = (raw: unknown): Result<SubAgent, AgentsDocError> => {
-  if (!isRecord(raw)) return invalid('a helper must be an object');
-  const { name, description, prompt, tools } = raw;
-  if (typeof name !== 'string' || !NAME.test(name) || name.length > NAME_LIMIT) return invalid('a helper name may only use lowercase letters, numbers and dashes');
-  if (typeof description !== 'string' || description.trim().length === 0) return invalid(`${name} needs a description, or the agent will never know when to use it`);
-  if (typeof prompt !== 'string' || prompt.trim().length === 0) return invalid(`${name} needs instructions`);
-  if (!Array.isArray(tools)) return invalid(`${name} must say which tools it may use`);
+const isHelperName = (name: unknown): name is string => typeof name === 'string' && NAME.test(name) && name.length <= NAME_LIMIT;
+const isFilled = (text: unknown): text is string => typeof text === 'string' && text.trim().length > 0;
 
+// The tools a helper may use, each once. A tool since withdrawn is dropped quietly, so a
+// helper saved before the withdrawal still loads.
+const chooseTools = (name: string, tools: readonly unknown[]): Result<AgentToolName[], AgentsDocError> => {
   const chosen: AgentToolName[] = [];
   for (const tool of tools) {
     if (WITHDRAWN_TOOLS.some((withdrawn) => withdrawn === tool)) continue;
@@ -83,14 +81,23 @@ export const validateSubAgent = (raw: unknown): Result<SubAgent, AgentsDocError>
     if (known === undefined) return invalid(`${name} asks for a tool that does not exist: ${String(tool)}`);
     if (!chosen.includes(known)) chosen.push(known);
   }
-  return ok({ name, description: description.trim(), prompt: prompt.trim(), tools: chosen });
+  return ok(chosen);
 };
 
-const parseDoc = (raw: unknown): Result<AgentsDoc, AgentsDocError> => {
-  if (!isRecord(raw)) return invalid('the helpers file must be an object');
+export const validateSubAgent = (raw: unknown): Result<SubAgent, AgentsDocError> => {
+  if (!isRecord(raw)) return invalid('a helper must be an object');
+  const { name, description, prompt, tools } = raw;
+  if (!isHelperName(name)) return invalid('a helper name may only use lowercase letters, numbers and dashes');
+  if (!isFilled(description)) return invalid(`${name} needs a description, or the agent will never know when to use it`);
+  if (!isFilled(prompt)) return invalid(`${name} needs instructions`);
+  if (!Array.isArray(tools)) return invalid(`${name} must say which tools it may use`);
 
-  const rawUsers = raw['userAgents'];
-  if (!Array.isArray(rawUsers)) return invalid('the helpers file must have a userAgents array');
+  const chosen = chooseTools(name, tools);
+  if (!chosen.ok) return chosen;
+  return ok({ name, description: description.trim(), prompt: prompt.trim(), tools: chosen.value });
+};
+
+const parseUserAgents = (rawUsers: readonly unknown[]): Result<SubAgent[], AgentsDocError> => {
   const userAgents: SubAgent[] = [];
   for (const candidate of rawUsers) {
     const agent = validateSubAgent(candidate);
@@ -98,11 +105,12 @@ const parseDoc = (raw: unknown): Result<AgentsDoc, AgentsDocError> => {
     if (userAgents.some((existing) => existing.name === agent.value.name)) return invalid(`two helpers share the name ${agent.value.name}`);
     userAgents.push(agent.value);
   }
+  return ok(userAgents);
+};
 
-  const rawOverrides = raw['builtinOverrides'];
-  if (rawOverrides !== undefined && !isRecord(rawOverrides)) return invalid('builtinOverrides must be an object');
+const parseOverrides = (rawOverrides: Record<string, unknown>): Result<Record<string, SubAgent>, AgentsDocError> => {
   const builtinOverrides: Record<string, SubAgent> = {};
-  for (const [key, candidate] of Object.entries(rawOverrides ?? {})) {
+  for (const [key, candidate] of Object.entries(rawOverrides)) {
     const agent = validateSubAgent(candidate);
     if (!agent.ok) return agent;
     // The key IS the built-in being overridden; a mismatch would silently override
@@ -110,7 +118,22 @@ const parseDoc = (raw: unknown): Result<AgentsDoc, AgentsDocError> => {
     if (agent.value.name !== key) return invalid(`the changed helper ${key} is stored under the wrong name`);
     builtinOverrides[key] = agent.value;
   }
-  return ok({ userAgents, builtinOverrides });
+  return ok(builtinOverrides);
+};
+
+const parseDoc = (raw: unknown): Result<AgentsDoc, AgentsDocError> => {
+  if (!isRecord(raw)) return invalid('the helpers file must be an object');
+
+  const rawUsers = raw['userAgents'];
+  if (!Array.isArray(rawUsers)) return invalid('the helpers file must have a userAgents array');
+  const userAgents = parseUserAgents(rawUsers);
+  if (!userAgents.ok) return userAgents;
+
+  const rawOverrides = raw['builtinOverrides'];
+  if (rawOverrides !== undefined && !isRecord(rawOverrides)) return invalid('builtinOverrides must be an object');
+  const builtinOverrides = parseOverrides(rawOverrides ?? {});
+  if (!builtinOverrides.ok) return builtinOverrides;
+  return ok({ userAgents: userAgents.value, builtinOverrides: builtinOverrides.value });
 };
 
 // Same checks, different error kind: a bad file is not something a form can fix.

@@ -85,17 +85,22 @@ type CommonProviderFields = { id: string; kind: ProviderKind; label: string; mod
 
 const isProviderKind = (kind: unknown): kind is ProviderKind => kind === 'anthropic' || kind === 'openai' || kind === 'claude-plan';
 
+const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
+const isOptionalString = (v: unknown): v is string | undefined => v === undefined || typeof v === 'string';
+
+// openai has no default endpoint to fall back on, so its baseUrl is required.
+const lacksRequiredBaseUrl = (kind: ProviderKind, baseUrl: string | undefined): boolean => kind === 'openai' && (baseUrl === undefined || baseUrl.length === 0);
+
 // Fields shared by both shapes. Returns the common part or a reason.
 const commonProviderFields = (raw: unknown): Result<CommonProviderFields, SettingsDocError> => {
   if (!isRecord(raw)) return unreadable('provider must be an object');
   const { id, kind, label, modelIds, baseUrl } = raw;
-  if (typeof id !== 'string' || id.length === 0) return unreadable('provider id must be a non-empty string');
+  if (!isNonEmptyString(id)) return unreadable('provider id must be a non-empty string');
   if (!isProviderKind(kind)) return unreadable(`provider kind must be anthropic, openai or claude-plan, got ${String(kind)}`);
-  if (typeof label !== 'string' || label.length === 0) return unreadable('provider label must be a non-empty string');
+  if (!isNonEmptyString(label)) return unreadable('provider label must be a non-empty string');
   if (!isStringArray(modelIds)) return unreadable('provider modelIds must be an array of strings');
-  if (baseUrl !== undefined && typeof baseUrl !== 'string') return unreadable('provider baseUrl must be a string');
-  // openai has no default endpoint to fall back on, so its baseUrl is required.
-  if (kind === 'openai' && (baseUrl === undefined || baseUrl.length === 0)) return unreadable('an openai provider needs a baseUrl');
+  if (!isOptionalString(baseUrl)) return unreadable('provider baseUrl must be a string');
+  if (lacksRequiredBaseUrl(kind, baseUrl)) return unreadable('an openai provider needs a baseUrl');
   return ok({ id, kind, label, modelIds, ...(baseUrl === undefined ? {} : { baseUrl }) });
 };
 
