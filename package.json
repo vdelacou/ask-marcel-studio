@@ -12,6 +12,7 @@
     "start": "electron-vite preview",
     "dist": "electron-vite build && electron-builder --mac --x64",
     "dist:dir": "electron-vite build && electron-builder --dir",
+    "test": "bun test --randomize",
     "lint": "eslint --cache --max-warnings=0",
     "lint:strict": "LINT_STRICT=1 eslint --max-warnings=0",
     "typecheck": "bun run typecheck:node && bun run typecheck:web",

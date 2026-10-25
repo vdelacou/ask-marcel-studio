@@ -5,7 +5,7 @@
   "packageManager": "npm",
   "testRunner": "command",
   "commandRunner": {
-    "command": "bun test"
+    "command": "bun run test"
   },
   "_mutate_comment": "Retuned for this repo's Electron hybrid layout: src/shared is the pure kernel (zero electron imports) and is the only tree the bun test runner can execute. src/main, src/preload and src/renderer import electron or render React and are out of scope. Test files have no logic to mutate; ports/ files are type-only. See .claude/LESSONS.md.",
   "mutate": [

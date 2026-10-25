@@ -1,3 +1,25 @@
+# Current run: adopt atelier rules 35-38 (approved 2026-10-25, "yes start", "Exclude them")
+
+The skills refresh of 2026-10-25 (upstream 94fcc88) added hard rules 35-38. The audit found:
+rule 35, 32 functions above complexity 10 (16 in shared, 5 in main, 11 in the renderer, one gate
+script); rule 36, no order dependence (five random seeds, the same 1983 passes and the same five
+root-only permission failures as the fixed order); rule 37, no import crossing a tier, but nothing
+to keep it that way; rule 38, no range gate in CI and 11 merge commits on main. The CI size check
+leaves out tests, bun.lock and .agents/skills/** (the user's call), so a refresh lands without a
+bypass. One pull request per step, each at most 300 lines.
+
+1. [ ] Rules 36 and 37, plus rule 15 as lint: a `test` script with `--randomize`, run by the hook,
+       CI and Stryker; one layer zone per tier and the design system's upward-only layers;
+       `noInlineConfig`, `ban-ts-comment` and `no-warning-comments`.
+       Done when: lint:strict and the randomized tests green; a planted import across each zone,
+       an inline directive and a foreign tool's marker each fail lint.
+2. [ ] Rule 38: `check-commit-range.sh` and `check-commit-messages.sh` in CI, the size count
+       matching the hook's plus the two vendored paths; `branches.yml` daily.
+3. [ ] Rule 35 in shared (16 functions), behind its 100% coverage and mutation gates.
+4. [ ] Rule 35 in main and scripts (6 functions).
+5. [ ] Rule 35 in the renderer (11 functions), each page checked in the built app.
+6. [ ] `complexity: ['error', 10]` on, and CLAUDE.md binds rules 1-38.
+
 # Current run: the dependency advisories, a weekly audit, then the agent SDK at 0.3.289 (approved 2026-10-04, "1 ok, 2 weekly is enough, 3 ok")
 
 `bun audit` reported 46 high advisories on main. Electron 43.1.1, which the app ships, had four

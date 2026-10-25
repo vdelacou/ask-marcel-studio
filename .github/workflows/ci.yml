@@ -50,7 +50,7 @@ jobs:
           tar -xzf "$archive" -C "$RUNNER_TEMP" gitleaks
           "$RUNNER_TEMP/gitleaks" git --redact --no-banner --verbose .
       - name: tests
-        run: bun test
+        run: bun run test
       - name: strict lint (0 errors, 0 warnings)
         run: bun run lint:strict
       - name: typecheck

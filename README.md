@@ -53,7 +53,7 @@ bun run dev     # opens the app with renderer HMR
 | `bun run start` | launch Electron against the production build |
 | `bun run dist` | build + package an unsigned x64 macOS DMG into `release/` (see Packaging) |
 | `bun run dist:dir` | same, but an unpacked `.app` (faster; for a quick launch test) |
-| `bun test` | unit tests (pure modules only — see Testing) |
+| `bun run test` | unit tests in random order (pure modules only — see Testing) |
 | `bun run lint` | fast ESLint, 0 warnings tolerated |
 | `bun run lint:strict` | adds type-aware rules (~25s); what pre-commit gate 6 runs |
 | `bun run typecheck` | `tsc --noEmit` across both tsconfig projects |
@@ -294,6 +294,15 @@ the 100% coverage tier. On disk an API key is `{"enc":"…"}`, never the key its
 `bun test` covers **pure modules only**. The Bun test runner has no Electron runtime, so a test
 importing `electron` crashes it. Logic that deserves a test therefore lives in `src/shared/**`
 or in a named pure module that never imports electron.
+
+`bun run test` runs them in random order (`bun test --randomize`, atelier rule 36), as do the hook,
+CI and Stryker. A red run prints its seed, and `bun test --randomize --seed=<n>` replays it. A
+test that only passes after another one is a defect, not a flake.
+
+Lint also holds the tiers apart (atelier rule 37): `src/shared` imports no other tier and no
+electron, `main` and `preload` see `shared` only, the renderer never imports `main` or `preload`,
+and no production file imports `src/test-helpers`. Inside the design system, atoms never import
+molecules or organisms, and molecules never import organisms.
 
 Design-system components under `src/renderer/src/components/**` are deliberately not unit-tested:
 they are prop-in/JSX-out by construction (atelier rule 21) and are verified by lint and review.
