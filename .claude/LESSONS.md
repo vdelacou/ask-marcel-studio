@@ -6,6 +6,11 @@ Each entry is one of `[mistake]`, `[decision]`, or `[gotcha]`. Newest first.
 
 ---
 
+## [mistake] 2026-10-25 | stryker run through `bun run test` let every mutant survive, and nothing went red
+
+PR #10 pointed Stryker's command runner at `bun run test` so mutation testing would run the tests in random order like everything else. The hook's mutation gate was not in scope for that commit, so nothing exercised it until the next change to `src/shared`: `bash-guard.ts` then scored 0.45% (2 of 444 killed), and `office-policy.ts`, untouched, scored 0 of 23 against 23 of 23 with `bun test --randomize` called directly. Why the extra `bun run` layer hides the mutants was not established. Stryker's command is `bun test --randomize` again.
+Rule for next time: after changing how Stryker runs the tests, mutate one known file with both commands and compare the scores before landing; a gate change is proven red as well as green.
+
 ## [gotcha] 2026-10-16 | agent sdk 0.3.289 records the system prompt once, so a resumed turn ignores a new append
 
 From SDK 0.3.289 (Claude Code 2.1.289), `systemPrompt` by default records a conversation's prompt on its first request and sends that record on every later request and resume, ignoring a different `append` until compaction. This app re-sends its `append` on every turn (the memory notes, About you, the quick context), so in a resumed conversation a word remembered after the first turn would never reach the agent: a capture-server probe saw the default resend the first turn's append. `agent-runtime.ts` passes `snapshot: false`, which renders the prompt fresh on every request, as 0.3.185 always did.

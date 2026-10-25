@@ -4,8 +4,9 @@
   "_packageManager_comment": "Stryker doesn't fully understand Bun yet; tell it npm so it doesn't probe for yarn/pnpm lockfiles.",
   "packageManager": "npm",
   "testRunner": "command",
+  "_commandRunner_comment": "bun test with --randomize (rule 36), called directly. Through `bun run test` every mutant survived: 0 of 23 killed on office-policy.ts, against 23 of 23 this way (2026-10-25). See .claude/LESSONS.md.",
   "commandRunner": {
-    "command": "bun run test"
+    "command": "bun test --randomize"
   },
   "_mutate_comment": "Retuned for this repo's Electron hybrid layout: src/shared is the pure kernel (zero electron imports) and is the only tree the bun test runner can execute. src/main, src/preload and src/renderer import electron or render React and are out of scope. Test files have no logic to mutate; ports/ files are type-only. See .claude/LESSONS.md.",
   "mutate": [
