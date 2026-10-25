@@ -339,6 +339,11 @@ export default [
       // exists: 'a traversal PREFIXED to a real uuid is rejected' was pinned after a mutant
       // survived. A table of inputs under one generic name would lose both.
       'sonarjs/parameterized-tests': 'off',
+      // Without type information the rule cannot follow an assertion made inside a helper
+      // (`refusedAs` in memory-entry-edit.test.ts calls expect itself), so the fast lane
+      // reported ten tests that do assert. The strict lane has the types, sees through the
+      // helper, and keeps the rule on: the hook and CI run that one.
+      ...(process.env['LINT_STRICT'] ? {} : { 'sonarjs/assertions-in-tests': 'off' }),
     },
   },
   // Non-source paths must not be linted: Stryker copies the tree into .stryker-tmp/
