@@ -125,34 +125,27 @@ const errorEvent = (state: StreamState, part: Record<string, unknown>): Step => 
   return { state: { ...state, done: true }, events: [{ type: 'error', error: { type: 'api_error', message } }] };
 };
 
+type PartStep = (state: StreamState, part: Record<string, unknown>) => Step;
+
+// One step per stream part this relays. Anything else (start, start-step, finish-step,
+// reasoning-*, tool-result, raw, and whatever v8 adds) is normal here, not exceptional,
+// and produces nothing.
+const PART_STEPS: ReadonlyMap<string, PartStep> = new Map<string, PartStep>([
+  ['text-start', (state, part) => openText(state, asString(part['id']) ?? 'text')],
+  ['text-delta', textDelta],
+  ['text-end', closeOpen],
+  ['tool-input-start', (state, part) => openTool(state, asString(part['id']) ?? '', asString(part['toolName']) ?? '')],
+  ['tool-input-delta', toolInputDelta],
+  ['tool-input-end', closeOpen],
+  ['tool-call', wholeToolCall],
+  ['finish', finish],
+  ['error', errorEvent],
+  // Ends the stream without claiming the turn completed.
+  ['abort', (state) => nothing({ ...state, done: true })],
+]);
+
 export const translatePart = (state: StreamState, part: unknown): Step => {
   if (!isRecord(part)) return nothing(state);
-
-  switch (part['type']) {
-    case 'text-start':
-      return openText(state, asString(part['id']) ?? 'text');
-    case 'text-delta':
-      return textDelta(state, part);
-    case 'text-end':
-      return closeOpen(state);
-    case 'tool-input-start':
-      return openTool(state, asString(part['id']) ?? '', asString(part['toolName']) ?? '');
-    case 'tool-input-delta':
-      return toolInputDelta(state, part);
-    case 'tool-input-end':
-      return closeOpen(state);
-    case 'tool-call':
-      return wholeToolCall(state, part);
-    case 'finish':
-      return finish(state, part);
-    case 'error':
-      return errorEvent(state, part);
-    case 'abort':
-      // Ends the stream without claiming the turn completed.
-      return nothing({ ...state, done: true });
-    default:
-      // start, start-step, finish-step, reasoning-*, tool-result, raw, and whatever
-      // v8 adds. Unknown is normal here, not exceptional.
-      return nothing(state);
-  }
+  const step = PART_STEPS.get(asString(part['type']) ?? '');
+  return step === undefined ? nothing(state) : step(state, part);
 };

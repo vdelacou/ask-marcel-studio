@@ -92,22 +92,43 @@ const readToolChoice = (raw: unknown): TranslatedRequest['toolChoice'] => {
   return undefined;
 };
 
+// A text block worth sending: an empty one says nothing to the model.
+const textPart = (block: Record<string, unknown>): UserPart | undefined => {
+  if (block['type'] !== 'text') return undefined;
+  const value = asString(block['text']);
+  return value === undefined || value.length === 0 ? undefined : { type: 'text', text: value };
+};
+
+const toolResultPart = (block: Record<string, unknown>, toolNames: ReadonlyMap<string, string>): ToolResultPart | undefined => {
+  if (block['type'] !== 'tool_result') return undefined;
+  const id = asString(block['tool_use_id']);
+  if (id === undefined) return undefined;
+  return { type: 'tool-result', toolCallId: id, toolName: toolNames.get(id) ?? 'unknown', output: { type: 'text', value: flattenToolResult(block['content']) } };
+};
+
+// Remembers the call's name, so a later tool_result can name its tool: Anthropic's result
+// block carries only the id, while the AI SDK wants the name too.
+const toolCallPart = (block: Record<string, unknown>, toolNames: Map<string, string>): AssistantPart | undefined => {
+  if (block['type'] !== 'tool_use') return undefined;
+  const id = asString(block['id']);
+  const name = asString(block['name']);
+  if (id === undefined || name === undefined) return undefined;
+  toolNames.set(id, name);
+  return { type: 'tool-call', toolCallId: id, toolName: name, input: block['input'] ?? {} };
+};
+
+const pushDefined = <T>(list: T[], item: T | undefined): void => {
+  if (item !== undefined) list.push(item);
+};
+
 // A user-role message may carry tool_result blocks, which the AI SDK models as a
 // separate tool-role message. One inbound message can therefore split into two.
 const translateUser = (blocks: readonly unknown[], toolNames: ReadonlyMap<string, string>): ModelMessage[] => {
   const text: UserPart[] = [];
   const results: ToolResultPart[] = [];
-  for (const block of blocks) {
-    if (!isRecord(block)) continue;
-    if (block['type'] === 'text') {
-      const value = asString(block['text']);
-      if (value !== undefined && value.length > 0) text.push({ type: 'text', text: value });
-    }
-    if (block['type'] === 'tool_result') {
-      const id = asString(block['tool_use_id']);
-      if (id === undefined) continue;
-      results.push({ type: 'tool-result', toolCallId: id, toolName: toolNames.get(id) ?? 'unknown', output: { type: 'text', value: flattenToolResult(block['content']) } });
-    }
+  for (const block of blocks.filter(isRecord)) {
+    pushDefined(text, textPart(block));
+    pushDefined(results, toolResultPart(block, toolNames));
   }
   // Tool results first: they answer the assistant turn that precedes them.
   const messages: ModelMessage[] = [];
@@ -118,25 +139,69 @@ const translateUser = (blocks: readonly unknown[], toolNames: ReadonlyMap<string
 
 const translateAssistant = (blocks: readonly unknown[], toolNames: Map<string, string>): ModelMessage[] => {
   const parts: AssistantPart[] = [];
-  for (const block of blocks) {
-    if (!isRecord(block)) continue;
-    if (block['type'] === 'text') {
-      const value = asString(block['text']);
-      if (value !== undefined && value.length > 0) parts.push({ type: 'text', text: value });
-    }
-    if (block['type'] === 'tool_use') {
-      const id = asString(block['id']);
-      const name = asString(block['name']);
-      if (id === undefined || name === undefined) continue;
-      // Remembered so a later tool_result can name its tool: Anthropic's result block
-      // carries only the id, while the AI SDK wants the name too.
-      toolNames.set(id, name);
-      parts.push({ type: 'tool-call', toolCallId: id, toolName: name, input: block['input'] ?? {} });
-    }
+  for (const block of blocks.filter(isRecord)) {
+    pushDefined(parts, textPart(block));
+    pushDefined(parts, toolCallPart(block, toolNames));
     // thinking, redacted_thinking, image, and anything else are dropped: an
     // OpenAI-compatible endpoint has nowhere to put them.
   }
   return parts.length === 0 ? [] : [{ role: 'assistant', content: parts }];
+};
+
+// The SDK really does put system-role messages in the array, alongside the top-level
+// `system` field. Caught live twice: refusing them 400s every real turn, and forwarding
+// them as system-role wiped the whole real system prompt on Google's OpenAI-compatible
+// endpoint, which keeps a single systemInstruction. So they ride as user content behind a
+// marker, in place, and the top-level `system` stays the one and only system message
+// upstream.
+const translateSystem = (blocks: readonly unknown[]): ModelMessage[] => {
+  const text = blocks
+    .map((block) => (isRecord(block) ? (asString(block['text']) ?? '') : ''))
+    .filter((x) => x.length > 0)
+    .join('\n\n');
+  return text.length === 0 ? [] : [{ role: 'user', content: [{ type: 'text', text: `<system-reminder>\n${text}\n</system-reminder>` }] }];
+};
+
+const translateMessage = (message: unknown, toolNames: Map<string, string>): Result<ModelMessage[], GatewayRequestError> => {
+  if (!isRecord(message)) return badRequest('every message must be an object');
+  const role = message['role'];
+  const content = message['content'];
+  // A plain string content is legal on the Anthropic wire.
+  const blocks = Array.isArray(content) ? content : [{ type: 'text', text: asString(content) ?? '' }];
+  if (role === 'user') return ok(translateUser(blocks, toolNames));
+  if (role === 'assistant') return ok(translateAssistant(blocks, toolNames));
+  if (role === 'system') return ok(translateSystem(blocks));
+  return badRequest(`unknown message role: ${String(role)}`);
+};
+
+const translateMessages = (raw: readonly unknown[]): Result<ModelMessage[], GatewayRequestError> => {
+  // Built as the assistant turns are read, so a tool_result can be given its name.
+  const toolNames = new Map<string, string>();
+  const messages: ModelMessage[] = [];
+  for (const message of raw) {
+    const translated = translateMessage(message, toolNames);
+    if (!translated.ok) return translated;
+    messages.push(...translated.value);
+  }
+  return ok(messages);
+};
+
+// Anthropic's server-side tools arrive as a dated `type` and a name with no schema
+// ({ type: 'web_search_20250305', name: 'web_search', max_uses: 8 }), because the API runs
+// them itself and the caller never sees the call. No upstream reached through here can.
+// Left alone, one would be handed on as an ordinary tool with an empty schema, and the
+// agent would get a silent nothing back rather than a failure. An ordinary tool always
+// carries a schema, so requiring one is enough to tell them apart.
+const readTools = (raw: unknown): Result<ToolSpec[], GatewayRequestError> => {
+  const tools: ToolSpec[] = [];
+  if (!Array.isArray(raw)) return ok(tools);
+  for (const tool of raw.filter(isRecord)) {
+    const name = asString(tool['name']);
+    if (name === undefined) continue;
+    if (asString(tool['type']) !== undefined && !isRecord(tool['input_schema'])) return badRequest(`${name} is a tool only Anthropic's own API can run`);
+    tools.push({ name, description: asString(tool['description']) ?? '', inputSchema: tool['input_schema'] ?? { type: 'object' } });
+  }
+  return ok(tools);
 };
 
 export const translateRequest = (raw: unknown): Result<TranslatedRequest, GatewayRequestError> => {
@@ -146,50 +211,10 @@ export const translateRequest = (raw: unknown): Result<TranslatedRequest, Gatewa
   if (modelRef === undefined || modelRef.length === 0) return badRequest('the request needs a model');
   if (!Array.isArray(raw['messages'])) return badRequest('the request needs a messages array');
 
-  // Built as the assistant turns are read, so a tool_result can be given its name.
-  const toolNames = new Map<string, string>();
-  const messages: ModelMessage[] = [];
-  for (const message of raw['messages']) {
-    if (!isRecord(message)) return badRequest('every message must be an object');
-    const role = message['role'];
-    const content = message['content'];
-    // A plain string content is legal on the Anthropic wire.
-    const blocks = Array.isArray(content) ? content : [{ type: 'text', text: asString(content) ?? '' }];
-
-    if (role === 'user') messages.push(...translateUser(blocks, toolNames));
-    else if (role === 'assistant') messages.push(...translateAssistant(blocks, toolNames));
-    // The SDK really does put system-role messages in the array, alongside the
-    // top-level `system` field. Caught live twice: refusing them 400s every real
-    // turn, and forwarding them as system-role wiped the whole real system prompt on
-    // Google's OpenAI-compatible endpoint, which keeps a single systemInstruction.
-    // So they ride as user content behind a marker, in place, and the top-level
-    // `system` stays the one and only system message upstream.
-    else if (role === 'system') {
-      const text = blocks
-        .map((block) => (isRecord(block) ? (asString(block['text']) ?? '') : ''))
-        .filter((x) => x.length > 0)
-        .join('\n\n');
-      if (text.length > 0) messages.push({ role: 'user', content: [{ type: 'text', text: `<system-reminder>\n${text}\n</system-reminder>` }] });
-    } else return badRequest(`unknown message role: ${String(role)}`);
-  }
-
-  const tools: ToolSpec[] = [];
-  if (Array.isArray(raw['tools'])) {
-    for (const tool of raw['tools']) {
-      if (!isRecord(tool)) continue;
-      const name = asString(tool['name']);
-      if (name === undefined) continue;
-      // Anthropic's server-side tools arrive as a dated `type` and a name with no schema
-      // ({ type: 'web_search_20250305', name: 'web_search', max_uses: 8 }), because the
-      // API runs them itself and the caller never sees the call. No upstream reached
-      // through here can. Left alone, the loop below would hand one on as an ordinary
-      // tool with an empty schema, and the agent would get a silent nothing back rather
-      // than a failure. An ordinary tool always carries a schema, so requiring one is
-      // enough to tell them apart.
-      if (asString(tool['type']) !== undefined && !isRecord(tool['input_schema'])) return badRequest(`${name} is a tool only Anthropic's own API can run`);
-      tools.push({ name, description: asString(tool['description']) ?? '', inputSchema: tool['input_schema'] ?? { type: 'object' } });
-    }
-  }
+  const messages = translateMessages(raw['messages']);
+  if (!messages.ok) return messages;
+  const tools = readTools(raw['tools']);
+  if (!tools.ok) return tools;
 
   const maxTokens = raw['max_tokens'];
   const system = readSystem(raw['system']);
@@ -197,8 +222,8 @@ export const translateRequest = (raw: unknown): Result<TranslatedRequest, Gatewa
   return ok({
     modelRef,
     ...(system === undefined ? {} : { system }),
-    messages,
-    tools,
+    messages: messages.value,
+    tools: tools.value,
     ...(toolChoice === undefined ? {} : { toolChoice }),
     ...(typeof maxTokens === 'number' ? { maxOutputTokens: maxTokens } : {}),
     stream: raw['stream'] === true,
