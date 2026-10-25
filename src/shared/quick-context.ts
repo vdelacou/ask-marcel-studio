@@ -68,17 +68,26 @@ const idsOf = (data: Record<string, unknown>): QuickContextIds => {
   };
 };
 
+// Without the user block there is nothing worth storing: it is the one part the CLI
+// guarantees, so its absence means the call did not really succeed.
+const signedInUser = (data: Record<string, unknown>): { readonly user: Record<string, unknown>; readonly userId: string } | undefined => {
+  const user = data['user'];
+  if (!isRecord(user)) return undefined;
+  const userId = stringOr(user['id']);
+  return userId === undefined ? undefined : { user, userId };
+};
+
+const emailOf = (user: Record<string, unknown>): string => stringOr(user['mail']) ?? stringOr(user['userPrincipalName']) ?? '';
+
 export const parseQuickContext = (stdout: string): QuickContext | undefined => {
   const parsed = parseJson(stdout);
   if (!isRecord(parsed) || parsed['ok'] !== true) return undefined;
   const data = parsed['data'];
   if (!isRecord(data)) return undefined;
-  const user = data['user'];
-  // Without the user block there is nothing worth storing: it is the one part the CLI
-  // guarantees, so its absence means the call did not really succeed.
-  const userId = isRecord(user) ? stringOr(user['id']) : undefined;
-  if (!isRecord(user) || userId === undefined) return undefined;
+  const signedIn = signedInUser(data);
+  if (signedIn === undefined) return undefined;
 
+  const { user, userId } = signedIn;
   const displayName = stringOr(user['displayName']) ?? '';
   const jobTitle = stringOr(user['jobTitle']);
   const tenantTimeZone = stringOr(data['tenantTimeZone']);
@@ -86,7 +95,7 @@ export const parseQuickContext = (stdout: string): QuickContext | undefined => {
     userId,
     displayName,
     firstName: firstNameOf(displayName),
-    email: stringOr(user['mail']) ?? stringOr(user['userPrincipalName']) ?? '',
+    email: emailOf(user),
     ...(jobTitle === undefined ? {} : { jobTitle }),
     ...(tenantTimeZone === undefined ? {} : { tenantTimeZone }),
     ids: idsOf(data),
@@ -114,26 +123,27 @@ export const quickContextBlock = (context: QuickContext | undefined): string => 
 
 // What the app wrote last time, read back. Its own file, so the shape is known, but it is
 // still a file on disk a user or a crash could have mangled.
+const storedContext = (context: Record<string, unknown>): QuickContext => {
+  const displayName = stringOr(context['displayName']) ?? '';
+  const jobTitle = stringOr(context['jobTitle']);
+  const tenantTimeZone = stringOr(context['tenantTimeZone']);
+  return {
+    userId: stringOr(context['userId']) ?? '',
+    displayName,
+    firstName: stringOr(context['firstName']) ?? firstNameOf(displayName),
+    email: stringOr(context['email']) ?? '',
+    ...(jobTitle === undefined ? {} : { jobTitle }),
+    ...(tenantTimeZone === undefined ? {} : { tenantTimeZone }),
+    ids: isRecord(context['ids']) ? idsOf(context['ids']) : {},
+  };
+};
+
 export const parseStoredQuickContext = (value: unknown): { readonly fetchedAt: string; readonly context: QuickContext } | undefined => {
   if (!isRecord(value)) return undefined;
   const fetchedAt = stringOr(value['fetchedAt']);
   const context = value['context'];
   if (fetchedAt === undefined || !isRecord(context)) return undefined;
-  const displayName = stringOr(context['displayName']) ?? '';
-  const jobTitle = stringOr(context['jobTitle']);
-  const tenantTimeZone = stringOr(context['tenantTimeZone']);
-  return {
-    fetchedAt,
-    context: {
-      userId: stringOr(context['userId']) ?? '',
-      displayName,
-      firstName: stringOr(context['firstName']) ?? firstNameOf(displayName),
-      email: stringOr(context['email']) ?? '',
-      ...(jobTitle === undefined ? {} : { jobTitle }),
-      ...(tenantTimeZone === undefined ? {} : { tenantTimeZone }),
-      ids: isRecord(context['ids']) ? idsOf(context['ids']) : {},
-    },
-  };
+  return { fetchedAt, context: storedContext(context) };
 };
 
 // Whether the app should ask the CLI again. Age is the usual reason; the other is a

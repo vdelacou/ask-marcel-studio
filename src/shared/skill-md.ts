@@ -49,6 +49,37 @@ const readValue = (line: string, key: string): string | undefined => {
   return unquote(line.slice(key.length + 1).trim());
 };
 
+type Fields = { readonly name?: string; readonly description?: string; readonly displayName?: string };
+
+// The lines between the two fences. The opening fence must be the first non-blank line: a
+// --- further down is a horizontal rule in the body, not frontmatter.
+const frontmatterLines = (lines: readonly string[]): Result<readonly string[], SkillMdError> => {
+  const start = lines.findIndex((line) => line.trim().length > 0);
+  if (start === -1 || lines[start]?.trim() !== FENCE) return notASkill('SKILL.md must open with --- frontmatter');
+  const end = lines.findIndex((line, index) => index > start && line.trim() === FENCE);
+  if (end === -1) return notASkill('SKILL.md frontmatter is never closed');
+  return ok(lines.slice(start + 1, end));
+};
+
+// The first value each key is given wins.
+const readFields = (lines: readonly string[]): Fields =>
+  lines.reduce<Fields>((fields, line) => {
+    const name = fields.name ?? readValue(line, 'name');
+    const description = fields.description ?? readValue(line, 'description');
+    const displayName = fields.displayName ?? readValue(line, 'displayName');
+    return {
+      ...(name === undefined ? {} : { name }),
+      ...(description === undefined ? {} : { description }),
+      ...(displayName === undefined ? {} : { displayName }),
+    };
+  }, {});
+
+const toFrontmatter = ({ name, description, displayName }: Fields): Result<SkillFrontmatter, SkillMdError> => {
+  if (name === undefined || name.length === 0) return notASkill('SKILL.md needs a name in its frontmatter');
+  if (description === undefined || description.length === 0) return notASkill('SKILL.md needs a description in its frontmatter');
+  return ok({ name, description, ...(displayName === undefined || displayName.length === 0 ? {} : { displayName }) });
+};
+
 export const parseSkillMd = (contents: string): Result<SkillFrontmatter, SkillMdError> => {
   // The BOM is written as \uFEFF, not literally: a literal one is invisible
   // in the source and trips no-irregular-whitespace. \r so windows line endings do
@@ -57,27 +88,9 @@ export const parseSkillMd = (contents: string): Result<SkillFrontmatter, SkillMd
     .replace(/^\uFEFF/, '')
     .replace(/\r/g, '')
     .split('\n');
-
-  // The opening fence must be the first non-blank line: a --- further down is a
-  // horizontal rule in the body, not frontmatter.
-  const start = lines.findIndex((line) => line.trim().length > 0);
-  if (start === -1 || lines[start]?.trim() !== FENCE) return notASkill('SKILL.md must open with --- frontmatter');
-
-  const end = lines.findIndex((line, index) => index > start && line.trim() === FENCE);
-  if (end === -1) return notASkill('SKILL.md frontmatter is never closed');
-
-  let name: string | undefined;
-  let description: string | undefined;
-  let displayName: string | undefined;
-  for (const line of lines.slice(start + 1, end)) {
-    name = name ?? readValue(line, 'name');
-    description = description ?? readValue(line, 'description');
-    displayName = displayName ?? readValue(line, 'displayName');
-  }
-
-  if (name === undefined || name.length === 0) return notASkill('SKILL.md needs a name in its frontmatter');
-  if (description === undefined || description.length === 0) return notASkill('SKILL.md needs a description in its frontmatter');
-  return ok({ name, description, ...(displayName === undefined || displayName.length === 0 ? {} : { displayName }) });
+  const body = frontmatterLines(lines);
+  if (!body.ok) return body;
+  return toFrontmatter(readFields(body.value));
 };
 
 // What to call a skill that never said. `answer-from-m365` is a handle, not a name: this
