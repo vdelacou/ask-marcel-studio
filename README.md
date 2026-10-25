@@ -51,8 +51,9 @@ bun run dev     # opens the app with renderer HMR
 | `bun run dev` | electron-vite dev server + launches Electron, renderer HMR |
 | `bun run build` | production build into `out/` |
 | `bun run start` | launch Electron against the production build |
-| `bun run dist` | build + package an unsigned x64 macOS DMG into `release/` (see Packaging) |
-| `bun run dist:dir` | same, but an unpacked `.app` (faster; for a quick launch test) |
+| `bun run dist` | build + package an ad-hoc signed Intel (x64) macOS DMG into `release/` (see Packaging) |
+| `bun run dist:arm64` | the same for Apple Silicon (arm64); run it on an Apple Silicon Mac |
+| `bun run dist:dir` | the Intel build as an unpacked `.app` (faster; for a quick launch test) |
 | `bun run test` | unit tests in random order (pure modules only — see Testing) |
 | `bun run lint` | fast ESLint, 0 warnings tolerated |
 | `bun run lint:strict` | adds type-aware rules (~25s); what pre-commit gate 6 runs |
@@ -67,24 +68,35 @@ improve: the incremental cache reports stale survivors after a test change.
 
 ## Packaging
 
-`bun run dist` produces an unsigned x64 macOS DMG in `release/`. Two things have to be in
-place first, because they ride into the bundle as `extraResources` and the build stops if
-they are missing:
+There are two DMGs, one per Mac architecture: Intel (x64) and Apple Silicon (arm64). Each is
+built on a Mac of that architecture, because the embedded Python runtime and its wheels are
+fetched for the machine doing the build. They ride into the bundle as `extraResources`, and
+the build stops if they are missing:
 
 ```bash
 bun run fetch:python   # the embedded CPython runtime, into vendor/python/<triple>
 bun run fetch:wheels   # the seed wheels, into vendor/wheels
-bun run dist           # electron-vite build, then electron-builder --mac --x64
+bun run dist           # Intel: electron-vite build, then electron-builder --mac --x64
+bun run dist:arm64     # Apple Silicon: the same with --arm64
 ```
 
-The build is **unsigned** (no Apple certificate on this project), so the first launch is
-gated by Gatekeeper: right-click the app and choose Open once, and macOS remembers it. For
-the same reason there is no silent autoupdate. The app checks GitHub's latest release once a
-day and, when a newer one exists, shows a banner linking the DMG; installing it is manual.
+Releases are built by GitHub instead (`.github/workflows/release.yml`). Push a tag that
+matches the version in `package.json`, such as `v0.2.0`, and two runners build the DMGs in
+parallel, `macos-15-intel` and `macos-15`, then attach both to a **draft** release. Check it
+and publish it by hand. Started from the Actions tab, the same workflow only builds and
+keeps the DMGs as run artifacts for 14 days, which is how a packaging change is tried
+without a release.
 
-Scope is deliberately narrow: **x64 only** (the dev machine is Intel; arm64 needs real Apple
-Silicon to build and test on), and `asar: false` (the agent SDK spawns its own CLI, which
-wants real files, not an archive). The running version shows under the settings nav.
+The builds are **ad-hoc signed**, not notarised (no Apple Developer certificate on this
+project). Apple Silicon will not run an arm64 app with no signature at all, so ad-hoc is the
+floor. Gatekeeper still gates the first launch: right-click the app and choose Open once,
+and macOS remembers it. For the same reason there is no silent autoupdate. The app checks
+GitHub's latest release once a day and, when a newer one exists, shows a banner linking the
+DMG for the Mac's own architecture; installing it is manual.
+
+`asar: false` on purpose: the agent SDK spawns its own CLI, which wants real files, not an
+archive. Windows is not built yet: the app has never run there. The running version shows
+under the settings nav.
 
 ## Layout
 
@@ -105,7 +117,8 @@ src/renderer/     React + Tailwind v4
 src/test-helpers/ test-only helpers; never imported by production code
 scripts/          atelier gate scripts
 .githooks/        pre-commit (9 gates) + commit-msg (Conventional Commits)
-.github/          workflows: ci.yml (the hook's gates and the commit checks on every push), audit.yml (weekly)
+.github/          workflows: ci.yml (the hook's gates and the commit checks on every push), audit.yml (weekly),
+                  release.yml (the two macOS DMGs, on a v* tag or by hand)
 docs/PLAN.md      the full 7-milestone plan
 .claude/          PLAN.md (current run), LESSONS.md (append-only memory)
 ```
