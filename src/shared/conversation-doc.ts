@@ -108,29 +108,46 @@ export const appendTurn = (base: Conversation, turn: TurnOutcome): { readonly co
   };
 };
 
+const isOptionalString = (v: unknown): v is string | undefined => v === undefined || typeof v === 'string';
+const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
+const isToolStatus = (v: unknown): v is 'running' | 'done' | 'error' => v === 'running' || v === 'done' || v === 'error';
+
+// Every item parsed, or the first one that is not.
+const parseAll = <T>(items: readonly unknown[], parse: (raw: unknown) => Result<T, ConversationDocError>): Result<T[], ConversationDocError> => {
+  const parsed: T[] = [];
+  for (const item of items) {
+    const one = parse(item);
+    if (!one.ok) return one;
+    parsed.push(one.value);
+  }
+  return ok(parsed);
+};
+
+const parseToolPart = (raw: Record<string, unknown>): Result<MessagePart, ConversationDocError> => {
+  const { toolUseId, name, status, result, parentToolUseId } = raw;
+  if (typeof toolUseId !== 'string') return unreadable('a tool part must have a toolUseId');
+  if (typeof name !== 'string') return unreadable('a tool part must have a name');
+  if (!isToolStatus(status)) return unreadable(`a tool part has an unknown status: ${String(status)}`);
+  if (!isOptionalString(result)) return unreadable('a tool part result must be a string');
+  if (!isOptionalString(parentToolUseId)) return unreadable('a tool part parentToolUseId must be a string');
+  return ok({
+    type: 'tool',
+    toolUseId,
+    name,
+    input: raw['input'],
+    status,
+    ...(result === undefined ? {} : { result }),
+    ...(parentToolUseId === undefined ? {} : { parentToolUseId }),
+  });
+};
+
 const parsePart = (raw: unknown): Result<MessagePart, ConversationDocError> => {
   if (!isRecord(raw)) return unreadable('message part must be an object');
   if (raw['type'] === 'text') {
     if (typeof raw['text'] !== 'string') return unreadable('a text part must have text');
     return ok({ type: 'text', text: raw['text'] });
   }
-  if (raw['type'] === 'tool') {
-    const { toolUseId, name, status, result, parentToolUseId } = raw;
-    if (typeof toolUseId !== 'string') return unreadable('a tool part must have a toolUseId');
-    if (typeof name !== 'string') return unreadable('a tool part must have a name');
-    if (status !== 'running' && status !== 'done' && status !== 'error') return unreadable(`a tool part has an unknown status: ${String(status)}`);
-    if (result !== undefined && typeof result !== 'string') return unreadable('a tool part result must be a string');
-    if (parentToolUseId !== undefined && typeof parentToolUseId !== 'string') return unreadable('a tool part parentToolUseId must be a string');
-    return ok({
-      type: 'tool',
-      toolUseId,
-      name,
-      input: raw['input'],
-      status,
-      ...(result === undefined ? {} : { result }),
-      ...(parentToolUseId === undefined ? {} : { parentToolUseId }),
-    });
-  }
+  if (raw['type'] === 'tool') return parseToolPart(raw);
   return unreadable(`unknown message part type: ${String(raw['type'])}`);
 };
 
@@ -146,23 +163,20 @@ const parseStats = (raw: unknown): TurnStats | undefined => {
 const parseMessage = (raw: unknown): Result<Message, ConversationDocError> => {
   if (!isRecord(raw)) return unreadable('message must be an object');
   const { id, role, parts, createdAt, stats } = raw;
-  if (typeof id !== 'string' || id.length === 0) return unreadable('message id must be a non-empty string');
+  if (!isNonEmptyString(id)) return unreadable('message id must be a non-empty string');
   if (role !== 'user' && role !== 'assistant') return unreadable(`message role must be user or assistant, got ${String(role)}`);
   if (typeof createdAt !== 'string') return unreadable('message createdAt must be a string');
   if (!Array.isArray(parts)) return unreadable('message parts must be an array');
 
-  const parsed: MessagePart[] = [];
-  for (const part of parts) {
-    const one = parsePart(part);
-    if (!one.ok) return one;
-    parsed.push(one.value);
-  }
-  return ok({ id, role, parts: parsed, createdAt, ...(parseStats(stats) === undefined ? {} : { stats: parseStats(stats) }) });
+  const parsed = parseAll(parts, parsePart);
+  if (!parsed.ok) return parsed;
+  const turnStats = parseStats(stats);
+  return ok({ id, role, parts: parsed.value, createdAt, ...(turnStats === undefined ? {} : { stats: turnStats }) });
 };
 
-export const parseConversation = (raw: unknown): Result<Conversation, ConversationDocError> => {
-  if (!isRecord(raw)) return unreadable('conversation must be an object');
-  const { id, title, model, createdAt, updatedAt, sdkSessionId, userRenamed, messages } = raw;
+// Everything about a conversation but its messages, checked in the order a read reports.
+const parseMeta = (raw: Record<string, unknown>): Result<ConversationMeta, ConversationDocError> => {
+  const { id, title, model, createdAt, updatedAt, sdkSessionId, userRenamed } = raw;
   if (typeof id !== 'string') return unreadable('conversation id must be a string');
 
   // Re-cross the checkpoint: the filename is not proof of what is inside, and this
@@ -170,19 +184,11 @@ export const parseConversation = (raw: unknown): Result<Conversation, Conversati
   const checked = conversationId(id);
   if (!checked.ok) return unreadable(checked.error.message);
 
-  if (typeof title !== 'string' || title.length === 0) return unreadable('conversation title must be a non-empty string');
-  if (typeof model !== 'string' || model.length === 0) return unreadable('conversation model must be a non-empty string');
+  if (!isNonEmptyString(title)) return unreadable('conversation title must be a non-empty string');
+  if (!isNonEmptyString(model)) return unreadable('conversation model must be a non-empty string');
   if (typeof createdAt !== 'string') return unreadable('conversation createdAt must be a string');
   if (typeof updatedAt !== 'string') return unreadable('conversation updatedAt must be a string');
-  if (sdkSessionId !== undefined && typeof sdkSessionId !== 'string') return unreadable('conversation sdkSessionId must be a string');
-  if (!Array.isArray(messages)) return unreadable('conversation messages must be an array');
-
-  const parsed: Message[] = [];
-  for (const message of messages) {
-    const one = parseMessage(message);
-    if (!one.ok) return one;
-    parsed.push(one.value);
-  }
+  if (!isOptionalString(sdkSessionId)) return unreadable('conversation sdkSessionId must be a string');
   // Absent in every conversation written before the flag existed, which reads correctly
   // as "the app named this one".
   return ok({
@@ -193,8 +199,17 @@ export const parseConversation = (raw: unknown): Result<Conversation, Conversati
     updatedAt,
     ...(sdkSessionId === undefined ? {} : { sdkSessionId }),
     ...(userRenamed === true ? { userRenamed: true } : {}),
-    messages: parsed,
   });
+};
+
+export const parseConversation = (raw: unknown): Result<Conversation, ConversationDocError> => {
+  if (!isRecord(raw)) return unreadable('conversation must be an object');
+  const meta = parseMeta(raw);
+  if (!meta.ok) return meta;
+  if (!Array.isArray(raw['messages'])) return unreadable('conversation messages must be an array');
+  const messages = parseAll(raw['messages'], parseMessage);
+  if (!messages.ok) return messages;
+  return ok({ ...meta.value, messages: messages.value });
 };
 
 export const toMeta = (conversation: Conversation): ConversationMeta => {
