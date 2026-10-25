@@ -47,6 +47,81 @@ type Boot =
   | { readonly step: 'ready'; readonly defaultModel: string; readonly models: readonly ModelOption[] }
   | { readonly step: 'failed'; readonly message: string };
 
+// Spread as a prop only when there is a value: exactOptionalPropertyTypes means an explicit
+// undefined is not the same as an absent prop.
+// The assertion is TypeScript widening a computed key of generic type K to a string index,
+// not a claim about the value.
+const present = <K extends string, V>(key: K, value: V | undefined): Partial<Record<K, V>> => (value === undefined ? {} : ({ [key]: value } as Partial<Record<K, V>>));
+
+type AppOverlaysProps = {
+  settingsOpen: boolean;
+  settingsSection: string | undefined;
+  onCloseSettings: () => void;
+  onOfficeChanged: () => void;
+  memoryOpen: boolean;
+  memoryKey: number;
+  memory: ReturnType<typeof useMemory>;
+  conversations: ReturnType<typeof useConversations>;
+  onCloseMemory: () => void;
+  onOpenConversation: (id: string) => void;
+  isClearingMemory: boolean;
+  isMemoryBusy: boolean;
+  onStartClearAll: () => void;
+  onClearAll: () => void;
+  onCancelClearAll: () => void;
+  memoryError: string | undefined;
+  onDismissMemoryError: () => void;
+};
+
+// Everything that opens over the chat: the two sheets, the two questions, and the toasts.
+const AppOverlays: FC<AppOverlaysProps> = (props) => {
+  const { conversations } = props;
+  return (
+    <>
+      {props.settingsOpen && (
+        <OverlaySheet label="Settings" onClose={props.onCloseSettings}>
+          <SettingsPage {...present('initialSection', props.settingsSection)} onOfficeChanged={props.onOfficeChanged} />
+        </OverlaySheet>
+      )}
+      {props.memoryOpen && (
+        <OverlaySheet label="Memory" onClose={props.onCloseMemory}>
+          <MemoryPage
+            key={props.memoryKey}
+            memory={props.memory}
+            conversations={conversations.view.conversations}
+            onOpenConversation={props.onOpenConversation}
+            onClearAll={props.onStartClearAll}
+            isClearing={props.isClearingMemory}
+          />
+        </OverlaySheet>
+      )}
+      {conversations.confirmingDeleteId !== undefined && (
+        <ConfirmDialog
+          title="Delete conversation?"
+          body={`“${conversations.deletingTitle ?? 'This conversation'}” will be permanently deleted. This can't be undone.`}
+          confirmLabel="Delete"
+          onConfirm={conversations.confirmDelete}
+          onCancel={conversations.cancelDelete}
+        />
+      )}
+      {props.isClearingMemory && (
+        <ConfirmDialog
+          title="Clear all memories?"
+          body="This clears everything on Memory: your words and people, the suggestions waiting and the words you skipped, and Who you are, Writing voice and your email signature. Your writing voice and signature stay empty until you rebuild them from your mailbox. This can't be undone."
+          confirmLabel="Clear everything"
+          isBusy={props.isMemoryBusy}
+          onConfirm={props.onClearAll}
+          onCancel={props.onCancelClearAll}
+        />
+      )}
+      {conversations.error !== undefined && <Toast message={conversations.error} onDismiss={conversations.dismissError} />}
+      {props.memoryError !== undefined && <Toast message={props.memoryError} onDismiss={props.onDismissMemoryError} />}
+    </>
+  );
+};
+
+AppOverlays.displayName = 'AppOverlays';
+
 export const App: FC = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   // The review surface. Nothing opens it but the user: what Marcel noticed waits in a list
@@ -372,47 +447,28 @@ export const App: FC = () => {
         )}
         {isReady && activeId === undefined && <EmptyConversations onNew={create} />}
       </AppFrame>
-      {settingsOpen && (
-        <OverlaySheet label="Settings" onClose={closeSettings}>
-          <SettingsPage {...(settingsSection === undefined ? {} : { initialSection: settingsSection })} onOfficeChanged={reloadOffice} />
-        </OverlaySheet>
-      )}
-      {memoryOpen && (
-        <OverlaySheet label="Memory" onClose={() => setMemoryOpen(false)}>
-          <MemoryPage
-            key={memoryKey}
-            memory={memory}
-            conversations={list.conversations}
-            onOpenConversation={(id) => {
-              setMemoryOpen(false);
-              conversations.select(id);
-            }}
-            onClearAll={() => setIsClearingMemory(true)}
-            isClearing={isClearingMemory}
-          />
-        </OverlaySheet>
-      )}
-      {conversations.confirmingDeleteId !== undefined && (
-        <ConfirmDialog
-          title="Delete conversation?"
-          body={`“${conversations.deletingTitle ?? 'This conversation'}” will be permanently deleted. This can't be undone.`}
-          confirmLabel="Delete"
-          onConfirm={conversations.confirmDelete}
-          onCancel={conversations.cancelDelete}
-        />
-      )}
-      {isClearingMemory && (
-        <ConfirmDialog
-          title="Clear all memories?"
-          body="This clears everything on Memory: your words and people, the suggestions waiting and the words you skipped, and Who you are, Writing voice and your email signature. Your writing voice and signature stay empty until you rebuild them from your mailbox. This can't be undone."
-          confirmLabel="Clear everything"
-          isBusy={isMemoryBusy}
-          onConfirm={clearAllMemories}
-          onCancel={cancelClearAll}
-        />
-      )}
-      {conversations.error !== undefined && <Toast message={conversations.error} onDismiss={conversations.dismissError} />}
-      {memoryError !== undefined && <Toast message={memoryError} onDismiss={() => setMemoryError(undefined)} />}
+      <AppOverlays
+        settingsOpen={settingsOpen}
+        settingsSection={settingsSection}
+        onCloseSettings={closeSettings}
+        onOfficeChanged={reloadOffice}
+        memoryOpen={memoryOpen}
+        memoryKey={memoryKey}
+        memory={memory}
+        conversations={conversations}
+        onCloseMemory={() => setMemoryOpen(false)}
+        onOpenConversation={(id) => {
+          setMemoryOpen(false);
+          conversations.select(id);
+        }}
+        isClearingMemory={isClearingMemory}
+        isMemoryBusy={isMemoryBusy}
+        onStartClearAll={() => setIsClearingMemory(true)}
+        onClearAll={clearAllMemories}
+        onCancelClearAll={cancelClearAll}
+        memoryError={memoryError}
+        onDismissMemoryError={() => setMemoryError(undefined)}
+      />
     </>
   );
 };
