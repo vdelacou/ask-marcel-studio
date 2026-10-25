@@ -29,6 +29,31 @@ const refreshLabel = (action: 'refresh' | 'sign-in', isRefreshing: boolean): str
   return action === 'sign-in' ? 'Sign in' : 'Refresh sign-in';
 };
 
+type StatusLinesProps = {
+  headline: string;
+  unavailable: readonly string[];
+  reassurance: string | undefined;
+  renewalNote: string | undefined;
+};
+
+// What the sign-in is doing, in the words the shell chose.
+const StatusLines: FC<StatusLinesProps> = ({ headline, unavailable, reassurance, renewalNote }) => (
+  <div role="status" className="flex flex-col gap-y-2">
+    <p className="text-sm text-ink">{headline}</p>
+    {unavailable.length > 0 && (
+      <ul className="flex list-disc flex-col gap-y-1 pl-4 text-xs text-ink-muted">
+        {unavailable.map((entry) => (
+          <li key={entry}>{entry}</li>
+        ))}
+      </ul>
+    )}
+    {reassurance !== undefined && <p className="text-xs text-ink-muted">{reassurance}</p>}
+    {renewalNote !== undefined && <p className="text-xs text-ink-muted">{renewalNote}</p>}
+  </div>
+);
+
+StatusLines.displayName = 'StatusLines';
+
 export const OfficeStatusPopover: FC<OfficeStatusPopoverProps> = ({
   health,
   headline,
@@ -47,18 +72,7 @@ export const OfficeStatusPopover: FC<OfficeStatusPopoverProps> = ({
 }) => (
   <Popover placement="up-end" dismissLabel="Close sign-in details" onDismiss={onDismiss}>
     <div className="flex w-72 flex-col gap-y-2 p-2">
-      <div role="status" className="flex flex-col gap-y-2">
-        <p className="text-sm text-ink">{headline}</p>
-        {unavailable.length > 0 && (
-          <ul className="flex list-disc flex-col gap-y-1 pl-4 text-xs text-ink-muted">
-            {unavailable.map((entry) => (
-              <li key={entry}>{entry}</li>
-            ))}
-          </ul>
-        )}
-        {reassurance !== undefined && <p className="text-xs text-ink-muted">{reassurance}</p>}
-        {renewalNote !== undefined && <p className="text-xs text-ink-muted">{renewalNote}</p>}
-      </div>
+      <StatusLines headline={headline} unavailable={unavailable} reassurance={reassurance} renewalNote={renewalNote} />
       {error !== undefined && (
         <p role="alert" className="rounded-md border border-danger bg-danger-wash px-2 py-1 text-xs text-danger">
           {error}
