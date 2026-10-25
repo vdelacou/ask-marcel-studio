@@ -122,6 +122,154 @@ const AppOverlays: FC<AppOverlaysProps> = (props) => {
 
 AppOverlays.displayName = 'AppOverlays';
 
+// The user's first name once the app knows it; before that the button is still just Settings.
+const knownFirstName = (context: { readonly firstName: string } | undefined): string | undefined =>
+  context === undefined || context.firstName.length === 0 ? undefined : context.firstName;
+
+// The sidebar, or while it is collapsed the button that brings it back.
+const sidebarSlots = (isCollapsed: boolean, sidebar: ReactNode, onReopen: () => void): { sidebar: ReactNode; reopenControl?: ReactNode } => {
+  if (!isCollapsed) return { sidebar };
+  return {
+    sidebar: undefined,
+    reopenControl: (
+      <IconButton label="Show the sidebar" onClick={onReopen} size="md">
+        <PanelIcon />
+      </IconButton>
+    ),
+  };
+};
+
+// No model is set up, or the settings could not be read: either way the way on is Settings.
+const isBlocked = (boot: Boot): boolean => boot.step === 'no-provider' || boot.step === 'failed';
+
+// Only worth a picker when there is a choice to make, and a conversation to make it for.
+const chatModelFor = (boot: Boot, activeModel: string | undefined): { value: string; options: readonly ModelOption[] } | undefined => {
+  if (boot.step !== 'ready' || boot.models.length <= 1 || activeModel === undefined) return undefined;
+  return { value: activeModel, options: boot.models };
+};
+
+type UpdateNoticeProps = {
+  update: ReturnType<typeof useUpdate>;
+  isDismissed: boolean;
+  insetForWindowControls: boolean;
+  onDismiss: () => void;
+};
+
+const UpdateNotice: FC<UpdateNoticeProps> = ({ update, isDismissed, insetForWindowControls, onDismiss }) => {
+  if (update?.updateAvailable !== true || isDismissed) return null;
+  return (
+    <UpdateBanner
+      version={update.latest ?? ''}
+      {...present('downloadUrl', update.downloadUrl)}
+      {...present('releaseUrl', update.releaseUrl)}
+      insetForWindowControls={insetForWindowControls}
+      onDismiss={onDismiss}
+    />
+  );
+};
+
+UpdateNotice.displayName = 'UpdateNotice';
+
+type Office = ReturnType<typeof useOfficeHealth>;
+
+type OfficePopoverProps = { office: Office; onRefresh: () => void; onSignOut: () => void; onDismiss: () => void };
+
+const OfficePopover: FC<OfficePopoverProps> = ({ office, onRefresh, onSignOut, onDismiss }) => (
+  <OfficeStatusPopover
+    health={office.popover.health}
+    headline={office.popover.headline}
+    unavailable={office.popover.unavailable}
+    action={office.popover.action}
+    canRefresh={office.popover.canRefresh}
+    canSignOut={office.popover.canSignOut}
+    {...present('reassurance', office.popover.reassurance)}
+    {...present('renewalNote', office.popover.renewalNote)}
+    isRefreshing={office.isRefreshing}
+    isSigningOut={office.isSigningOut}
+    {...present('error', office.error)}
+    onRefresh={onRefresh}
+    onSignOut={onSignOut}
+    onDismiss={onDismiss}
+  />
+);
+
+OfficePopover.displayName = 'OfficePopover';
+
+const UserMenu: FC<{ memoryCount: number; onPick: (id: string) => void; onDismiss: () => void }> = ({ memoryCount, onPick, onDismiss }) => (
+  <Popover placement="up-start" dismissLabel="Close menu" onDismiss={onDismiss}>
+    <Menu
+      items={[
+        { id: 'memory', label: 'Memory', badge: memoryCount },
+        { id: 'settings', label: 'Settings' },
+      ]}
+      onPick={onPick}
+    />
+  </Popover>
+);
+
+UserMenu.displayName = 'UserMenu';
+
+type AppSidebarProps = {
+  conversations: ReturnType<typeof useConversations>;
+  // Which surface asked for the rename: the sidebar shows its input only when it did.
+  renameSurface: 'sidebar' | 'header';
+  onStartRename: (id: string, title: string) => void;
+  isSettingsActive: boolean;
+  office: Office;
+  officeOpen: boolean;
+  onToggleOfficeStatus: () => void;
+  onDismissOffice: () => void;
+  onRefreshSignIn: () => void;
+  onSignOutOffice: () => void;
+  onNew: () => void;
+  userName: string | undefined;
+  memoryCount: number;
+  userMenuOpen: boolean;
+  onDismissUserMenu: () => void;
+  onPickUserMenu: (id: string) => void;
+  onPressUser: () => void;
+  sidebarLayout: ReturnType<typeof useSidebarLayout>;
+};
+
+const AppSidebar: FC<AppSidebarProps> = (props) => {
+  const { conversations, office, sidebarLayout } = props;
+  const list = conversations.view;
+  return (
+    <Sidebar
+      conversations={list.conversations.map((c) => ({ id: c.id, title: c.title, ...present('activity', conversations.activity[c.id]) }))}
+      {...present('activeId', list.activeId)}
+      {...present('editingId', props.renameSurface === 'sidebar' ? conversations.editingId : undefined)}
+      draftTitle={conversations.draftTitle}
+      {...present('menuOpenId', conversations.menuOpenId)}
+      isSettingsActive={props.isSettingsActive}
+      officeHealth={office.popover.health}
+      officeLabel={dotLabel(office.popover.health)}
+      {...present('officeDetail', office.popover.dotDetail)}
+      {...(props.officeOpen
+        ? { officePopover: <OfficePopover office={office} onRefresh={props.onRefreshSignIn} onSignOut={props.onSignOutOffice} onDismiss={props.onDismissOffice} /> }
+        : {})}
+      width={sidebarLayout.width}
+      onStartResize={sidebarLayout.startResize}
+      onCollapse={sidebarLayout.toggleCollapse}
+      onToggleOfficeStatus={props.onToggleOfficeStatus}
+      onNew={props.onNew}
+      onSelect={conversations.select}
+      {...present('userName', props.userName)}
+      memoryCount={props.memoryCount}
+      {...(props.userMenuOpen ? { userMenu: <UserMenu memoryCount={props.memoryCount} onPick={props.onPickUserMenu} onDismiss={props.onDismissUserMenu} /> } : {})}
+      onPressUser={props.onPressUser}
+      onToggleRowMenu={conversations.toggleRowMenu}
+      onStartRename={props.onStartRename}
+      onDraftChange={conversations.changeDraft}
+      onCommitRename={conversations.commitRename}
+      onCancelRename={conversations.cancelRename}
+      onStartDelete={conversations.startDelete}
+    />
+  );
+};
+
+AppSidebar.displayName = 'AppSidebar';
+
 export const App: FC = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   // The review surface. Nothing opens it but the user: what Marcel noticed waits in a list
@@ -221,7 +369,8 @@ export const App: FC = () => {
   }, [bootstrap, reloadOffice]);
   // Before the app knows the user's name the button is still just Settings, so it opens
   // settings rather than a menu with one item in it.
-  const knowsUser = identity.context !== undefined && identity.context.firstName.length > 0;
+  const userName = knownFirstName(identity.context);
+  const knowsUser = userName !== undefined;
   const pressUser = useCallback((): void => {
     if (!knowsUser) return openSettings();
     return setUserMenuOpen((open) => !open);
@@ -275,8 +424,6 @@ export const App: FC = () => {
   }, [forgetSkip, focusSoon]);
 
   const isReady = boot.step === 'ready';
-  // Only worth a picker when there is a choice to make.
-  const models = boot.step === 'ready' && boot.models.length > 1 ? boot.models : undefined;
   const activeModel = list.conversations.find((c) => c.id === activeId)?.model;
   const { setModel } = conversations;
   const changeModel = useCallback(
@@ -326,110 +473,43 @@ export const App: FC = () => {
   const conversationHeader = buildConversationHeader();
 
   const sidebar = (
-    <Sidebar
-      conversations={list.conversations.map((c) => ({
-        id: c.id,
-        title: c.title,
-        ...(conversations.activity[c.id] === undefined ? {} : { activity: conversations.activity[c.id] }),
-      }))}
-      {...(list.activeId === undefined ? {} : { activeId: list.activeId })}
-      {...(conversations.editingId === undefined || renameSurface !== 'sidebar' ? {} : { editingId: conversations.editingId })}
-      draftTitle={conversations.draftTitle}
-      {...(conversations.menuOpenId === undefined ? {} : { menuOpenId: conversations.menuOpenId })}
-      isSettingsActive={settingsOpen}
-      officeHealth={office.popover.health}
-      officeLabel={dotLabel(office.popover.health)}
-      {...(office.popover.dotDetail === undefined ? {} : { officeDetail: office.popover.dotDetail })}
-      {...(officeOpen
-        ? {
-            officePopover: (
-              <OfficeStatusPopover
-                health={office.popover.health}
-                headline={office.popover.headline}
-                unavailable={office.popover.unavailable}
-                action={office.popover.action}
-                canRefresh={office.popover.canRefresh}
-                canSignOut={office.popover.canSignOut}
-                {...(office.popover.reassurance === undefined ? {} : { reassurance: office.popover.reassurance })}
-                {...(office.popover.renewalNote === undefined ? {} : { renewalNote: office.popover.renewalNote })}
-                isRefreshing={office.isRefreshing}
-                isSigningOut={office.isSigningOut}
-                {...(office.error === undefined ? {} : { error: office.error })}
-                onRefresh={refreshSignIn}
-                onSignOut={signOutOffice}
-                onDismiss={() => setOfficeOpen(false)}
-              />
-            ),
-          }
-        : {})}
-      width={sidebarLayout.width}
-      onStartResize={sidebarLayout.startResize}
-      onCollapse={sidebarLayout.toggleCollapse}
-      onToggleOfficeStatus={() => {
-        if (!officeOpen) office.reload();
-        setOfficeOpen((open) => !open);
-      }}
-      onNew={create}
-      onSelect={conversations.select}
-      {...(identity.context === undefined || identity.context.firstName.length === 0 ? {} : { userName: identity.context.firstName })}
-      memoryCount={memory.pending.length}
-      {...(userMenuOpen
-        ? {
-            userMenu: (
-              <Popover placement="up-start" dismissLabel="Close menu" onDismiss={() => setUserMenuOpen(false)}>
-                <Menu
-                  items={[
-                    { id: 'memory', label: 'Memory', badge: memory.pending.length },
-                    { id: 'settings', label: 'Settings' },
-                  ]}
-                  onPick={(id) => {
-                    setUserMenuOpen(false);
-                    if (id === 'memory') return openMemory();
-                    return openSettings();
-                  }}
-                />
-              </Popover>
-            ),
-          }
-        : {})}
-      onPressUser={pressUser}
-      onToggleRowMenu={conversations.toggleRowMenu}
+    <AppSidebar
+      conversations={conversations}
+      renameSurface={renameSurface}
       onStartRename={(id, title) => {
         setRenameSurface('sidebar');
         conversations.startRename(id, title);
       }}
-      onDraftChange={conversations.changeDraft}
-      onCommitRename={conversations.commitRename}
-      onCancelRename={conversations.cancelRename}
-      onStartDelete={conversations.startDelete}
+      isSettingsActive={settingsOpen}
+      office={office}
+      officeOpen={officeOpen}
+      onToggleOfficeStatus={() => {
+        if (!officeOpen) office.reload();
+        setOfficeOpen((open) => !open);
+      }}
+      onDismissOffice={() => setOfficeOpen(false)}
+      onRefreshSignIn={refreshSignIn}
+      onSignOutOffice={signOutOffice}
+      onNew={create}
+      userName={userName}
+      memoryCount={memory.pending.length}
+      userMenuOpen={userMenuOpen}
+      onDismissUserMenu={() => setUserMenuOpen(false)}
+      onPickUserMenu={(id) => {
+        setUserMenuOpen(false);
+        if (id === 'memory') return openMemory();
+        return openSettings();
+      }}
+      onPressUser={pressUser}
+      sidebarLayout={sidebarLayout}
     />
   );
 
   return (
     <>
-      <AppFrame
-        sidebar={sidebarLayout.isCollapsed ? undefined : sidebar}
-        {...(sidebarLayout.isCollapsed
-          ? {
-              reopenControl: (
-                <IconButton label="Show the sidebar" onClick={sidebarLayout.toggleCollapse} size="md">
-                  <PanelIcon />
-                </IconButton>
-              ),
-            }
-          : {})}
-      >
-        {update?.updateAvailable === true && !updateDismissed && (
-          <UpdateBanner
-            version={update.latest ?? ''}
-            {...(update.downloadUrl === undefined ? {} : { downloadUrl: update.downloadUrl })}
-            {...(update.releaseUrl === undefined ? {} : { releaseUrl: update.releaseUrl })}
-            insetForWindowControls={sidebarLayout.isCollapsed}
-            onDismiss={() => setUpdateDismissed(true)}
-          />
-        )}
-        {boot.step === 'no-provider' && <NoProviderNotice onOpenSettings={openSettings} />}
-        {boot.step === 'failed' && <NoProviderNotice onOpenSettings={openSettings} />}
+      <AppFrame {...sidebarSlots(sidebarLayout.isCollapsed, sidebar, sidebarLayout.toggleCollapse)}>
+        <UpdateNotice update={update} isDismissed={updateDismissed} insetForWindowControls={sidebarLayout.isCollapsed} onDismiss={() => setUpdateDismissed(true)} />
+        {isBlocked(boot) && <NoProviderNotice onOpenSettings={openSettings} />}
         {isReady && activeId !== undefined && (
           // Keyed so the composer draft resets between conversations. The transcript no
           // longer lives in this component, so remounting costs nothing.
@@ -437,12 +517,12 @@ export const App: FC = () => {
             key={activeId}
             conversationId={activeId}
             view={viewFor(activeId)}
-            {...(models === undefined || activeModel === undefined ? {} : { model: { value: activeModel, options: models } })}
+            {...present('model', chatModelFor(boot, activeModel))}
             onHydrate={hydrateActive}
             onSend={sendToActive}
             onCancel={cancelActive}
             onChangeModel={changeModel}
-            {...(conversationHeader === undefined ? {} : { header: conversationHeader })}
+            {...present('header', conversationHeader)}
           />
         )}
         {isReady && activeId === undefined && <EmptyConversations onNew={create} />}
