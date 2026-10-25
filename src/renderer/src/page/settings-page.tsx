@@ -7,7 +7,7 @@
  * is orchestration; the transforms live in lib/ where they are tested.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { FC } from 'react';
+import type { Dispatch, FC, ReactNode, SetStateAction } from 'react';
 import { ProvidersPanel } from '../components/organisms/providers-panel/index.tsx';
 import type { PanelNotice } from '../components/organisms/providers-panel/index.tsx';
 import { SkillsPanel } from '../components/organisms/skills-panel/index.tsx';
@@ -63,6 +63,146 @@ export type SettingsPageProps = {
   // updates without waiting for its next poll.
   onOfficeChanged?: () => void;
 };
+
+type SkillForm = { readonly name: string; readonly displayName: string; readonly description: string; readonly body: string };
+
+const isSkillDirty = (form: SkillForm, stored: SkillForm): boolean =>
+  form.body !== stored.body || form.name !== stored.name || form.displayName !== stored.displayName || form.description !== stored.description;
+
+// The name a skill goes by on its own page: the one it shows, else its handle, else what a new one is.
+const skillTitle = (form: SkillForm): string => {
+  if (form.displayName.length > 0) return form.displayName;
+  return form.name || 'New skill';
+};
+
+type SkillsSettingsProps = {
+  skills: Skills;
+  // Kept by the page, so the menu stays as it was when the user comes back to Skills.
+  isAddMenuOpen: boolean;
+  setAddMenuOpen: Dispatch<SetStateAction<boolean>>;
+};
+
+type Skills = ReturnType<typeof useSkills>;
+type SkillEditing = NonNullable<Skills['editing']>;
+
+// What the detail page says about the skill open in it; a new one has no folder yet.
+const skillFacts = (editing: SkillEditing, disabledFolders: Skills['disabledFolders']): { folder: string; isBuiltIn: boolean; isModified: boolean; isActive: boolean } => ({
+  folder: editing.skill?.folder ?? 'chosen from the name',
+  isBuiltIn: editing.skill?.isBuiltIn ?? false,
+  isModified: editing.skill?.isModified ?? false,
+  isActive: editing.skill === undefined || !disabledFolders.has(editing.skill.folder),
+});
+
+// A built-in's body is read-only (rendered), an own skill's is the editor.
+//
+// Rendered through MarkdownView, like the chat does it: that atom owns the prose typography
+// and, more to the point here, makes a wide code block scroll inside itself. Handed the raw
+// tree, a built-in skill's instructions set their own width and dragged the whole panel out
+// past the sheet.
+//
+// Optional props are spread from a value rather than from a conditional inside the JSX:
+// exactOptionalPropertyTypes means an explicit undefined is not the same as an absent prop.
+const skillBody = (skills: Skills, editing: SkillEditing): { bodyRendered: ReactNode } | { bodyEditor: ReactNode } => {
+  if (editing.skill?.isBuiltIn === true) return { bodyRendered: <MarkdownView>{renderMarkdown(editing.form.body)}</MarkdownView> };
+  return {
+    bodyEditor: (
+      <DocumentEditor
+        mode="rich"
+        richNode={<MarkdownEditor key={editing.skill?.folder ?? 'new-skill'} defaultValue={editing.stored.body} onChange={skills.setBody} />}
+        markdownValue={editing.form.body}
+        isSaving={skills.isSaving}
+        isDirty={isSkillDirty(editing.form, editing.stored)}
+        {...(skills.notice === undefined ? {} : { notice: skills.notice })}
+        onChangeMarkdown={skills.setBody}
+        onSave={skills.save}
+        onCancel={skills.closeEditor}
+      />
+    ),
+  };
+};
+
+const SkillPage: FC<{ skills: Skills; editing: SkillEditing }> = ({ skills, editing }) => (
+  <SkillDetail
+    title={skillTitle(editing.form)}
+    {...skillFacts(editing, skills.disabledFolders)}
+    name={editing.form.name}
+    displayName={editing.form.displayName}
+    description={editing.form.description}
+    extras={editing.form.extras}
+    onBack={skills.closeEditor}
+    onToggleActive={() => editing.skill !== undefined && skills.toggleActive(editing.skill.folder)}
+    onChangeName={(name) => skills.setField({ name })}
+    onChangeDisplayName={(displayName) => skills.setField({ displayName })}
+    onChangeDescription={(description) => skills.setField({ description })}
+    onRestore={skills.restore}
+    {...skillBody(skills, editing)}
+  />
+);
+
+SkillPage.displayName = 'SkillPage';
+
+// Skills: the list, or one skill open. A section that is a list until you open one of its
+// rows is two screens, so each is named rather than nested in a ternary.
+const SkillsSettings: FC<SkillsSettingsProps> = ({ skills, isAddMenuOpen, setAddMenuOpen }) =>
+  skills.editing === undefined ? (
+    <SkillsPanel
+      skills={skills.skills.map((skill) => ({ ...skill, isActive: !skills.disabledFolders.has(skill.folder) }))}
+      error={skills.error}
+      isImporting={skills.isImporting}
+      isAddMenuOpen={isAddMenuOpen}
+      onToggleAddMenu={() => setAddMenuOpen((open) => !open)}
+      onCreate={() => {
+        setAddMenuOpen(false);
+        skills.startCreate();
+      }}
+      onImport={() => {
+        setAddMenuOpen(false);
+        skills.importFolder();
+      }}
+      onEdit={skills.edit}
+      onRemove={skills.remove}
+    />
+  ) : (
+    <SkillPage skills={skills} editing={skills.editing} />
+  );
+
+SkillsSettings.displayName = 'SkillsSettings';
+
+// Helpers: the list, or one helper open in its editor.
+const AgentsSettings: FC<{ agents: ReturnType<typeof useAgents> }> = ({ agents }) => {
+  const agentError = agents.error === undefined ? {} : { error: agents.error };
+  return agents.editing === undefined ? (
+    <AgentsPanel agents={agents.agents} error={agents.error} onAdd={agents.startNew} onEdit={agents.edit} />
+  ) : (
+    <AgentEditor
+      name={agents.editing.name}
+      slug={agents.editing.isBuiltIn ? agents.editing.name : slugify(agents.editing.name)}
+      description={agents.editing.description}
+      isBuiltIn={agents.editing.isBuiltIn}
+      isNew={agents.editing.isNew}
+      isModified={agents.editing.isModified}
+      {...agentError}
+      onChangeName={agents.changeName}
+      onChangeDescription={agents.changeDescription}
+      onBack={agents.closeEditor}
+      onRemove={agents.remove}
+      onRestore={agents.restore}
+    >
+      <DocumentEditor
+        mode="rich"
+        richNode={<MarkdownEditor key={agents.editing.isNew ? 'new-agent' : agents.editing.name} defaultValue={agents.editing.prompt} onChange={agents.changePrompt} />}
+        markdownValue={agents.editing.prompt}
+        isSaving={agents.isSaving}
+        isDirty
+        onChangeMarkdown={agents.changePrompt}
+        onSave={agents.save}
+        onCancel={agents.closeEditor}
+      />
+    </AgentEditor>
+  );
+};
+
+AgentsSettings.displayName = 'AgentsSettings';
 
 export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeChanged }) => {
   const [section, setSection] = useState(initialSection ?? 'models');
@@ -274,118 +414,6 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
     [persist, drafts, defaultModel, officeCatalog, officePolicy]
   );
 
-  // Optional props are spread from a value rather than from a conditional inside the
-  // JSX: exactOptionalPropertyTypes means an explicit undefined is not the same as an
-  // absent prop, and a ternary inside a ternary reads like neither.
-  const skillNotice = skills.notice === undefined ? {} : { notice: skills.notice };
-  const agentError = agents.error === undefined ? {} : { error: agents.error };
-
-  // A built-in's body is read-only (rendered), an own skill's is the editor. Computed
-  // here so the JSX below is not a ternary inside a spread inside a ternary.
-  const skillEditing = skills.editing;
-  const skillBodyEditor =
-    skillEditing === undefined
-      ? {}
-      : {
-          bodyEditor: (
-            <DocumentEditor
-              mode="rich"
-              richNode={<MarkdownEditor key={skillEditing.skill?.folder ?? 'new-skill'} defaultValue={skillEditing.stored.body} onChange={skills.setBody} />}
-              markdownValue={skillEditing.form.body}
-              isSaving={skills.isSaving}
-              isDirty={
-                skillEditing.form.body !== skillEditing.stored.body ||
-                skillEditing.form.name !== skillEditing.stored.name ||
-                skillEditing.form.displayName !== skillEditing.stored.displayName ||
-                skillEditing.form.description !== skillEditing.stored.description
-              }
-              {...skillNotice}
-              onChangeMarkdown={skills.setBody}
-              onSave={skills.save}
-              onCancel={skills.closeEditor}
-            />
-          ),
-        };
-  // Through MarkdownView, like the chat does it: that atom owns the prose typography and,
-  // more to the point here, makes a wide code block scroll inside itself. Handed the raw
-  // tree, a built-in skill's instructions set their own width and dragged the whole panel
-  // out past the sheet.
-  const skillBody = skillEditing?.skill?.isBuiltIn === true ? { bodyRendered: <MarkdownView>{renderMarkdown(skillEditing.form.body)}</MarkdownView> } : skillBodyEditor;
-
-  // Built as values rather than nested inside the JSX: a section that is a list until
-  // you open one of its rows is two screens, and reading that as a ternary inside a
-  // conditional is worse than naming it.
-  const skillsSection =
-    skills.editing === undefined ? (
-      <SkillsPanel
-        skills={skills.skills.map((skill) => ({ ...skill, isActive: !skills.disabledFolders.has(skill.folder) }))}
-        error={skills.error}
-        isImporting={skills.isImporting}
-        isAddMenuOpen={skillAddMenuOpen}
-        onToggleAddMenu={() => setSkillAddMenuOpen((open) => !open)}
-        onCreate={() => {
-          setSkillAddMenuOpen(false);
-          skills.startCreate();
-        }}
-        onImport={() => {
-          setSkillAddMenuOpen(false);
-          skills.importFolder();
-        }}
-        onEdit={skills.edit}
-        onRemove={skills.remove}
-      />
-    ) : (
-      <SkillDetail
-        title={skills.editing.form.displayName.length > 0 ? skills.editing.form.displayName : skills.editing.form.name || 'New skill'}
-        folder={skills.editing.skill?.folder ?? 'chosen from the name'}
-        isBuiltIn={skills.editing.skill?.isBuiltIn ?? false}
-        isModified={skills.editing.skill?.isModified ?? false}
-        isActive={skills.editing.skill === undefined || !skills.disabledFolders.has(skills.editing.skill.folder)}
-        name={skills.editing.form.name}
-        displayName={skills.editing.form.displayName}
-        description={skills.editing.form.description}
-        extras={skills.editing.form.extras}
-        onBack={skills.closeEditor}
-        onToggleActive={() => skills.editing?.skill !== undefined && skills.toggleActive(skills.editing.skill.folder)}
-        onChangeName={(name) => skills.setField({ name })}
-        onChangeDisplayName={(displayName) => skills.setField({ displayName })}
-        onChangeDescription={(description) => skills.setField({ description })}
-        onRestore={skills.restore}
-        {...skillBody}
-      />
-    );
-
-  const agentsSection =
-    agents.editing === undefined ? (
-      <AgentsPanel agents={agents.agents} error={agents.error} onAdd={agents.startNew} onEdit={agents.edit} />
-    ) : (
-      <AgentEditor
-        name={agents.editing.name}
-        slug={agents.editing.isBuiltIn ? agents.editing.name : slugify(agents.editing.name)}
-        description={agents.editing.description}
-        isBuiltIn={agents.editing.isBuiltIn}
-        isNew={agents.editing.isNew}
-        isModified={agents.editing.isModified}
-        {...agentError}
-        onChangeName={agents.changeName}
-        onChangeDescription={agents.changeDescription}
-        onBack={agents.closeEditor}
-        onRemove={agents.remove}
-        onRestore={agents.restore}
-      >
-        <DocumentEditor
-          mode="rich"
-          richNode={<MarkdownEditor key={agents.editing.isNew ? 'new-agent' : agents.editing.name} defaultValue={agents.editing.prompt} onChange={agents.changePrompt} />}
-          markdownValue={agents.editing.prompt}
-          isSaving={agents.isSaving}
-          isDirty
-          onChangeMarkdown={agents.changePrompt}
-          onSave={agents.save}
-          onCancel={agents.closeEditor}
-        />
-      </AgentEditor>
-    );
-
   return (
     <SheetLayout
       nav={<SheetNav groups={NAV_GROUPS} activeId={section} onSelect={setSection} />}
@@ -410,9 +438,9 @@ export const SettingsPage: FC<SettingsPageProps> = ({ initialSection, onOfficeCh
           onTestModel={onTestModel}
         />
       )}
-      {section === 'skills' && skillsSection}
+      {section === 'skills' && <SkillsSettings skills={skills} isAddMenuOpen={skillAddMenuOpen} setAddMenuOpen={setSkillAddMenuOpen} />}
 
-      {section === 'agents' && agentsSection}
+      {section === 'agents' && <AgentsSettings agents={agents} />}
 
       {section === 'office' && (
         <OfficePanel

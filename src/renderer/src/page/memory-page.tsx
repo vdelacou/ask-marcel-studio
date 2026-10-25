@@ -60,6 +60,22 @@ export type MemoryPageProps = {
   isClearing: boolean;
 };
 
+// What an empty document says, and nothing once it has words in it.
+const emptyHint = (draft: string, hint: string): { emptyHint?: string } => (draft.trim().length === 0 ? { emptyHint: hint } : {});
+
+// The line under the list after a skip, with its way back.
+const undoNotice = <T extends { readonly term: string }>(
+  skipped: T | undefined,
+  onUndo: (skipped: T) => void
+): { notice?: { message: string; action: { label: string; onAction: () => void } } } =>
+  skipped === undefined ? {} : { notice: { message: `Skipped ${skipped.term}. Marcel will not ask about it again.`, action: { label: 'Undo', onAction: () => onUndo(skipped) } } };
+
+// Offered once there are two cards or more to take as they stand, and not while asked or busy.
+const rememberAllButton = (
+  state: { readonly answerCount: number; readonly isAsking: boolean; readonly isBusy: boolean },
+  onStart: () => void
+): { bulk?: { label: string; onStart: () => void } } => (state.answerCount < 2 || state.isAsking || state.isBusy ? {} : { bulk: { label: 'Remember all', onStart } });
+
 export const MemoryPage: FC<MemoryPageProps> = ({ memory, conversations, onOpenConversation, onClearAll, isClearing }) => {
   const [section, setSection] = useState('waiting');
   // Kept by the shell beside the list, so closing Memory does not throw them away.
@@ -200,25 +216,15 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory, conversations, onOpenC
         <MemoryReviewPanel
           items={items}
           {...(memory.error === undefined ? {} : { error: memory.error })}
-          {...(skipped === undefined
-            ? {}
-            : {
-                notice: {
-                  message: `Skipped ${skipped.term}. Marcel will not ask about it again.`,
-                  action: {
-                    label: 'Undo',
-                    onAction: () => {
-                      focus.keepAfterRestore();
-                      memory.restore(skipped);
-                    },
-                  },
-                },
-              })}
+          {...undoNotice(skipped, (last) => {
+            focus.keepAfterRestore();
+            memory.restore(last);
+          })}
           onChoose={choose}
           onChangeMeaning={changeMeaning}
           onChangeTerm={changeTerm}
           {...(isConfirmingAll ? { confirm: confirmAll } : {})}
-          {...(answers.length < 2 || isConfirmingAll || memory.isAnsweringAll ? {} : { bulk: { label: 'Remember all', onStart: () => setIsConfirmingAll(true) } })}
+          {...rememberAllButton({ answerCount: answers.length, isAsking: isConfirmingAll, isBusy: memory.isAnsweringAll }, () => setIsConfirmingAll(true))}
           onChangeKind={changeKind}
           hint="On a selected card, ↑ and ↓ move, Enter remembers and Backspace skips."
           onOpenSource={openSource}
@@ -243,9 +249,7 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory, conversations, onOpenC
                 onLeave={(text, opened) => about.saveOnLeave({ text, opened, revision: about.revision })}
               />
             }
-            {...(about.draft.trim().length === 0
-              ? { emptyHint: 'Nothing yet. Tell Marcel who you are, what you are responsible for, and anything it should always keep in mind.' }
-              : {})}
+            {...emptyHint(about.draft, 'Nothing yet. Tell Marcel who you are, what you are responsible for, and anything it should always keep in mind.')}
             {...statusOf(about)}
           />
         </AboutYouPanel>
@@ -284,7 +288,7 @@ export const MemoryPage: FC<MemoryPageProps> = ({ memory, conversations, onOpenC
                 onLeave={(text, opened) => voice.saveOnLeave({ text, opened, revision: voice.revision })}
               />
             }
-            {...(voice.draft.trim().length === 0 ? { emptyHint: 'Nothing yet. Rebuild it from your sent mail, or write your own.' } : {})}
+            {...emptyHint(voice.draft, 'Nothing yet. Rebuild it from your sent mail, or write your own.')}
             {...statusOf(voice)}
           />
         </VoicePanel>
